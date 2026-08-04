@@ -1,0 +1,5 @@
+{
+  "id": "greybox_terrain",
+  "fallback_rgb": [128, 128, 128],
+  "tints": [{"type": "soft_dirt", "rgb": [138, 109, 74]}, {"type": "hard_rock", "rgb": [112, 112, 118]}, {"type": "dense_granite", "rgb": [78, 78, 86]}, {"type": "artificial_granite", "rgb": [96, 104, 112]}, {"type": "rubble", "rgb": [134, 128, 118]}, {"type": "gold_vein", "rgb": [201, 162, 39]}, {"type": "iron_vein", "rgb": [124, 100, 84]}, {"type": "magestone_crust", "rgb": [96, 84, 168]}, {"type": "mithril_seam", "rgb": [176, 214, 226]}]
+}

@@ -18,38 +18,45 @@ not-yet-committed.
   generator, chunked MultiMesh renderer, camera rig, hex picking); M1-T1/M1-T2/M1-T3 delivered
   **HexMath (both slices) and `Los`**, M1-T4 + M1-T5 delivered the **concentric-bowl generator
   COMPLETE** (`HexMap` + the §4.4 band/elevation bowl, then the seeded `Rng`, the §4.4 terrain-type
-  composition, `content_hash` and the first golden), and M1-T6 delivered **renderer slice 1**
-  (`HexLayout` — flat-top hex→world placement + the deterministic chunk partition, the pure
-  headless-testable half of the chunked MultiMesh renderer). Still missing: the **Node half of the
-  renderer (MapRenderer + greybox scene), the camera rig and hex picking**. **TWO of the three §14 M1
+  composition, `content_hash` and the first golden), and M1-T6 + M1-T7 delivered the **chunked
+  MultiMesh renderer COMPLETE** (`HexLayout` — flat-top hex→world placement + the deterministic chunk
+  partition; then `MapRenderer` — the project's **first `Node`**: one `MultiMeshInstance3D` per chunk,
+  shared prism mesh + material, per-instance type/tint custom data and the dirty-chunk rebuild seam,
+  plus `data/render/terrain_palette.json`). Still missing: the **camera rig (M1-T8, which also carries
+  the greybox scene and the 60-fps measurement) and hex picking (M1-T9)**. **TWO of the three §14 M1
   acceptance criteria pass — re-checked against the §14 row (line 1097) this iteration** — *"Golden
   mapgen test (seed ⇒ terrain hash)"* (M1-T5, green headless) and *"LOS property tests"* (M1-T3,
-  green headless). *"60 fps on Medium map greybox"* remains unmet: no greybox scene exists yet, and
-  per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all** (the `--headless` dummy
-  renderer has no renderer) — it will be a **manual windowed measurement logged at M1-T7**.
-- **Next task:** **M1-T7 — renderer slice 2: `MapRenderer`, the Node half** — one
-  `MultiMeshInstance3D` per chunk driven by `HexLayout` (§10 line 680: per-instance custom data =
-  type/tint, dirty-chunk rebuilds on dig), plus the first `scenes/Main.tscn` greybox scene and the
-  **manual windowed 60-fps measurement on the Medium map** (radius 32 / 3,169 hexes, SDFGI off),
-  logged in decisions.md at that task. **This is the FIRST `Node` code in the project** — keep it
-  strictly out of `scripts/core|sim`, keep the §11.3 typing gate green over it, and read decisions.md
-  M1-T6 **(Z) before writing a single assertion**: the headless dummy renderer does **not** store
-  MultiMesh instance data, so M1-T7's tests must be **STRUCTURAL only** (chunk node count,
-  `instance_count`, resources assigned, parenting) and must never read an instance transform or
-  custom-data back. Camera rig (M1-T8) and hex picking (M1-T9) follow; size each slice to ≤ ~300 LOC.
-  Continue the decisions.md lettering at **(AA)** — M1-T6 ended at (Z).
-- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 14 / Tests 278 /
-  **Passing 278** / Failing 0 / Asserts 2760; `bash tools/typecheck.sh` exits 0 over 24 files;
-  `bash tools/ci.sh` exits 0 (all three re-measured at Land, 2026-08-04, M1-T6); `bash
+  green headless). *"60 fps on Medium map greybox"* **REMAINS UNMET after M1-T7**: there is still no
+  scene and no camera, and per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all** (the
+  `--headless` dummy renderer has no renderer) — it is a **manual windowed measurement now owed at
+  M1-T8** (see the M1-T7 re-slice, decisions.md M1-T7 item 1: **(Z)**'s forward reference to "M1-T7"
+  now points to **M1-T8**).
+- **Next task:** **M1-T8 — the greybox scene + camera rig + the 60-fps measurement.** Create the first
+  `scenes/Main.tscn` (a `MapRenderer` instanced from the scene, `WorldEnvironment` with **SDFGI off**
+  per §10 line 680), the **CameraRig**, and then run the **MANUAL WINDOWED 60-fps measurement on the
+  Medium map** (radius 32 / 3,169 hexes) and **log the number in decisions.md at that task even if it
+  is bad** — that is the last unmet §14 M1 acceptance criterion. Read decisions.md **M1-T7 (AA)–(AH)**
+  first; three carry-overs bite here: (a) `_clear_chunks()` frees **all** children of the
+  `MapRenderer` node, so the `.tscn` must **not** give it non-chunk children; (b) `set_layout()` must
+  be called **once** per renderer — the shared mesh is sized on first `build()` and is not resized
+  later; (c) the **open cosmetic item** — whether Godot's `CylinderMesh` starts its first radial vertex
+  at +X (flat-top, matching **(V)**) or 30° off is not verifiable headless, so check it **by eye** in
+  the windowed run and log a yaw only if one is genuinely needed. `project.godot` still deliberately
+  has **no** `run/main_scene`; if M1-T8 sets one, it must point at a scene that actually exists (a
+  dangling path breaks `--import`). Hex picking is **M1-T9**; size each slice to ≤ ~300 LOC. Continue
+  the decisions.md lettering at **(AI)** — M1-T7 ended at (AH).
+- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 15 / Tests 321 /
+  **Passing 321** / Failing 0 / Asserts 3380; `bash tools/typecheck.sh` exits 0 over 26 files;
+  `bash tools/ci.sh` exits 0 (all three re-measured at Land, 2026-08-04, M1-T7); `bash
   tools/verify_harness.sh` exits 0 across all four phases with the tree left clean (re-run at
-  M1-T6 Verify).
+  M1-T7 Verify).
 
 ## Milestone tracker
 
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
-| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 … M1-T6 landed 2026-08-04) | **2 of 3 §14 M1 criteria met, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand); (b) *60 fps on Medium map greybox*: **NOT met** — renderer slice 1 (`HexLayout`) landed at M1-T6 but no `Node`, `.tscn`, mesh or MultiMesh exists yet, and per decisions.md M1-T6 **(Z)** this criterion is **not headless-measurable at all** (the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), so it is scheduled as a **manual windowed measurement on the Medium map (radius 32 / 3,169 hexes, SDFGI off) logged in decisions.md at M1-T7**; (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is therefore NOT marked done — criterion (b), half of the renderer deliverable, the camera rig and hex picking remain.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer HALF delivered** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests). Still to build: **the renderer's Node half (MapRenderer + `scenes/Main.tscn` greybox, M1-T7), the camera rig (M1-T8) and hex picking (M1-T9)** — no `Node`, `.tscn`, mesh, material or MultiMesh exists yet. |
+| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 … M1-T7 landed 2026-08-04) | **2 of 3 §14 M1 criteria met, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand; **untouched and still green after M1-T7**, which hashes nothing); (b) *60 fps on Medium map greybox*: **STILL NOT met after M1-T7** — the chunked MultiMesh renderer is now COMPLETE as a `Node`, but there is still **no `.tscn` and no camera**, and per decisions.md M1-T6 **(Z)** this criterion is **not headless-measurable at all** (the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), so it is scheduled as a **manual windowed measurement on the Medium map (radius 32 / 3,169 hexes, SDFGI off) logged in decisions.md at M1-T8** — the re-slice moved it one task later (decisions.md M1-T7 item 1); (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is therefore NOT marked done — criterion (b), the camera rig and hex picking remain.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer COMPLETE, both slices** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests. M1-T7 slice 2 — `scripts/render/map_renderer.gd` + `data/render/terrain_palette.json`: the project's **first `Node`** (`class_name MapRenderer extends Node3D`), one `MultiMeshInstance3D` per chunk in canonical order, ONE shared hexagonal `CylinderMesh` + ONE shared `StandardMaterial3D` for the whole renderer, per-instance transforms and type/tint custom data written from `HexLayout`/`HexMap`, the in-place dirty-chunk rebuild seam M2's dig will call, and the (AF) palette load contract reusing `RulesError`; resolutions (AA)–(AH), 43 tests, six adversarial probes). Still to build: **the greybox scene + camera rig + the 60-fps measurement (M1-T8) and hex picking (M1-T9)** — no `.tscn` and no `scenes/` directory exists yet, and `project.godot` still deliberately has no `run/main_scene`. |
 | M2 Dig & Economy | not started | — |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
@@ -81,69 +88,131 @@ not-yet-committed.
 | 2026-08-04 | M1-T4 | HexMap plus the concentric-bowl band and elevation pass (generator slice 1) | landed | M1-T4: HexMap plus the concentric-bowl band and elevation pass (generator slice 1) |
 | 2026-08-04 | M1-T5 | Seeded Rng core, terrain-type composition (generator slice 2) and the project's first golden (**meets the §14 M1 "golden mapgen test" criterion; completes the generator deliverable**) | landed | M1-T5: Seeded Rng core, terrain-type composition (generator slice 2) and the project's first golden |
 | 2026-08-04 | M1-T6 | HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) (**opens `scripts/render/`; half of the chunked-MultiMesh-renderer deliverable**) | landed | M1-T6: HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) |
+| 2026-08-04 | M1-T7 | MapRenderer: chunked MultiMesh nodes, type/tint custom data and dirty-chunk rebuilds (renderer slice 2) (**the project's first `Node`; completes the chunked-MultiMesh-renderer deliverable; re-slices the scene/camera/60-fps measurement to M1-T8 and picking to M1-T9**) | landed | M1-T7: MapRenderer: chunked MultiMesh nodes, type/tint custom data and dirty-chunk rebuilds (renderer slice 2) |
 
 ## Notes for the next iteration
 
-- **Pick up: M1-T7 = renderer slice 2 — `MapRenderer`, the NODE half, plus the first greybox scene.**
-  M1-T6 is finished and the tree is green; nothing is carried over. The whole **sim** side of M1 is
-  done and pinned (HexMath, Los, HexMap, MapGenerator, Rng, the golden) and **renderer slice 1** is
-  done (`HexLayout` — placement + chunk partition, pure `RefCounted`, see its contract bullet below).
-  What is left: one `MultiMeshInstance3D` **per chunk** driven by `HexLayout.partition()`,
-  per-instance transforms from `HexLayout.hex_to_world()` and per-instance custom data = type/tint
-  (§10 line 680), **dirty-chunk rebuilds on dig**, `scenes/Main.tscn`, then the camera rig (M1-T8)
-  and hex picking (M1-T9). Read §11.1's renderer/UI boundary and §11.2's directory layout before
-  speccing, and read decisions.md **M1-T6 (V)–(Z)** in full.
-  - **READ (Z) BEFORE WRITING A SINGLE ASSERTION.** Measured live on the pinned binary: under
-    `--headless` the dummy renderer **does not store MultiMesh instance data** —
-    `set_instance_transform` → `get_instance_transform` returns the **identity**,
-    `set_instance_custom_data` reads back `(0,0,0,1)`, and `MultiMesh.buffer` is **size 0** even with
-    `instance_count = 3`. **What IS readable headless:** `instance_count`, `transform_format`,
-    `use_custom_data`, `mesh != null`, `get_class()`, node parenting, a valid `VisualInstance` RID.
-    So **M1-T7's tests must be STRUCTURAL only** (chunk node count, `instance_count` per chunk,
-    resources assigned, parenting) — an instance read-back assertion can only ever pass **vacuously**.
-    The *placement* math is already covered by `test_hex_layout.gd`, which is exactly why slice 1
-    exists; do not re-test it through a MultiMesh.
-  - **This is the FIRST engine-bound (`Node`) code in the project, and that boundary is the whole
-    risk.** §11.1 is binding: `data → Sim Core (engine-free) → EventBus → Renderer/UI`, and **the sim
-    never calls the renderer**. Renderer code lives in `scripts/render/` (§11.2) and **must not**
-    appear in `scripts/core/` or `scripts/sim/` — every existing source scan in those two trees
-    forbids `extends Node`/`SceneTree`/`get_tree`/`Engine.`/`Time.`/`OS.`, and **none of them may be
-    weakened to make a renderer compile**. The UI/renderer may read `HexMap` (`hexes()`,
-    `get_elevation()`, `get_terrain_type()` — read-only, §11.3-legal) and construct Commands; it may
-    not import sim internals or mutate sim state. `MapRenderer` is the one allowed to call the map;
-    `HexLayout` deliberately never does.
-  - **Size it: ≤ ~300 LOC per slice.** MapRenderer + scene is one task; camera rig and picking are
-    M1-T8/M1-T9.
-  - *"60 fps on Medium map greybox"* is a **3,169-hex** target (§4.1 Medium radius 32) and is the one
-    M1 criterion that is **not headless-testable at all** — `--headless` has no renderer. Per (Z) it
-    is a **MANUAL WINDOWED measurement**, run against the greybox scene with **SDFGI off** (§10 line
-    680) and **logged in decisions.md at M1-T7**. Plan the measurement before writing the renderer,
-    not after, and record the number even if it is bad.
-  - **Write the source scans fresh for any new file.** They are per-file and inherit nothing
-    (`test_hex_map.gd` covers `hex_map.gd` only, and so on). For a **sim/core** file copy
-    `tests/unit/test_rng.gd`/`test_map_generator.gd`; for a **renderer** file copy the newest example,
-    `tests/unit/test_hex_layout.gd`, which is the mirror image: **strip comment lines first**
-    (load-bearing — doc blocks contain `§4.1`, which the no-float regex `\.[0-9]` would otherwise
-    hit), then assert the boundary in the *other* direction — no sim class named, no
-    `set_elevation(`/`set_terrain_type(`, no Command bypass — instead of copying the purity
-    assertions. **`RulesError` is explicitly ALLOWED in renderer files** (M1-T6 (Y)); the **no-float**
-    scan is deliberately **NOT** copied to renderer files (geometry is not a §11.1 rule surface).
-    Always keep: no map-size literal `24|32|40|1801|3169|4921`; a `## §<section>` doc comment on every
-    public function (section list in a `DOC_SECTIONS` const); **an explicit expected public-member
-    list** so a missing **or extra** member fails; and class-kind via `get_class()`, **never**
-    `is Node` (statically impossible against a `RefCounted` — parse-errors and silently un-collects
-    the whole file; decisions.md M0-T2 item 11 / M0-T5 item (a)). **An M1-T7 `MapRenderer` IS a Node
-    by design**, so its scan asserts `get_class()` names the expected Node class rather than
-    forbidding `extends Node` — write that scan deliberately, do not paste `test_hex_layout.gd`'s
-    engine-bound token list into it unchanged.
-  - Continue the decisions.md lettering at **(AA)** — M1-T6 ended at (Z).
+- **Pick up: M1-T8 = the greybox scene + CameraRig + THE 60-FPS MEASUREMENT.** M1-T7 is finished and
+  the tree is green; nothing is carried over. The whole **sim** side of M1 is done and pinned
+  (HexMath, Los, HexMap, MapGenerator, Rng, the golden) and the **chunked MultiMesh renderer is now
+  COMPLETE** (`HexLayout` placement + partition, `MapRenderer` the Node — see both contract bullets
+  below). What is left in M1: `scenes/Main.tscn` (a `MapRenderer` instanced from the scene, a
+  `WorldEnvironment` with **SDFGI off** per §10 line 680), the **CameraRig**, the **manual windowed
+  60-fps measurement on the Medium map** (radius 32 / 3,169 hexes) — then hex picking at **M1-T9**.
+  Read §11.1's renderer/UI boundary and §11.2's directory layout before speccing, and read
+  decisions.md **M1-T6 (V)–(Z)** and **M1-T7 (AA)–(AH)** in full.
+  - **THE MEASUREMENT IS THE POINT OF M1-T8, not a postscript.** *"60 fps on Medium map greybox"* is
+    the **last unmet §14 M1 acceptance criterion** and the one criterion that is **not headless-testable
+    at all** — `--headless` has no renderer (decisions.md M1-T6 **(Z)**). It is a **MANUAL WINDOWED**
+    measurement against the greybox scene with **SDFGI off** (§10 line 680), on **3,169 hexes**
+    (§4.1 Medium radius 32). Plan it before writing the scene, run it, and **log the number in
+    decisions.md at M1-T8 even if it is bad**. The re-slice that moved it here is decisions.md M1-T7
+    item 1 — **(Z)**'s forward reference to "M1-T7" now points to M1-T8.
+  - **Three carry-overs from M1-T7 that bite at M1-T8** (decisions.md M1-T7 item 13): (a)
+    `MapRenderer._clear_chunks()` frees **all** children of the node, so the `.tscn` must **not** give
+    the `MapRenderer` node non-chunk children — hang the camera and environment elsewhere in the
+    scene; (b) `set_layout()` is effectively **once per renderer** — the shared prism mesh is sized on
+    the first `build()` and is **not** resized by a later layout; (c) the **open cosmetic item**:
+    whether Godot's `CylinderMesh` starts its first radial vertex at **+X** (flat-top, matching
+    **(V)**) or 30° off is **not verifiable headless** and no yaw was guessed — check it **by eye** in
+    the windowed run and log a yaw only if one is genuinely needed.
+  - **`project.godot` still deliberately has NO `run/main_scene`.** If M1-T8 sets one, it must point
+    at a scene that actually exists — a dangling path breaks `--import`, which every `tools/` script
+    runs first.
+  - **(Z) STILL GOVERNS EVERY RENDERER ASSERTION.** Under `--headless` the dummy renderer **does not
+    store MultiMesh instance data** — `set_instance_transform` → `get_instance_transform` returns the
+    **identity**, `set_instance_custom_data` reads back `(0,0,0,1)`, and `MultiMesh.buffer` is **size
+    0** even at `instance_count = 3` (re-measured at M1-T7). Readable headless: `instance_count`,
+    `transform_format`, `use_custom_data`, `use_colors`, `mesh != null`, resource properties,
+    `get_class()`, node parenting/naming/order, `get_instance_id()`. Renderer tests stay **STRUCTURAL
+    only**; an instance read-back assertion can only ever pass **vacuously**. Placement math is covered
+    by `test_hex_layout.gd` — do not re-test it through a MultiMesh.
+  - **Size it: ≤ ~300 LOC per slice.** Scene + camera + measurement is one task; picking is M1-T9.
+  - **Write the source scans fresh for any new file.** They are per-file and inherit nothing. For a
+    **sim/core** file copy `tests/unit/test_rng.gd`/`test_map_generator.gd`; for a **renderer** file
+    the newest examples are `tests/unit/test_hex_layout.gd` (a pure `RefCounted` renderer helper) and
+    `tests/unit/test_map_renderer.gd` (an actual `Node` — **copy this one for M1-T8**, it is the scan
+    written for engine-bound code). Both **strip comment lines FIRST** (load-bearing — doc blocks
+    contain `§4.1`, which naive regexes hit). **`RulesError` is explicitly ALLOWED in renderer files**
+    (M1-T6 (Y)); the **no-float** scan is deliberately **NOT** applied to renderer files (geometry is
+    not a §11.1 rule surface). Always keep: no map-size literal `24|32|40|1801|3169|4921`; a
+    `## §<section>` doc comment on every public function (section list in a `DOC_SECTIONS` const);
+    **an explicit expected public-member list** so a missing **or extra** member fails; and class-kind
+    via `get_class()`, **never** `is Node` (a statically-decidable construct parse-errors and silently
+    un-collects the whole file; decisions.md M0-T2 item 11 / M0-T5 item (a)) — for a Node file
+    `get_class()` **names** the expected class instead of forbidding Node-ness.
+  - Continue the decisions.md lettering at **(AI)** — M1-T7 ended at (AH).
   `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd` + `sim/hex_map.gd` +
   `sim/map_generator.gd`, `core/event.gd` + `core/event_bus.gd`, `core/hex_math.gd`, `core/los.gd`,
-  `core/rng.gd` and `render/hex_layout.gd`, and nothing else, deliberately (§13.4: invent nothing
-  ahead of its milestone). **No `Node`, no `.tscn`, no `scenes/` directory, no mesh, material or
-  MultiMesh exists anywhere in the repo yet**, and no GameState, Command, vein **node**, cave feature,
-  river, lair or spawn code exists — nor any concrete `Event` subclass. Those belong to the milestones
-  that emit them.
+  `core/rng.gd`, `render/hex_layout.gd` and `render/map_renderer.gd`, and nothing else, deliberately
+  (§13.4: invent nothing ahead of its milestone). **`MapRenderer` is the project's only `Node`; there
+  is still no `.tscn`, no `scenes/` directory, no `Camera3D`, no `WorldEnvironment` and no shader**,
+  and no GameState, Command, vein **node**, cave feature, river, lair or spawn code exists — nor any
+  concrete `Event` subclass. Those belong to the milestones that emit them.
+- **`MapRenderer` contract (`scripts/render/map_renderer.gd`, `data/render/terrain_palette.json`, NEW
+  at M1-T7 — read decisions.md M1-T7 (AA)–(AH) before touching it). THE PROJECT'S FIRST `Node`**
+  (`class_name MapRenderer extends Node3D`), and the boundary it opens is the standing risk: §11.1 is
+  binding (`data → Sim Core (engine-free) → EventBus → Renderer/UI`, **the sim never calls the
+  renderer**), engine-bound code lives **only** in `scripts/render/`, and **no source scan in
+  `scripts/core/` or `scripts/sim/` may ever be weakened to make a renderer compile** — those trees
+  still forbid `extends Node`/`SceneTree`/`get_tree`/`Engine.`/`Time.`/`OS.` and were left
+  byte-untouched at M1-T7.
+  - Public surface is **EXACTLY** `var errors: Array[RulesError]` + eight functions —
+    `load_palette_text`, `load_palette_file`, `tint_for`, `set_layout`, `build`, `chunk_keys`,
+    `mark_hex_dirty`, `flush_dirty` — and a source scan fails on a **missing OR extra** member. **No
+    camera, no picking, no `EventBus` subscription, no shader** (§13.4). If M1-T8/M1-T9 needs a new
+    public member, update the scan's expected list in the same commit.
+  - **(AA)/(AE) structure and the dirty seam:** one `MultiMeshInstance3D` child per
+    `HexLayout.chunk_keys()` key, **in canonical (X) order**, named `"chunk_%d_%d" % [key.x, key.y]`
+    (negative keys round-trip). `mark_hex_dirty(hex)` marks `chunk_of(hex)` **only if built** (else a
+    silent no-op); `flush_dirty(map)` rebuilds **only** marked chunks **IN PLACE** (same nodes, same
+    `MultiMesh` objects — both pinned by `get_instance_id()`), returns keys in canonical order and
+    clears the set. **This is the seam M2's dig calls** — wire the `EventBus` to it *there*, not here.
+  - **(AD) ONE shared `CylinderMesh` + ONE shared `StandardMaterial3D` for the whole renderer** — the
+    pin that makes a 3,169-hex Medium map viable; probe P3 showed **exactly one test** stands between
+    the project and 1,801 mesh allocations, so never "simplify" it away. Geometry comes from
+    `data/render/greybox.json` **via `HexLayout`** (`hex_width_m()/2.0`, `elevation_step_m()`); only
+    `RADIAL_SEGMENTS = 6` is a code const (mathematical — a hexagon has six sides; the `SQRT_3`/FNV
+    precedent). The material rides on `PrimitiveMesh.material`, not a `material_override`.
+  - **NEVER `queue_free()` a chunk node** — it defers to the next frame while GUT asserts
+    **synchronously**, so a rebuild appears to **double** the children. Use `remove_child(child)` then
+    `child.free()`. This is now a standing rule for **every** Node file in this project; `queue_free(`
+    is a forbidden token in the scan and probe P1 catches it behaviourally.
+  - **MultiMesh FORMAT MUST BE SET BEFORE `instance_count`** (measured): assigning the count first
+    makes the engine refuse both toggles — *"Instance count must be 0 to change the transform format"*
+    / *"… to toggle whether custom data is used"* — and every later
+    `set_instance_transform`/`set_instance_custom_data` then errors too. `transform_format` defaults to
+    **`TRANSFORM_2D`**, and `use_custom_data`/`use_colors` default to **false**.
+  - **(AB) totality:** `build()` draws only with a configured layout **AND** a loaded palette **AND** a
+    non-null map with `hex_count() > 0`; otherwise zero children, empty `chunk_keys()`, empty
+    `flush_dirty()`. **Any** palette error leaves the palette **UNLOADED** (including a failed load
+    after a successful one), and *unloaded* means `tint_for(anything) == Color(0,0,0,1)` — the **black
+    sentinel**, deliberately distinct from the loaded fallback grey, so a failed load never
+    masquerades as working greybox art.
+  - **(AF) the palette loader mirrors `MapGenerator`'s (P) and `HexLayout`'s (Y) exactly and REUSES
+    `RulesError`** — line 0 reserved for missing/unreadable files, schema errors on the top-level key's
+    own 1-based line (fallback 1), row errors attributed to the `tints` line, error order from the
+    loader's **declared** key-spec order (`fallback_rgb` → `tints`) and never the parsed Dictionary's,
+    unknown extra top-level keys load clean, integral floats accepted / fractional rejected / never
+    truncated.
+  - **`data/render/terrain_palette.json` is CONTENT and its formatting is load-bearing** (line 1 a lone
+    `{`, one top-level key per line, like `ruleset.json`/`greybox.json`): `"id": "greybox_terrain"`,
+    `fallback_rgb [128,128,128]`, and all **nine** §4.2 Solid tints — including `artificial_granite`
+    and `rubble`, which the generator never emits. It is a **separate file** precisely because
+    `test_hex_layout.gd` asserts `greybox.json` **byte-for-byte**. **There is NO terrain-type whitelist
+    in engine code** (all nine ids are forbidden tokens in `map_renderer.gd`); §4.2's vocabulary is
+    pinned **by test**, plus a **cross-file coverage property** that reds if a future
+    `concentric_bowl.json` composition type has no palette entry. Data-drivenness is proven **by
+    mutation**, not by a token scan.
+  - **(AC)** per-instance transform (`hex_to_world`, identity basis, MapRenderer-local space) and
+    custom data (`tint_for(terrain_type)`, **alpha 1.0 reserved for M3's §10 line 679 Lit/Dark
+    shader**) are **written, never read back** — (Z) makes a read-back vacuous, so the scan requires the
+    literal `set_instance_transform(`/`set_instance_custom_data(` tokens instead. **(AH)** at M1 every
+    in-bounds hex is drawn as solid rock; **cave culling arrives with M2's dig**.
+  - **Two known, deliberately unfixed observations** (decisions.md M1-T7 item 13): `const SPEC_KEYS` is
+    declared but unreferenced (documentation only — the order comes from the fixed
+    `_validate_fallback` → `_validate_tints` call sequence), and `_ensure_resources()` allocates the
+    shared mesh once per renderer lifetime.
 - **`HexLayout` contract (`scripts/render/hex_layout.gd`, `data/render/greybox.json`, NEW at M1-T6 —
   read decisions.md M1-T6 (V)–(Z) before touching it). The FIRST file in `scripts/render/`, and still
   a pure `RefCounted`** (`class_name HexLayout extends RefCounted`) — it holds no Node, builds no
@@ -154,8 +223,9 @@ not-yet-committed.
     `load_params_text`, `load_params_file`, `hex_width_m`, `elevation_step_m`, `chunk_hexes`,
     `hex_to_world`, `chunk_of`, `chunk_keys`, `partition` — and a source scan fails on a **missing OR
     extra** member. Privates: `_floor_div`, `_is_integral`, `_as_float`, `_add_error`, `_line_for_key`,
-    `_clear_configuration`, `_chunk_less`. **If M1-T7 needs a new public member, the scan's expected
-    list must be updated in the same commit.**
+    `_clear_configuration`, `_chunk_less`. **If a later task needs a new public member, the scan's
+    expected list must be updated in the same commit.** `MapRenderer` (M1-T7) is its first consumer and
+    needed nothing added.
   - **(W) the formula:** XZ ground plane, **+Y up**, hex `(0,0)` at the **world origin**,
     `R = hex_width_m / 2`; `world.x = 1.5*R*q`, `world.z = SQRT_3*R*(r + 0.5*q)`,
     `world.y = elevation * elevation_step_m`. `SQRT_3 = 1.7320508075688772` is a **named const in the
@@ -443,17 +513,18 @@ not-yet-committed.
   Errors surface as `RulesError` (`line` 1-based, `path` dotted, `message`,
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
-- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 14 /
-  Tests 278 / Passing 278 / Failing 0 / Asserts 2760** (re-measured at Land, 2026-08-04, M1-T6).
-  `Scripts 14` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
-  `bash tools/typecheck.sh` exits **0** over 24 files; `bash tools/ci.sh` exits 0 (PASS with the
+- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 15 /
+  Tests 321 / Passing 321 / Failing 0 / Asserts 3380** (re-measured at Land, 2026-08-04, M1-T7).
+  `Scripts 15` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
+  `bash tools/typecheck.sh` exits **0** over 26 files; `bash tools/ci.sh` exits 0 (PASS with the
   three documented M7/E4/E5 skips) and `bash tools/verify_harness.sh` exits 0. Prior green baselines,
-  for reference: M1-T5's 13 / 234 / 234 / 2268, M1-T4's 11 / 183 / 183 / 1879, M1-T3's
+  for reference: M1-T6's 14 / 278 / 278 / 2760, M1-T5's 13 / 234 / 234 / 2268, M1-T4's
+  11 / 183 / 183 / 1879, M1-T3's
   9 / 129 / 129 / 1308, M1-T2's 8 / 106 / 106 / 1023, M1-T1's 8 / 86 / 86 / 835, and
   7 / 62 / 62 / 473 at the close of M0 (the M0 tracker row above deliberately keeps that historical
   figure). **Expect these totals to RISE as you add tests — they are enumerated, not hard-coded.**
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 on a healthy tree, and
-  `bash tools/typecheck.sh` → exit 0 over **24** project `.gd` files, and
+  `bash tools/typecheck.sh` → exit 0 over **26** project `.gd` files, and
   `bash tools/verify_harness.sh` → exit 0
   with **four** phases (A green · B failing canary · C syntactic parse error · D
   statically-impossible construct), each red phase non-zero *and naming its probe*, self-cleaning
@@ -560,8 +631,8 @@ not-yet-committed.
   the harness phrase trap — is in the **GOLDEN contract** bullet above; read it before you touch
   `HexMap`'s storage, its canonical order, `content_hash`, the composition table or the shipped
   `data/mapgen/concentric_bowl.json`, because **any** of those changes the hash.
-- **Adversarial mutation probes are now standing practice at Verify** (M1-T1 item 8 → M1-T6 item 9,
-  six iterations running). Before declaring green, break the implementation on purpose — capture the
+- **Adversarial mutation probes are now standing practice at Verify** (M1-T1 item 8 → M1-T7 item 12,
+  seven iterations running). Before declaring green, break the implementation on purpose — capture the
   file md5, mutate, run, restore, re-verify byte-identical — and **record what went red**. A property
   test that has never been observed failing is indistinguishable from one that cannot fail. M1-T4's
   yield: the terrace `>` vs `>=` slip is invisible except at exact-multiple radii, and a q/r-swapped
@@ -576,4 +647,13 @@ not-yet-committed.
   chunk-q-then-chunk-r instead of chunk-r-then-chunk-q reds only 2 tests, so "sorted somehow" is a
   strictly weaker property than what is implemented; and **Verify adding its own probes beyond the
   spec's list is now the expectation, not a bonus** — P4/P5/P6 each found a pin that no inherited
-  probe exercised.
+  probe exercised. **M1-T7's yield (six probes, all red on demand, file md5 restored byte-identical
+  each time): the resource-sharing pin is SURGICALLY NARROW** — allocating a fresh `CylinderMesh` per
+  chunk reds **exactly one** test (`test_all_chunks_share_one_prism_mesh_and_one_material`), and that
+  one test is all that stands between the project and 1,801 mesh allocations on a Small map, so it
+  must never be folded into a broader assertion; **`queue_free()` instead of `remove_child()+free()`
+  makes a same-frame rebuild appear to DOUBLE the children** (GUT asserts synchronously, `queue_free`
+  defers a frame) — a failure mode that reads as a logic bug and is caught only by the same-frame
+  idempotence test; and **assigning `instance_count` before the MultiMesh format makes the engine
+  silently REFUSE the format toggles** (*"Instance count must be 0 to change the transform format"*),
+  after which every per-instance write errors too.

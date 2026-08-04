@@ -1673,3 +1673,287 @@ M1-T7 continues at (AA)**.
   accompanies this entry, because no numeric table value changed: `hex_width_m` 18 falls inside a
   printed range rather than replacing a printed number, and `elevation_step_m` 3 / `chunk_hexes` 8
   have no printed counterpart at all.**
+
+## 2026-08-04 — M1-T7 — `MapRenderer`: chunked MultiMesh nodes, type/tint custom data and dirty-chunk rebuilds (renderer slice 2); resolutions (AA)–(AH); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 15 / Tests 321 /
+Passing 321 / Failing 0 / Asserts 3380** (the M1-T6 baseline was 14 / 278 / 278 / 0 / 2760 — all four
+totals rose); `bash tools/typecheck.sh` exits 0 over **26** files (was 24); `bash tools/ci.sh` exits 0
+(PASS) with the three documented not-yet-built skips; `bash tools/verify_harness.sh` exits 0 across
+all four phases with the tree left clean. All ran headless through the `tools/` scripts on the
+repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3).
+`sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5) were correctly **SKIPped, not failed**,
+per CLAUDE.md's applicability rule. `Scripts 15` equals the number of `test_*.gd` on disk, so the
+M0-T5 enumeration guard is satisfied and nothing was silently un-collected. The run output contained
+**zero** of `run_tests.sh`'s five refusal phrases.
+
+**This is the FIRST `Node` code in the project.** `class_name MapRenderer extends Node3D` lives in
+`scripts/render/map_renderer.gd` (§11.2 names it there verbatim). **No source scan in `scripts/core/`
+or `scripts/sim/` was weakened to accommodate it** — those trees are byte-untouched and still forbid
+`extends Node`/`SceneTree`/`get_tree`/`Engine.`/`Time.`/`OS.`; the renderer carries its own,
+differently-written scan.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §4.1
+line 171 (flat-top hexes, axial (q, r), the fixed index 0–5 neighbour order), §4.1 line 173
+(*"**Elevation:** integer 0–3 per hex"*), §4.1 line 174 (map sizes — Small 24 / 1,801, Medium 32 /
+3,169, Large 40 / 4,921; used as **test fixtures only**), §4.2 lines 178–193 (the **nine** Solid
+type ids), §1.2 line 41 (*"Hex scale ≈ 15–20 m (cosmetic only)"*), §10 line 678 (*"Greybox first. All
+MVP visuals are flat-shaded prisms and capsules …"*), §10 line 679 (the Lit/Dark **shader** tint —
+**M3**, deliberately not built here), §10 line 680 (*"Rock rendered as chunked MultiMeshInstance3D
+(per-instance custom data = type/tint); dirty-chunk rebuilds on dig. Target: Medium map at 60 fps on
+mid-range hardware; SDFGI off"*), §11.1–§11.3, §13.2, §13.4, §13.6, §14 line 1097.
+`docs/decisions.md` was re-scanned end to end: **no logged override touches §1.2, §4.1, §4.2 or
+§10**, so the printed text governs unamended; the lettering genuinely ended at **(Z)** in the M1-T6
+entry, so this entry continues at **(AA)**.
+
+The resolutions below are §13.4 decisions closing §10's silences, **not** deviations from a printed
+value. Their lettering continues M1-T1's (A)/(B), M1-T2's (C)–(G), M1-T3's (H)–(L), M1-T4's (M)–(Q),
+M1-T5's (R)–(U) and M1-T6's (V)–(Z), and is cross-referenced by the header doc block of
+`scripts/render/map_renderer.gd` and by `tests/unit/test_map_renderer.gd` — **keep it stable; M1-T8
+continues at (AI)**.
+
+- **What changed / was decided:**
+  1. **SCOPE RE-SLICE — M1-T7 / M1-T8 / M1-T9 re-sequenced, DELIBERATELY, with no §14 deliverable
+     dropped (the M0-T2 item 1 precedent).** `docs/PROGRESS.md`'s next-task pointer, and M1-T6 **(Z)**
+     item (c), both bundled *MapRenderer + `scenes/Main.tscn` + the manual windowed 60-fps measurement*
+     into M1-T7. That is now split: **M1-T7 = the renderer Node only** (this task); **M1-T8 =
+     `scenes/Main.tscn` greybox + CameraRig + SDFGI off + the MANUAL WINDOWED 60-fps measurement on the
+     Medium map** (radius 32 / 3,169 hexes), logged in decisions.md at that task; **M1-T9 = hex
+     picking**. Reason: §14 M1's *"60 fps on Medium map greybox"* cannot be measured without a camera
+     pointed at the map, so scene + camera + measurement belong together, and bundling all of it here
+     would have blown the ≤ ~300 LOC house rule. **Only the order changed, nothing was dropped.**
+     **Consequence to carry forward: M1-T6 (Z)'s forward reference to "M1-T7" for the manual windowed
+     measurement now points to M1-T8.** Deliberately **not** created in this task and absent from the
+     diff: any `.tscn` (still no `scenes/` directory), any `Camera3D`, any `WorldEnvironment`, any
+     picking code, any `EventBus` subscription, any shader, and any edit to `project.godot` (which
+     still deliberately has **no** `run/main_scene` — a dangling path breaks `--import`).
+  2. **(AA) ONE `MultiMeshInstance3D` CHILD PER CHUNK, IN CANONICAL ORDER.** `build(map)` adds exactly
+     one `MultiMeshInstance3D` per key of `HexLayout.chunk_keys(map.hexes())`, **in that order**
+     (M1-T6 **(X)**: ascending chunk-r (y) then chunk-q (x), matching `HexMap`'s **(O)** hex order),
+     named `"chunk_%d_%d" % [key.x, key.y]`. `MapRenderer.chunk_keys()` returns that same array
+     element-for-element. Negative keys round-trip through the node name exactly (`chunk_-1_-1`,
+     measured). Chunk node transforms are left at **identity**; all placement lives in the per-instance
+     transforms, in MapRenderer-local space.
+  3. **(AB) TOTALITY.** `build(map)` draws something **only** when a `HexLayout` is configured **and**
+     a palette is successfully loaded **and** `map != null` **and** `map.hex_count() > 0`; in every
+     other combination it leaves `get_child_count() == 0`, `chunk_keys()` empty and `flush_dirty()`
+     empty, with no engine error. `flush_dirty(null)` is safe. **Any palette error leaves the palette
+     UNLOADED, including a failed load after a successful one** — and *unloaded* means
+     `tint_for(anything) == Color(0, 0, 0, 1)`, the **black sentinel**, deliberately distinct from the
+     loaded fallback grey, so "no palette" and "unknown terrain id" are never confused.
+  4. **(AC) PER-INSTANCE DATA IS WRITTEN, NEVER READ BACK (forced by M1-T6 (Z)).** Instance transform
+     origin = `layout.hex_to_world(hex, map.get_elevation(hex))` with an **identity basis**; instance
+     custom data = `tint_for(map.get_terrain_type(hex))`, alpha **1.0**, which §10 line 679 reserves
+     for **M3's** Lit/Dark shader tint and which this task therefore does not use. §10's phrase
+     *"per-instance custom data = type/tint"* is read the simplest way (§13.4): **one `Color` carrying
+     the tint that the terrain TYPE maps to** — no separate type channel is invented. Because the
+     `--headless` dummy renderer stores no instance data, **that the writes happen at all** is pinned
+     the only way headless allows: the source scan requires the literal `set_instance_transform(` and
+     `set_instance_custom_data(` tokens. **No assertion in the suite reads an instance transform or
+     custom datum back** — such a test could only ever pass vacuously.
+  5. **(AD) ONE SHARED PRISM MESH AND ONE SHARED MATERIAL FOR THE WHOLE RENDERER** — the pin that
+     actually matters for §10's 60-fps target. A single `CylinderMesh` with `radial_segments = 6`,
+     `top_radius = bottom_radius = layout.hex_width_m() / 2.0` and `height = layout.elevation_step_m()`
+     (all three read from `data/render/greybox.json` **via `HexLayout`**, asserted against the layout
+     and never against a `.gd` literal), carrying **one** `StandardMaterial3D` on
+     `PrimitiveMesh.material` rather than a per-instance `material_override`. Every chunk's
+     `multimesh.mesh` is the **same object** (equal `get_instance_id()`), so a radius-24 build
+     allocates **1** mesh and **1** material, never 1,801. `RADIAL_SEGMENTS = 6` is a **named const in
+     the `.gd`** — a hexagon has six sides, a **mathematical** constant on the `SQRT_3` (M1-T6 (W)) /
+     FNV (M1-T5 item 7) precedent — and is **not** a §13.6 violation; the test re-derives it as
+     `HexMath.DIRECTIONS.size()` rather than trusting the literal. The prism is **centred** on
+     `hex_to_world`.
+  6. **(AE) THE DIRTY-CHUNK SEAM (§10 *"dirty-chunk rebuilds on dig"*).** `mark_hex_dirty(hex)` marks
+     `layout.chunk_of(hex)` **only if that chunk was built** (an out-of-map hex, or any chunk with no
+     node, is a silent no-op — the M1-T1 **(B)** totality spirit). `flush_dirty(map)` rebuilds **only**
+     the marked chunks, **IN PLACE** — the **same** `MultiMeshInstance3D` nodes **and** the same
+     `MultiMesh` objects, both pinned by `get_instance_id()` — returns their keys in the canonical
+     **(X)** order (**not** marking order; a fixture marks the last chunk first) and **clears** the set,
+     so an immediate second flush returns `[]`. A flush before any build returns `[]`; two hexes in one
+     chunk collapse to one key; a terrain-type change moves the tint and never the `instance_count`.
+     `build()` caches the hex list and the partition buckets so a flush is **O(chunk)**, not O(map).
+     **This is the seam M2's dig will call — the renderer deliberately does NOT subscribe to the
+     `EventBus` here** (§13.4: invent nothing ahead of its milestone).
+  7. **(AF) PALETTE LOAD CONTRACT — mirrors `MapGenerator`'s (P) and `HexLayout`'s (Y) exactly and
+     REUSES `RulesError`.** No second error type was invented (§13.4, simplest interpretation);
+     `scripts/sim/rules_error.gd` is a plain line-numbered value holder and is explicitly **allowed**
+     in renderer files (M1-T6 (Y)). **All** errors are collected, never stopping at the first; **line 0
+     stays reserved for missing/unreadable files** and is never emitted for a schema error; schema
+     errors carry the offending **top-level** key's own 1-based line, falling back to 1 when the key is
+     absent, and row errors inside `tints` attribute to the `tints` line exactly as `MapGenerator`'s
+     composition errors attribute to `composition`; error **ORDER** comes from the loader's own
+     declared key-spec order (`fallback_rgb` → `tints`), **never** the parsed `Dictionary`'s (a fixture
+     presents them reversed **and** breaks both); unknown extra top-level keys load clean (M0-T2
+     item 5 — the shipped `"id"` is one); `JSON.get_error_line()` is **0-based** and normalized `+1`;
+     every JSON number arrives as `TYPE_FLOAT`, so an integral `128.0` is **ACCEPTED** and a fractional
+     `128.5` **REJECTED, never truncated**. Rejected: root not an object; either required key missing;
+     `tints` not an array or empty; a row that is not an object; a row with no / empty / non-string /
+     **duplicate** `"type"`; an `"rgb"` that is missing, not an array, of length ≠ 3, non-numeric,
+     fractional, or outside 0..255 — with `fallback_rgb` obeying the identical triple-of-bytes rule.
+  8. **(AG) THE TEN TINT VALUES ARE ENTIRELY NEW TUNABLE CONTENT — §10 prints only FACTION palettes,
+     never terrain tints — so NO GDD cell moves.** `data/render/terrain_palette.json` (md5
+     `1c7f5f8f07b018be931dbb894ecb1156`) ships `"id": "greybox_terrain"`, `fallback_rgb`
+     `[128, 128, 128]`, and the nine §4.2 Solid tints: `soft_dirt [138,109,74]`,
+     `hard_rock [112,112,118]`, `dense_granite [78,78,86]`, `artificial_granite [96,104,112]`,
+     `rubble [134,128,118]`, `gold_vein [201,162,39]`, `iron_vein [124,100,84]`,
+     `magestone_crust [96,84,168]`, `mithril_seam [176,214,226]`. Its formatting is **load-bearing**
+     (line 1 a lone `{`, one top-level key per line) exactly like `ruleset.json` and `greybox.json` —
+     **do not re-pretty-print it nested**, the line-attribution tests derive expected lines from the
+     fixture. It is a **NEW file** rather than three more keys in `greybox.json` precisely because
+     `tests/unit/test_hex_layout.gd` asserts `greybox.json` **byte-for-byte**. Data-drivenness is
+     proven **by mutation**, not merely by a token scan: mutating `soft_dirt`'s rgb in the params TEXT
+     moves `tint_for`, and mutating `fallback_rgb` moves the unknown-id result. **All nine §4.2 ids
+     must be present** — including `artificial_granite` and `rubble`, which the concentric-bowl
+     generator never emits — and a **cross-file coverage property** parses
+     `data/mapgen/concentric_bowl.json` in the test and requires every composition `"type"` to have a
+     palette entry, so a future generator content change that outruns the palette goes red. **There is
+     NO terrain-type whitelist in engine code** (the EventBus **(f)** / M1-T5 precedent): all nine ids
+     are **forbidden tokens** in `map_renderer.gd`; §4.2's vocabulary is pinned **BY TEST**.
+  9. **(AH) AT M1 EVERY IN-BOUNDS HEX IS DRAWN AS SOLID ROCK.** The per-chunk `instance_count` equals
+     the layout bucket size and the counts sum to `map.hex_count()` (37 at radius 3, **1,801** at
+     radius 24) — the only headless pin that every hex reaches the renderer. **Cave-hex culling arrives
+     with M2's dig**, together with the `mark_hex_dirty` caller.
+  10. **THREE ENGINE FACTS MEASURED LIVE THIS ITERATION, recorded so nobody re-derives them.**
+     (a) `MultiMesh.transform_format` **DEFAULTS to `TRANSFORM_2D` (0)**; `TRANSFORM_3D` is 1; and
+     `use_custom_data` / `use_colors` both default to **false** — so all four format assertions are
+     meaningful rather than tautological. (b) **FORMAT MUST BE SET BEFORE `instance_count`**: assigning
+     the count first makes the engine **refuse** both toggles, verbatim —
+     `Instance count must be 0 to change the transform format` and `Instance count must be 0 to toggle
+     whether custom data is used` — after which every `set_instance_transform` /
+     `set_instance_custom_data` also errors (`Can't set Transform3D on a Multimesh configured to use
+     Transform2D`, `Can't get instance custom data on a Multimesh that isn't using custom data`). The
+     implementation therefore sets `transform_format`, `use_custom_data` and `mesh` **first**, then the
+     count; probe P5 measured exactly this. (c) `Color8(v, v, v).r` differs from `v / 255.0` by at most
+     **2.97e-8** (float32 storage), comfortably inside the suite's 1e-6 tolerance, so `Color8()` — which
+     avoids a bare `255` literal and the division entirely — and an explicit `/255.0` both satisfy the
+     colour comparator. Also confirmed: node names containing `-` round-trip exactly, and
+     `get_instance_id()` survives `remove_child` + `add_child`.
+  11. **THE `queue_free()` TRAP, now a standing rule for every Node file in this project.**
+     `queue_free()` is **deferred to the next frame** while GUT's assertions run **synchronously in the
+     same frame**, so a rebuild would appear to **double** the children. `build()` therefore uses
+     `remove_child(child)` then `child.free()`, `queue_free(` is a **forbidden token** in the source
+     scan, and `test_rebuilding_in_the_same_frame_is_idempotent` catches it **behaviourally** as well
+     (probe P1). GUT reported **no orphan nodes** — every `MapRenderer` in the suite is `autofree`d.
+  12. **SIX ADVERSARIAL MUTATION PROBES RUN LIVE at Verify** (the M1-T1 item 8 → M1-T6 item 9
+     standard, seven iterations running), each with the file md5 captured before
+     (`9871fa49efe2dce296d85069553c8b5f`) and re-verified **byte-identical** after restore, and **none**
+     of the probe logs contained any of `run_tests.sh`'s five refusal phrases, so every red was a
+     genuine assertion failure rather than a harness refusal. **(P1)** `queue_free()` instead of
+     `remove_child()+free()` → RED on `test_rebuilding_in_the_same_frame_is_idempotent` (plus the token
+     scan). **(P2)** chunk children built in reverse of canonical order → RED on
+     `test_build_creates_one_named_multimesh_chunk_node_per_layout_chunk` (+7 more). **(P3)** a fresh
+     `CylinderMesh` per chunk → RED on `test_all_chunks_share_one_prism_mesh_and_one_material`, and on
+     **exactly that one test** — a surgically narrow pin, so it must never be "simplified" away.
+     **(P4)** `flush_dirty` rebuilding ALL chunks → RED on
+     `test_marking_one_hex_flushes_exactly_its_own_chunk_once` and
+     `test_flush_returns_the_canonical_order_not_the_marking_order` (+5). **(P5)** `instance_count`
+     assigned before the format → RED on `test_every_chunk_multimesh_declares_the_required_format`
+     (+11), with the engine refusals quoted verbatim in item 10(b). **(P6)** the palette clear dropped
+     from `load_palette_text` → RED on
+     `test_a_failed_load_after_a_successful_one_leaves_the_palette_unloaded` (+5 rejection fixtures).
+  13. **IMPLEMENTATION NOTES recorded as such (no rule moved, nothing needed fixing at Verify —
+     `fixes_made` was empty).** The loader body is split into the privates `_clear_palette`,
+     `_ensure_resources`, `_clear_chunks`, `_fill_chunk`, `_validate_fallback`, `_validate_tints`,
+     `_rgb_row`, `_is_integral`, `_int_of`, `_add_error`, `_line_for_key` purely for readability; none
+     is public, none changes loader behaviour, error order or error attribution. **Three minor
+     non-blocking observations from the Verify diff review, deliberately left unfixed because no rule
+     or test is wrong:** (a) `map_renderer.gd` declares `const SPEC_KEYS: PackedStringArray =
+     ["fallback_rgb", "tints"]` but never references it — unlike `hex_layout.gd`, where `SPEC_KEYS`
+     genuinely drives the loop, here the order is produced by the fixed `_validate_fallback` →
+     `_validate_tints` call sequence (which the reversed-and-both-broken fixture pins correctly), so the
+     const is **documentation only**; (b) `_ensure_resources()` allocates the shared mesh **once per
+     renderer lifetime**, so a second `set_layout()` with different geometry would **not** resize the
+     prism — untested and out of scope, since M1-T8 configures one layout per renderer, but flagged so
+     it is not discovered as a surprise; (c) `_clear_chunks()` frees **all** children, so **M1-T8's
+     `.tscn` must not give the `MapRenderer` node non-chunk children**.
+  14. **§11.1 BOUNDARY HELD, AND IN THE HARDER DIRECTION NOW THAT A `Node` EXISTS.** `MapRenderer`
+     reads `HexMap` through its **read-only** accessors only — `hexes()`, `hex_count()`,
+     `get_elevation()`, `get_terrain_type()`, `content_hash()` — never `set_elevation(` /
+     `set_terrain_type(` (both **forbidden tokens**, both absent), constructs **no** `Command` and
+     touches **no** `EventBus`. Non-mutation is pinned **behaviourally**: `HexMap.content_hash()` is
+     byte-identical across build / mark / flush on both the radius-3 and the radius-24 map. `hexes()`
+     returns a fresh array per call, so the renderer's cache cannot alias sim storage. Determinism holds
+     on the render side too: the three `Dictionary`s (`_tints`, `_chunk_index`, `_dirty`) are **local
+     lookup/dedup sets only** and **no `Dictionary` iteration ever reaches an output** — ordered output
+     is emitted by walking the cached `Array[Vector2i]` of chunk keys. No `randi(`/`randf(`/
+     `randomize(`/`RandomNumberGenerator`/`SceneTree`/`get_tree`/`Engine.`/`Time.`/`OS.` token appears,
+     and no map-size literal `24|32|40|1801|3169|4921` (M1-T1 item 4) survives the comment-stripped
+     scan. **The source scan strips comment lines FIRST** — load-bearing, because doc blocks contain
+     `§4.1` and naive regexes hit it. Class-kind is asserted via `get_class()`, **never** `is Node`
+     (statically decidable constructs parse-error and silently un-collect the whole file — M0-T2
+     item 11 / M0-T5 item (a)); here `get_class()` must name `Node3D`/`MultiMeshInstance3D` rather than
+     forbid Node-ness, which is why the scan was **written fresh** and not pasted from
+     `test_hex_layout.gd`. **The no-float scan is deliberately NOT applied** (renderer geometry is not
+     a §11.1 rule surface — M1-T6 item 8), and the tint numbers are **not** token-forbidden (they
+     collide with ordinary indices); their data-drivenness is proven by mutation instead.
+  15. **§13.6 CLAUSES RE-CHECKED RATHER THAN ASSUMED.** *Tests green headless*: **MET** (15 / 321 /
+     321 / 0 / 3380, exit 0). *Static typing clean*: **MET** mechanically — `typecheck.sh` exit 0 over
+     **26** files, with the measured traps honoured (`:=` and bare `var x = …` both errors;
+     `get_child(i)` returns `Node`, so it is read into a typed local via `as MultiMeshInstance3D`
+     (`unsafe_cast` is level 0); `unused_parameter` level 2 → unused args prefixed `_`;
+     `native_method_override` level 2 → no method shadows one `Node`/`Node3D` already defines; no
+     `Variant` reaches a typed parameter). *Constants read from data, not code*: **MET and proven by
+     mutation** — the three greybox geometry tunables still come from `data/render/greybox.json` via
+     `HexLayout` and the ten tint values from `data/render/terrain_palette.json`. *Events emitted for
+     every state change*: **VACUOUS and stated explicitly** — this task mutates no `GameState`,
+     constructs no `Command` and touches no `EventBus`; there is no state change to emit for.
+     *Goldens re-recorded only with a logged reason*: **NONE re-recorded** — the M1-T5 golden
+     `tests/golden/mapgen_concentric_bowl_small_seed1337.json` (`content_hash 0xcad24923`) is
+     byte-identical and still green; this task hashes nothing and moved neither `HexMap` storage nor
+     the canonical order. *Relevant GDD table cell updated if numbers moved*: **no number moved** —
+     see the GDD-section line below.
+  16. **OPEN COSMETIC ITEM, deliberately NOT asserted and NOT guessed, owed to M1-T8's windowed run:**
+     whether Godot's `CylinderMesh` starts its first radial vertex at **+X** (flat-top, matching
+     **(V)**) or 30° off is **not verifiable headless**. No yaw was invented for it. Check it by eye at
+     M1-T8 and, if a yaw is needed, log it there.
+  17. **STAGE-BOUNDARY NOTE**, the same call M0-T5 item (i) → M1-T6 item 11 record: `docs/PROGRESS.md`
+     and `docs/decisions.md` are **Land**-stage artefacts, and the Tests/Implement/Verify stages
+     correctly left both untouched. Verify made **no** fixes this iteration (`fixes_made: []`) — the
+     implementation was green on first run, all 43 new tests passing unmodified, with the 14
+     previously-landed suites byte-untouched and still green.
+- **Why:** §10 line 680 mandates chunked `MultiMeshInstance3D`, per-instance custom data and
+  dirty-chunk rebuilds in a single sentence and specifies **no** chunk-node naming, no rebuild
+  granularity, no resource-sharing policy and **no terrain tints at all** (§10's palettes are
+  **faction** colours). Nothing could be drawn without closing those silences, so they are closed here,
+  once, with the ten colour numbers as **content** in `data/render/terrain_palette.json` and only the
+  mathematical `RADIAL_SEGMENTS = 6` in code. **(AD)** is recorded at length because shared resources —
+  not instance placement — are what make a 3,169-hex Medium map viable at 60 fps, and probe P3 shows
+  the sharing pin is surgically narrow: exactly one test stands between the project and 1,801
+  `CylinderMesh` allocations. **(AB)**'s black-sentinel-vs-fallback distinction is recorded because
+  "unloaded" and "unknown id" are otherwise indistinguishable at the call site, and a silent grey would
+  make a failed palette load look like working greybox art. Item 10(b) and item 11 are recorded because
+  both are **measured engine behaviour that is not documented anywhere** and both produce failures that
+  look like logic bugs: a MultiMesh silently refusing its format, and a rebuild that appears to double
+  its children. The re-slice (item 1) is recorded because it moves a **§14 acceptance criterion's**
+  measurement one task later, and a reader of (Z) must be able to find where it went.
+- **GDD section affected:** §10 (its *"Rock rendered as chunked MultiMeshInstance3D (per-instance
+  custom data = type/tint); dirty-chunk rebuilds on dig"* now **fully implemented as a Node**, closing
+  the deliverable half that M1-T6 left open; its line 678 *"flat-shaded prisms"* realised as the shared
+  hexagonal `CylinderMesh`; its line 679 Lit/Dark **shader** tint deliberately **NOT** built — alpha
+  1.0 is reserved for it at M3; its *"Medium map at 60 fps … SDFGI off"* target still owed as a
+  **manual windowed** measurement, now at **M1-T8**; **no cell edited**); §4.2 (all **nine** Solid type
+  ids given greybox tints as **new content**, with the vocabulary pinned **by test** and **no**
+  whitelist in engine code; **no cell edited**); §4.1 (flat-top **(V)** and the fixed neighbour order
+  re-confirmed **unchanged** — no sim value moved; elevation 0–3 still the linear Y axis through
+  `HexLayout`); §1.2 (its *"Hex scale ≈ 15–20 m"* still realised as the already-landed `hex_width_m`
+  18, unmoved); §11.1 (the layered boundary held with the project's **first `Node`** — read-only sim
+  access proven by `content_hash()` equality, no `Command`, no `EventBus`, no `Dictionary` iteration in
+  an output); §11.2 (`scripts/render/map_renderer.gd` created exactly where §11.2 names *"MapRenderer
+  (chunked MultiMesh)"*); §11.3 (typing gate green over **26** files; every public function carries its
+  `## §` doc comment; the public surface is **exactly** `errors` + eight functions — a missing *or
+  extra* member fails); §13.2 (tier-1 unit suite: 43 tests, **all structural** per **(Z)**, covering
+  chunk-node structure over the real radius-24 1,801-hex map, every-hex-drawn-once, MultiMesh format,
+  resource sharing, same-frame idempotent rebuild, the seven-part dirty-chunk contract, non-mutation,
+  the full palette load contract with its rejection fixtures, the cross-file coverage property and the
+  freshly-written source scan); §13.4 (procedure exercised: eight silences resolved (AA)–(AH), nothing
+  stalled, nothing invented ahead of its milestone); §13.6 (definition of done **MET**, every clause
+  re-checked in item 15; **no golden re-recorded**); **§14 M1 row — still TWO of three acceptance
+  criteria MET, unchanged by this commit: *"Golden mapgen test (seed ⇒ terrain hash)"* MET (M1-T5) and
+  *"LOS property tests"* MET (M1-T3). *"60 fps on Medium map greybox"* REMAINS **NOT MET** after this
+  task — there is still no scene and no camera, and per (Z) it is not headless-measurable at all; it is
+  owed at **M1-T8** as a manual windowed measurement on the Medium map (radius 32 / 3,169 hexes) with
+  SDFGI off. Of the five §14 M1 deliverables, HexMath, the concentric-bowl generator **and now the
+  chunked MultiMesh renderer** are COMPLETE; the camera rig (M1-T8) and hex picking (M1-T9) are not
+  started, so **M1 is NOT done**.** Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md`
+  edit accompanies this entry, because no numeric table value changed: §10 prints FACTION palettes and
+  never terrain tints, so the ten shipped colour triples have no printed counterpart at all.**
