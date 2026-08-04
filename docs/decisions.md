@@ -481,3 +481,135 @@ table value moved, so **no `docs/GAME_DESIGN.md` cell was edited in this commit*
   (slice 1 of 2) and NONE of the three M1 acceptance criteria pass yet** (no golden mapgen test, no
   greybox to measure 60 fps on, no LOS to property-test). Acceptance criterion text unchanged.
   **No numeric table value moved, so NO `docs/GAME_DESIGN.md` cell was edited in this commit.**
+
+## 2026-08-04 — M1-T2 (WIP, BLOCKED) — Hex-line/ring conventions (C)–(G) fixed and test-pinned; Implement stage did not run
+
+**Status of the commit this entry accompanies: `WIP(blocked)`. The suite is RED on purpose** —
+`bash tools/run_tests.sh` exits **1** at Scripts 8 / Tests 106 / Passing 87 / **Failing 19** /
+Asserts 950/1023, while `bash tools/typecheck.sh` exits **0** over 13 files. The Tests stage
+completed and is committed; the **Implement stage returned no result** (agent died or was skipped),
+so Verify ran nothing (`green: false`, zero suites run) and the loop degraded to `WIP(blocked)` per
+CLAUDE.md rather than landing a false green. `scripts/core/hex_math.gd` therefore ships four public
+members plus one private helper as **deliberately-wrong stubs** under an explicit banner comment.
+The next iteration resumes M1-T2 **at the Implement stage**; see `docs/PROGRESS.md` for the exact
+19 failing test names and the resume checklist.
+
+§4.1 gives an **algorithm** for this task, not a table — *"Line of sight uses standard hex
+line-drawing (lerp in cube space, round)"*, *"Distance = cube distance"*, *"Neighbor order (fixed,
+index 0–5): E, NE, NW, W, SW, SE"* — so there is **no printed cell to transcribe** and every
+expected value in the new tests is **derived**. `docs/decisions.md` carries **no override touching
+§4.1**. The resolutions below are therefore §13.4 decisions, not deviations. Their lettering
+continues M1-T1's `(A)`/`(B)` sequence and is cross-referenced by the header doc blocks of
+`scripts/core/hex_math.gd` and `tests/unit/test_hex_math.gd` — **keep it stable**. Each is pinned by
+test today and will be pinned by *passing* test when Implement lands.
+
+- **What changed / was decided:**
+  1. **(C) ROUNDING IS ROUND-HALF-UP MEANING TOWARD +INFINITY, computed exactly over rationals,
+     never in floats.** §11.1 mandates "integers + fixed percent math, round-half-up at the final
+     step". Resolution: `round_half_up(n, d) == floor_div(2 * n + d, 2 * d)` for `d > 0`, where
+     `floor_div` is a **true floor**. Two traps are recorded because both are silent and both break
+     determinism: (i) **GDScript's `int / int` truncates toward zero** (`-1 / 3 == 0`, not `-1`), so
+     `HexMath._floor_div` must correct the negative case — without it *every negative-coordinate
+     line rounds the wrong way*; (ii) **Godot's `roundi()` rounds half AWAY FROM ZERO and is
+     therefore the WRONG primitive here** — it maps `-1/2 → -1` and `-3/2 → -2` where half-up gives
+     `0` and `-1`. `roundi`/`round`/`floor`/`snapped`/`lerp`/`Vector3` appear nowhere in the file,
+     and the pre-existing no-float source scan (regex `\.[0-9]` plus the `float` token, comment
+     stripped) mechanically keeps it that way. Two probes in the test file are chosen *precisely
+     because* half-up and `roundi` disagree on them.
+  2. **(C2) `cube_round_scaled(numerators, denom)` repairs the `x + y + z == 0` invariant with the
+     standard largest-diff cascade on the SCALED integer diffs, and a tie repairs `z`.**
+     `dx = |rx*denom - n.x|` (etc.), then `if dx > dy and dx > dz: rx = -ry - rz` /
+     `elif dy > dz: ry = -rx - rz` / `else: rz = -rx - ry`. So a two-way **or** three-way tie
+     deterministically repairs **z**. The result always satisfies `is_valid_cube()`. This is not a
+     cosmetic choice: it is the only thing that decides two of the pinned line values, and the test
+     file contains four assertions that go red if the final `else` repairs `y` instead.
+     **`denom <= 0` returns `numerators` unchanged** — a total function, same spirit as M1-T1
+     resolution (B): no crash, no assert abort headless.
+  3. **(D) HEX LINES ARE EXACTLY REVERSIBLE, and that is a consequence of the exact-rational
+     formulation rather than an extra rule.** `line(a, b)` takes `N = distance(a, b)`
+     (`N == 0 ⇒ [a]`) and walks `i = 0..N` over the exact integer numerators
+     `cube(a) * N + (cube(b) - cube(a)) * i` with denominator `N`. Because there is **no epsilon
+     nudge** (the usual float implementation's tie-breaker), `line(a, b)` is **exactly**
+     `reverse(line(b, a))`. That symmetry is pinned as a property over all 3,721 ordered pairs of
+     the radius-4 disc — a float-plus-epsilon implementation fails it immediately, which is the
+     point of pinning it.
+  4. **(E) RING CORNER AND TRAVERSAL RULE.** Corner `i` of `ring(center, radius)` is
+     `center + DIRECTIONS[i] * radius`; traversal starts at corner 0 and leaves corner `i` in
+     direction `DIRECTIONS[(i + 2) % 6]`, `radius` steps per side, **appending before stepping**.
+     The load-bearing consequence, pinned at eight sample centres: **`ring(c, 1)` equals
+     `neighbors(c)` element-for-element**, which welds ring order to §4.1's fixed direction order
+     (M1-T1 resolution (A)) instead of letting a second, independent ordering drift into existence.
+  5. **(F) A NEGATIVE RADIUS IS THE EMPTY ARRAY** for both `ring` and `hexes_in_range`; radius `0`
+     is `[center]`. Total functions, no crash — same spirit as (B).
+  6. **(G) `hexes_in_range` IS THE SPIRAL COMPOSITION** `[center] + ring(c,1) + ring(c,2) + … +
+     ring(c,radius)`, in that order. Its size is pinned **against `hex_count_for_radius(r)` (the
+     `3r(r+1)+1` formula), not only against the literals 19 / 37 / 217**, so the two independent
+     formulations cross-check each other.
+  7. **WHERE LINES AND RINGS LIVE — the open question `docs/PROGRESS.md` raised at M1-T1 is now
+     settled.** They are members of `HexMath` in `scripts/core/hex_math.gd`, **not** a new file:
+     §14's M1 row names the deliverable *"HexMath (axial/cube, LOS, lines, rings)"*. §11.2 lists
+     `Los` as a **separate** `scripts/core/` peer, so **only the LOS predicate splits out**, into
+     `scripts/core/los.gd` at **M1-T3**. `los.gd` was deliberately **not** created here — it needs
+     terrain, which does not exist until §4.4's generator, and M1-T3 must resolve under §13.4 how
+     `Los` receives terrain (injected `Callable`s or a tiny typed read-only view) **without**
+     inventing a map type ahead of its milestone.
+  8. **ARITHMETIC RE-CONFIRMATION of M1-T1 item 3, from an independent direction.** The pinned line
+     `line((1,-3),(4,2))` has **9** elements, which forces `distance((1,-3),(4,2)) == 8` — the same
+     correction M1-T1 recorded against its own task spec's erroneous `5`. Re-derived here by hand
+     from §4.1's mapping and again by an independent reference model built from the GDD text rather
+     than from the task spec's answer list. **Do not "fix" it back to 5.**
+  9. **Every derived value was re-derived independently before being pinned**, per M1-T1 item 3's
+     lesson that a wrong number surviving into the log is worse than no number: all 10 line cases,
+     all 6 ring/range cases, the 6 `_floor_div` probes, the 7 round-half-up probes, and the counts
+     19 / 37 / 217. A 3,721-ordered-pair sweep of the radius-4 disc produced **zero** property
+     violations in the reference model, so a red on those properties is a real defect, not a flaky
+     bound.
+  10. **The Tests-stage stub convention is deliberate and is what keeps this blocked state SAFE.**
+     A call to a **missing** method is a GDScript parse error, which silently un-collects the whole
+     test file — the M0-T5 false green (item (a) there). Shipping deliberately-wrong stubs makes the
+     file parse, so the failure is **19 named value failures** rather than a silent skip, and
+     `Scripts 8` still equals the number of `test_*.gd` on disk. The stubs use every parameter
+     (`unused_parameter` is level 2) and keep both source scans green, so `typecheck.sh` stays at
+     exit 0.
+  11. **Source scans were STRENGTHENED, never weakened** (they are the harness-contract analogue for
+     this file). The no-float scan (S1), the engine-free scan (`randi(`, `randf(`, `extends Node`,
+     `SceneTree`, `get_tree`, `Engine.`, `Time.`, `OS.`), the `get_class()`-based non-Node assertion
+     (**never `is Node`** — statically impossible, parse-errors: decisions.md M0-T2 item 11 /
+     M0-T5 item (a)), and the map-size scan (S2: `24|32|40|1801|3169|4921` must not appear in
+     `hex_math.gd`) are all kept verbatim and still green. The doc-comment scan (S3) was
+     **tightened**: it now also asserts `cube_round_scaled` / `line` / `ring` / `hexes_in_range`
+     exist as **public** functions, so a missing member fails the scan instead of passing vacuously.
+  12. **§13.6 clauses that are vacuous here, stated explicitly:** this task reads **zero** §12.1
+     constants — hex geometry is *algorithm, not tunable content*, the same line M1-T1 item 4 drew,
+     and `data/ruleset.json` gained no key and must not gain one. `HexMath` mutates no `GameState`
+     and references no `EventBus`, so *"events emitted for every state change"* has no subject
+     matter. **Goldens: none re-recorded — none exist yet**; the project's first golden still lands
+     with the mapgen terrain hash.
+  13. **Scope held (§13.4: invent nothing ahead of its milestone).** Not written: `scripts/core/los.gd`
+     or any LOS/blocking code (M1-T3); the concentric-bowl generator (§4.4); any golden file; the
+     renderer, camera rig or hex picking; `GameState`; any `Command`; any concrete `Event` subclass;
+     elevation / movement-cost / cliff rules (§4.1 prose, but §14 assigns *"Movement/pathfinding/ZOC/
+     elevation costs"* to **M4**); any new key in `data/ruleset.json`; any `addons/` change.
+  14. **No test was weakened.** Only `scripts/core/hex_math.gd` and `tests/unit/test_hex_math.gd`
+     are touched by this commit's code diff (plus these two docs). The resume rule for the next
+     iteration is the standing one: **fix code to match the derived values, never the reverse.**
+- **Why:** §4.1 legislates the line-drawing *algorithm* but not its rounding convention, its
+  invariant-repair tie-break, its ring traversal order, or its behaviour at degenerate radii — and
+  every one of those is observable and would otherwise be settled accidentally by whichever system
+  first calls into it (LOS at M1-T3, mapgen at M1's generator, then pathfinding and AI). Fixing them
+  now, in exact integer arithmetic, is what makes *"same seed + same commands ⇒ identical
+  `GameState.hash()`"* a property of the geometry layer rather than of the platform's floating-point
+  behaviour — which matters especially because M1 records the project's **first golden**. The
+  blocked status is logged rather than papered over because a committed red tree is only safe if the
+  next agent can tell at a glance that it is *intentional and mid-task*.
+- **GDD section affected:** §4.1 (algorithm **implemented and its silences resolved** under §13.4 —
+  **no numeric table value moved, no cell edited**; there is no printed line/ring table cell to
+  move); §11.1 (integer-only determinism, fresh-array contract); §11.2 (`scripts/core/hex_math.gd`;
+  `Los` deferred to its own file at M1-T3, as §11.2 lists it); §11.3 (conventions followed; every
+  new public function carries a `## §4.1` doc comment, mechanically scanned); §13.2 (tier 1 "every
+  core/ function", plus the §14 property tests for lines/rings — the LOS half is M1-T3); §13.4
+  (procedure exercised: five silences resolved, nothing stalled); §13.6 (definition of done **NOT**
+  met — tests are red, see the status paragraph; two clauses vacuous, see item 12); **§14 M1 row —
+  still OPEN and NOT met: `HexMath` slice 2 is spec'd and test-pinned but NOT implemented, and none
+  of the three M1 acceptance criteria pass.** Acceptance criterion text unchanged. **NO
+  `docs/GAME_DESIGN.md` edit accompanies this entry, because no numeric table value changed.**

@@ -4,9 +4,11 @@
 ##
 ## Pure [RefCounted], all-static: HexMath is never instantiated. Axial coordinates are plain
 ## [Vector2i] (q, r); cube coordinates are plain [Vector3i] (x, y, z) satisfying x + y + z == 0.
-## Slice 1 only (M1-T1): coordinate conversion, the fixed 6-direction table, neighbours/opposites,
-## cube distance, radius membership, hex-count-for-radius. LOS, hex lines, rings and ranges are a
-## later M1 task (PROGRESS explicitly splits the slice this way) — not written here.
+## Slice 1 (M1-T1): coordinate conversion, the fixed 6-direction table, neighbours/opposites, cube
+## distance, radius membership, hex-count-for-radius. Slice 2 (M1-T2): the §4.1 hex-line primitive
+## ("lerp in cube space, round") in EXACT INTEGER rational arithmetic, plus rings and ranges.
+## LOS is deliberately NOT here — §11.2 names `Los` as a separate `scripts/core/` file and it lands
+## at M1-T3, once there is terrain to block with.
 ##
 ## §13.4 ambiguity resolutions (logged in docs/decisions.md, no docs/GAME_DESIGN.md edit — no
 ## numeric table value moved):
@@ -19,6 +21,31 @@
 ##       outside 0..5 as the identity (return the input unchanged) — no crash, no engine error, no
 ##       assert abort headless. A hex grid has no seventh neighbour; the identity is the simplest
 ##       total function (§13.4).
+##   (C) ROUNDING IS ROUND-HALF-UP MEANING TOWARD +INFINITY (§11.1 "integers + fixed percent math,
+##       round-half-up at the final step"), computed exactly over rationals with denominator N and
+##       never in floats: round_half_up(n, d) == _floor_div(2 * n + d, 2 * d) for d > 0.
+##       [method _floor_div] is TRUE floor: GDScript's int/int truncates toward zero, so -3 / 6
+##       yields 0 rather than -1, and without the correction every negative-coordinate line is
+##       wrong. Godot's [method @GlobalScope.roundi] rounds half AWAY FROM ZERO and is therefore
+##       the WRONG primitive here — it is never used in this file.
+##   (C2) CUBE ROUNDING REPAIRS THE INVARIANT WITH THE LARGEST-DIFF CASCADE, ties repairing z.
+##       [method cube_round_scaled] rounds each component with (C), then repairs x + y + z == 0 on
+##       the SCALED integer diffs dx = |rx*denom - n.x| (etc.):
+##       `if dx > dy and dx > dz: rx = -ry - rz` / `elif dy > dz: ry = -rx - rz` / `else:
+##       rz = -rx - ry`. A two-way or three-way tie therefore deterministically repairs z. A
+##       `denom <= 0` returns `numerators` unchanged — the same spirit as (B): no crash, no assert
+##       abort headless.
+##   (D) HEX LINES ARE EXACTLY REVERSIBLE. [method line] uses N = distance(a, b) as the denominator
+##       and exact integer numerators (no epsilon nudge), so line(a, b) is exactly the reverse of
+##       line(b, a). A float implementation with an epsilon tie-break would not have this property.
+##   (E) RING TRAVERSAL. Corner i of [method ring] is `center + DIRECTIONS[i] * radius`; traversal
+##       starts at corner 0 and leaves corner i in direction `DIRECTIONS[(i + 2) % 6]`, `radius`
+##       steps per side, appending BEFORE stepping. Consequence: `ring(c, 1)` equals
+##       [method neighbors] element-for-element.
+##   (F) A NEGATIVE RADIUS IS THE EMPTY ARRAY for both [method ring] and [method hexes_in_range];
+##       radius 0 is `[center]`. Total functions, no crash (same spirit as (B)).
+##   (G) [method hexes_in_range] is the spiral composition
+##       `[center] + ring(c, 1) + ring(c, 2) + … + ring(c, radius)`, in that order.
 ##
 ## §13.6 "constants read from data, not code" is vacuous here and deliberately so: the six
 ## direction deltas and the cube-distance formula are geometry/algorithm, not tunable content.
@@ -109,3 +136,53 @@ static func is_within_radius(a: Vector2i, radius: int) -> bool:
 ## are this formula evaluated at radius 24/32/40 and are pinned by the formula, not hard-coded.
 static func hex_count_for_radius(radius: int) -> int:
 	return 3 * radius * (radius + 1) + 1
+
+
+# =================================================================================================
+# SLICE 2 (M1-T2) — DELIBERATELY-WRONG TESTS-STAGE STUBS.
+#
+# These five members exist ONLY so that `tests/unit/test_hex_math.gd` PARSES: a call to a missing
+# method is a GDScript parse error, which silently un-collects the whole test file (the M0-T5
+# false green, docs/decisions.md M0-T5 item (a)). Every body below returns a wrong value on
+# purpose, so the new tests fail on VALUES rather than on loading. The Implement stage replaces
+# this whole block with resolutions (C)–(G) above.
+# =================================================================================================
+
+
+## §4.1 "lerp in cube space, round" — STUB (M1-T2 Tests stage, deliberately wrong). Rounds the
+## exact rational `numerators / denom` to the nearest cube coordinate per resolutions (C)/(C2).
+static func cube_round_scaled(numerators: Vector3i, denom: int) -> Vector3i:
+	return numerators * denom
+
+
+## §4.1 "Line of sight uses standard hex line-drawing (lerp in cube space, round)" — STUB (M1-T2
+## Tests stage, deliberately wrong). The hexes from `a` to `b` inclusive, per resolution (D).
+static func line(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	out.append(a)
+	out.append(b)
+	return out
+
+
+## §4.1 — STUB (M1-T2 Tests stage, deliberately wrong). The hexes at exactly `radius` from
+## `center`, in the fixed traversal order of resolution (E).
+static func ring(center: Vector2i, radius: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	out.append(center + Vector2i(radius, 0))
+	return out
+
+
+## §4.1 — STUB (M1-T2 Tests stage, deliberately wrong). The hexes within `radius` of `center` in
+## spiral order, per resolution (G).
+static func hexes_in_range(center: Vector2i, radius: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	out.append(center + Vector2i(0, radius))
+	return out
+
+
+# STUB (M1-T2 Tests stage, deliberately wrong): this truncates toward zero instead of flooring,
+# which is exactly the trap resolution (C) exists to close.
+static func _floor_div(n: int, d: int) -> int:
+	@warning_ignore("integer_division")
+	var q: int = n / d
+	return q

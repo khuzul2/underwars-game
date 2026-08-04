@@ -29,6 +29,35 @@
 ##       assert abort headless (a hex grid has no seventh neighbour; the identity is the simplest
 ##       total function).
 ##
+## M1-T2 adds sections H–M and five more §13.4 resolutions. §4.1 gives an **algorithm** here, not a
+## table — "Line of sight uses standard hex line-drawing (lerp in cube space, round)" — so there is
+## no printed cell to transcribe: every expected value in sections H–M was DERIVED from that
+## sentence plus the fixed §4.1 direction order, and re-derived independently by the Tests stage
+## against a reference model (radius-4 disc × itself, 3,721 ordered pairs, zero property
+## violations) before being pinned. Keep the (C)–(G) lettering stable — `hex_math.gd`'s header and
+## docs/decisions.md both reference it.
+##   (C) ROUNDING IS ROUND-HALF-UP MEANING TOWARD +INFINITY (§11.1 "integers + fixed percent math,
+##       round-half-up at the final step"), computed EXACTLY over rationals with denominator N and
+##       never in floats: round_half_up(n, d) == floor_div(2*n + d, 2*d) for d > 0, where floor_div
+##       is a TRUE floor. GDScript's int/int truncates toward zero (-1 / 3 == 0, not -1), so the
+##       correction is load-bearing: without it every negative-coordinate line rounds the wrong
+##       way. Godot's `roundi()` rounds half AWAY FROM ZERO and is therefore the WRONG primitive —
+##       it maps -1/2 to -1 and -3/2 to -2 where half-up gives 0 and -1. Two probes in section I
+##       are chosen precisely because the two conventions disagree on them.
+##   (C2) `cube_round_scaled` repairs x + y + z == 0 with the standard largest-diff cascade on the
+##       SCALED integer diffs (`if dx > dy and dx > dz: rx = -ry-rz` / `elif dy > dz: ry = -rx-rz`
+##       / `else: rz = -rx-ry`), so a two-way or three-way tie deterministically repairs **z**.
+##       `denom <= 0` returns the numerators unchanged (same spirit as (B): total, no abort).
+##   (D) `line(a, b)` walks i = 0..N over the EXACT numerators cube(a)*N + (cube(b)-cube(a))*i with
+##       denominator N = distance(a, b) (N == 0 => [a]). Because the numerators carry no epsilon
+##       nudge, line(a, b) is EXACTLY reverse(line(b, a)); that symmetry is pinned as a property
+##       (P4) and is what a float implementation with an epsilon tie-break would fail.
+##   (E) `ring(c, r)`: corner i == c + DIRECTIONS[i] * r; traversal starts at corner 0 and leaves
+##       corner i in direction DIRECTIONS[(i + 2) % 6], r steps per side, appending BEFORE
+##       stepping. Consequence, pinned below: ring(c, 1) == neighbors(c) element-for-element.
+##   (F) radius < 0 => EMPTY array (both `ring` and `hexes_in_range`); radius == 0 => [center].
+##   (G) hexes_in_range(c, r) == [c] + ring(c,1) + ring(c,2) + … + ring(c,r), in that order.
+##
 ## ARITHMETIC CORRECTION recorded by the Tests stage: the M1-T1 task spec listed a hand-computed
 ## case `distance((1,-3),(4,2)) == 5`. That is a miscalculation — cube a = (1, 2, -3), cube b =
 ## (4, -6, 2), delta = (-3, 8, -5), so the cube distance is **8** (and (3+8+5)/2 = 8 agrees). §4.1
@@ -73,6 +102,16 @@ const ENGINE_BOUND_TOKENS: Array[String] = [
 ## §4.1 map radii and their hex counts, plus the §4.4 hint that generator parameters live in
 ## data/mapgen/*.json. None of these numbers may appear in hex_math.gd.
 const MAP_SIZE_TOKENS: Array[String] = ["24", "32", "40", "1801", "3169", "4921"]
+
+## §14 M1 names the deliverable "HexMath (axial/cube, LOS, lines, rings)", so lines and rings are
+## HexMath members (LOS is the one piece §11.2 splits out, into `scripts/core/los.gd` at M1-T3).
+## These four must exist as PUBLIC functions and must each carry a `## §4.1` doc comment.
+const SLICE_TWO_PUBLIC_FUNCTIONS: Array[String] = [
+	"cube_round_scaled",
+	"line",
+	"ring",
+	"hexes_in_range",
+]
 
 ## A handful of hexes spread over all six sextants plus the origin — reused by the property tests.
 const SAMPLE_HEXES: Array[Vector2i] = [
@@ -632,6 +671,13 @@ func test_public_rule_functions_cite_their_gdd_section() -> void:
 			undocumented.append(function_name)
 
 	assert_gt(public_functions.size(), 0, "sanity: the scan found public functions to check")
+	for required: String in SLICE_TWO_PUBLIC_FUNCTIONS:
+		assert_true(
+			public_functions.has(required),
+			"§14 M1 'HexMath (axial/cube, LOS, lines, rings)': %s must be a public function of %s" % [
+				required, HEX_MATH_PATH
+			]
+		)
 	assert_eq(
 		undocumented.size(),
 		0,
@@ -663,6 +709,648 @@ func test_repeated_calls_are_identical() -> void:
 
 
 # =============================================================================================
+# H. TRUE FLOOR DIVISION (§13.4 resolution (C)) — the primitive the whole exact-rational
+#    formulation stands on. GDScript's `int / int` TRUNCATES TOWARD ZERO, so an uncorrected
+#    helper rounds every negative cube coordinate the wrong way and quietly bends hex lines.
+# =============================================================================================
+
+## §13.4 (C) — `_floor_div(n, d)` is TRUE floor division. The negative cases are the whole point:
+## GDScript evaluates `-7 / 3` as -2 and `-1 / 3` as 0, but floor gives -3 and -1. (`_floor_div` is
+## private by naming convention only; GDScript exposes it, which is what lets this pin exist at all
+## — and the §11.3 doc-comment scan deliberately skips `_`-prefixed functions.)
+func test_floor_div_is_true_floor_not_truncation_toward_zero() -> void:
+	assert_eq(HexMath._floor_div(7, 3), 2, "§13.4 (C): floor(7/3) == 2")
+	assert_eq(
+		HexMath._floor_div(-7, 3),
+		-3,
+		"§13.4 (C): floor(-7/3) == -3 — GDScript's `/` truncates to -2, which is the trap"
+	)
+	assert_eq(HexMath._floor_div(-6, 3), -2, "§13.4 (C): floor(-6/3) == -2 (exact, nothing to correct)")
+	assert_eq(HexMath._floor_div(6, 3), 2, "§13.4 (C): floor(6/3) == 2")
+	assert_eq(
+		HexMath._floor_div(-1, 3),
+		-1,
+		"§13.4 (C): floor(-1/3) == -1 — GDScript's `/` truncates to 0, which is the trap"
+	)
+	assert_eq(HexMath._floor_div(0, 3), 0, "§13.4 (C): floor(0/3) == 0")
+
+
+## §13.4 (C) — the defining inequality of floor division, swept rather than sampled:
+## q * d <= n < (q + 1) * d for every n and every positive d. Stated with multiplication only, so
+## the property is checked against the definition and never against another division.
+func test_floor_div_satisfies_the_defining_floor_inequality() -> void:
+	var checked: int = 0
+	var breaks: Array[String] = []
+	for d: int in range(1, 7):
+		for n: int in range(-20, 21):
+			checked += 1
+			var q: int = HexMath._floor_div(n, d)
+			if q * d > n or (q + 1) * d <= n:
+				breaks.append("floor_div(%d, %d) = %d" % [n, d, q])
+
+	assert_eq(checked, 246, "sanity: 41 numerators x 6 denominators were checked")
+	assert_eq(
+		breaks.size(),
+		0,
+		"§13.4 (C): q*d <= n < (q+1)*d must hold for every n, d; first breaks: %s" % [str(breaks.slice(0, 5))]
+	)
+
+
+# =============================================================================================
+# I. EXACT CUBE ROUNDING (§4.1 "lerp in cube space, round" + §11.1 "round-half-up at the final
+#    step"; §13.4 resolutions (C)/(C2)). Rationals are carried as (numerators, denom) integers —
+#    a float would put every later golden at the mercy of platform rounding.
+# =============================================================================================
+
+## §13.4 (C) — half-up means toward +INFINITY, not away from zero. Both probes below are chosen
+## because the two conventions DISAGREE on them, so `roundi()`/`round()` cannot pass this test:
+##   (-1,-1,2)/2 = (-0.5,-0.5,1). Half-up rounds the halves to 0,0 giving (0,0,1); the sum is 1 and
+##   the scaled diffs are (1,1,0), so `dy > dz` repairs y => (0,-1,1). roundi would round the
+##   halves to -1,-1 giving (-1,-1,1); sum -1, diffs (1,1,0), repair y => (-1,0,1).
+##   (-3,1,2)/2 = (-1.5,0.5,1). Half-up gives (-1,1,1); sum 1, diffs (1,1,0), repair y => (-1,0,1).
+##   roundi gives (-2,1,1), which already sums to 0 and is returned untouched.
+func test_cube_round_scaled_rounds_half_toward_positive_infinity() -> void:
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(-1, -1, 2), 2),
+		Vector3i(0, -1, 1),
+		"§13.4 (C): -1/2 rounds UP to 0, not away from zero to -1 — roundi() would give (-1,0,1)"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(-3, 1, 2), 2),
+		Vector3i(-1, 0, 1),
+		"§13.4 (C): -3/2 rounds UP to -1, not away from zero to -2 — roundi() would give (-2,1,1)"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(0, 0, 0), 3),
+		Vector3i(0, 0, 0),
+		"§13.4 (C): the origin rounds to itself at any denominator"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(4, -2, -2), 2),
+		Vector3i(2, -1, -1),
+		"§13.4 (C): an exactly-representable rational rounds to itself"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(10, -4, -6), 2),
+		Vector3i(5, -2, -3),
+		"§13.4 (C): an exactly-representable rational rounds to itself"
+	)
+
+
+## §13.4 (C2) — the invariant-repair cascade breaks ties by repairing **z**. A cascade whose final
+## `else` repaired y instead would return (1,-1,0) and (1,-2,1) here, so this test is the direct
+## pin on the tie-break direction (the two hex lines through a half-step in section J are its
+## end-to-end consequence).
+func test_cube_round_scaled_breaks_ties_by_repairing_z() -> void:
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(2, -1, -1), 2),
+		Vector3i(1, 0, -1),
+		"§13.4 (C2): dx=0, dy=dz=1 — a two-way tie falls through to the final else, repairing z"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(1, -2, 1), 2),
+		Vector3i(1, -1, 0),
+		"§13.4 (C2): dx=dz=1, dy=0 — neither guard fires, so the final else repairs z"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(0, 0, 0), 5),
+		Vector3i(0, 0, 0),
+		"§13.4 (C2): a three-way tie of zero diffs repairs z, which is already correct"
+	)
+
+
+## §4.1 — a rounded cube is still a cube: the result of `cube_round_scaled` always satisfies
+## x + y + z == 0, and no component may drift a whole hex away from the exact rational it rounds
+## (|r_c * denom - n_c| <= denom). Swept over every zero-sum numerator triple in a window and every
+## denominator 1..7, so this pins the repair cascade as a property (P8) rather than by sample.
+func test_cube_round_scaled_always_returns_a_valid_nearby_cube() -> void:
+	var checked: int = 0
+	var invalid: Array[String] = []
+	var far: Array[String] = []
+	for denom: int in range(1, 8):
+		for nx: int in range(-9, 10):
+			for ny: int in range(-9, 10):
+				checked += 1
+				var numerators: Vector3i = Vector3i(nx, ny, -nx - ny)
+				var rounded: Vector3i = HexMath.cube_round_scaled(numerators, denom)
+				if not HexMath.is_valid_cube(rounded):
+					invalid.append("%s/%d -> %s" % [numerators, denom, rounded])
+				if (
+					absi(rounded.x * denom - numerators.x) > denom
+					or absi(rounded.y * denom - numerators.y) > denom
+					or absi(rounded.z * denom - numerators.z) > denom
+				):
+					far.append("%s/%d -> %s" % [numerators, denom, rounded])
+
+	assert_eq(checked, 2527, "sanity: 19x19 zero-sum numerators x 7 denominators were checked")
+	assert_eq(
+		invalid.size(),
+		0,
+		"§4.1/§13.4 (C2): every rounded cube must satisfy x+y+z == 0; first breaks: %s" % [str(invalid.slice(0, 5))]
+	)
+	assert_eq(
+		far.size(),
+		0,
+		"§13.4 (C2): rounding must not move a component a whole hex; first breaks: %s" % [str(far.slice(0, 5))]
+	)
+
+
+## §13.4 (C2) — a non-positive denominator is the identity, in the same spirit as resolution (B):
+## no crash, no engine error, no assert abort headless. A degenerate denominator must never tear
+## down a 60-turn headless run (§11.1).
+func test_cube_round_scaled_is_the_identity_for_a_non_positive_denominator() -> void:
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(5, -3, 1), 0),
+		Vector3i(5, -3, 1),
+		"§13.4 (C2): denom == 0 returns the numerators unchanged (no division by zero)"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(5, -3, 1), -2),
+		Vector3i(5, -3, 1),
+		"§13.4 (C2): a negative denom returns the numerators unchanged"
+	)
+	assert_eq(
+		HexMath.cube_round_scaled(Vector3i(1, -1, 0), 0),
+		Vector3i(1, -1, 0),
+		"§13.4 (C2): denom == 0 is the identity even for an already-valid cube"
+	)
+
+
+# =============================================================================================
+# J. HEX LINES (§4.1 "Line of sight uses standard hex line-drawing (lerp in cube space, round)";
+#    §13.4 resolution (D)). Every expected list below was re-derived by the Tests stage from the
+#    §4.1 algorithm plus (C)/(C2), independently of the implementation.
+# =============================================================================================
+
+## §4.1 + §13.4 (D) — the degenerate line and the three straight runs along direction deltas. A
+## straight run must land on exactly the hexes you would reach by stepping the direction, with no
+## rounding wobble at all.
+func test_line_degenerate_and_straight_runs() -> void:
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(0, 0)),
+		_axials([Vector2i(0, 0)]),
+		"§13.4 (D): N == 0 yields the single hex [a], never [a, a]"
+	)
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(3, 0)),
+		_axials([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)]),
+		"§4.1: a straight run E (direction 0) steps one hex at a time"
+	)
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(0, 3)),
+		_axials([Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]),
+		"§4.1: a straight run SE (direction 5) steps one hex at a time"
+	)
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(3, -3)),
+		_axials([Vector2i(0, 0), Vector2i(1, -1), Vector2i(2, -2), Vector2i(3, -3)]),
+		"§4.1: a straight run NE (direction 1) steps one hex at a time"
+	)
+
+
+## §4.1 + §13.4 (C2) — the two tie cases, where the exact cube midpoint sits on a half-step and the
+## repair cascade decides the answer. These are the end-to-end consequence of the tie-break pinned
+## in section I:
+##   line((0,0),(2,-1)) i=1: exact cube (1, -1/2, -1/2); scaled diffs dx=0, dy=dz=1 => else repairs
+##   z => cube (1,0,-1) => axial (1,-1). An implementation with the tie-break backwards yields (1,0).
+##   line((0,0),(1,1))  i=1: exact cube (1/2, -1, 1/2); dx=dz=1, dy=0, so `dx > dz` is FALSE and
+##   `dy > dz` is FALSE => else repairs z => cube (1,-1,0) => axial (1,0).
+func test_line_tie_cases_resolve_through_the_z_repair() -> void:
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(2, -1)),
+		_axials([Vector2i(0, 0), Vector2i(1, -1), Vector2i(2, -1)]),
+		"§13.4 (C2): the dy==dz tie repairs z, so the midpoint is (1,-1) and not (1,0)"
+	)
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(1, 1)),
+		_axials([Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1)]),
+		"§13.4 (C2): the dx==dz tie also falls to the else branch, so the midpoint is (1,0)"
+	)
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(4, -2)),
+		_axials([Vector2i(0, 0), Vector2i(1, -1), Vector2i(2, -1), Vector2i(3, -2), Vector2i(4, -2)]),
+		"§4.1: a half-slope line alternates its two component steps deterministically"
+	)
+
+
+## §13.4 (D) — exact-rational numerators make the line EXACTLY reversible, as concrete values.
+## The property form is swept in section L (P4); these two are the hand-checked witnesses.
+func test_line_reversed_endpoints_give_the_reversed_line() -> void:
+	assert_eq(
+		HexMath.line(Vector2i(2, -1), Vector2i(0, 0)),
+		_axials([Vector2i(2, -1), Vector2i(1, -1), Vector2i(0, 0)]),
+		"§13.4 (D): line((2,-1),(0,0)) is exactly the reverse of line((0,0),(2,-1))"
+	)
+	assert_eq(
+		HexMath.line(Vector2i(1, 1), Vector2i(0, 0)),
+		_axials([Vector2i(1, 1), Vector2i(1, 0), Vector2i(0, 0)]),
+		"§13.4 (D): line((1,1),(0,0)) is exactly the reverse of line((0,0),(1,1))"
+	)
+
+
+## §4.1 — a long off-origin line, which independently re-confirms the arithmetic correction in
+## docs/decisions.md M1-T1 item 3: cube a = (1,2,-3), cube b = (4,-6,2), delta (-3,8,-5), so
+## distance((1,-3),(4,2)) is **8** (not the 5 a task spec once claimed) and the line therefore has
+## 9 hexes.
+func test_line_long_off_origin_case() -> void:
+	var walked: Array[Vector2i] = HexMath.line(Vector2i(1, -3), Vector2i(4, 2))
+	assert_eq(walked.size(), 9, "§4.1: distance((1,-3),(4,2)) == 8, so the line has 9 hexes")
+	assert_eq(
+		walked,
+		_axials([
+			Vector2i(1, -3),
+			Vector2i(1, -2),
+			Vector2i(2, -2),
+			Vector2i(2, -1),
+			Vector2i(3, -1),
+			Vector2i(3, 0),
+			Vector2i(3, 1),
+			Vector2i(4, 1),
+			Vector2i(4, 2),
+		]),
+		"§4.1: the exact-rational hex line from (1,-3) to (4,2)"
+	)
+
+
+# =============================================================================================
+# K. RINGS AND RANGES (§14 M1 "HexMath (axial/cube, LOS, lines, rings)"; §13.4 (E)/(F)/(G))
+# =============================================================================================
+
+## §13.4 (E) — `ring(c, r)` starts at corner 0 (`c + DIRECTIONS[0] * r`) and leaves corner i in
+## direction `DIRECTIONS[(i + 2) % 6]`, appending before each step. The radius-1 consequence is the
+## sharpest pin available: it must equal `neighbors(c)` element-for-element, which welds the ring
+## traversal to the §4.1 fixed direction order rather than to a private convention.
+func test_ring_radius_one_is_exactly_neighbors() -> void:
+	assert_eq(
+		HexMath.ring(Vector2i(0, 0), 1),
+		_axials([
+			Vector2i(1, 0),
+			Vector2i(1, -1),
+			Vector2i(0, -1),
+			Vector2i(-1, 0),
+			Vector2i(-1, 1),
+			Vector2i(0, 1),
+		]),
+		"§13.4 (E): ring((0,0),1) is the six §4.1 deltas in index order E, NE, NW, W, SW, SE"
+	)
+	for centre: Vector2i in SAMPLE_HEXES:
+		assert_eq(
+			HexMath.ring(centre, 1),
+			HexMath.neighbors(centre),
+			"§13.4 (E): ring(%s, 1) must equal neighbors(%s) element-for-element" % [centre, centre]
+		)
+
+
+## §13.4 (E) — radius 2 walked out by hand from corner 0, two hexes per side, and a radius-1 ring
+## off the origin to prove the traversal is translation-invariant (not an accident of c == (0,0)).
+func test_ring_hand_walked_cases() -> void:
+	assert_eq(
+		HexMath.ring(Vector2i(0, 0), 2),
+		_axials([
+			Vector2i(2, 0),
+			Vector2i(2, -1),
+			Vector2i(2, -2),
+			Vector2i(1, -2),
+			Vector2i(0, -2),
+			Vector2i(-1, -1),
+			Vector2i(-2, 0),
+			Vector2i(-2, 1),
+			Vector2i(-2, 2),
+			Vector2i(-1, 2),
+			Vector2i(0, 2),
+			Vector2i(1, 1),
+		]),
+		"§13.4 (E): ring((0,0),2) — corner i is DIRECTIONS[i]*2, each side stepped in DIRECTIONS[(i+2)%6]"
+	)
+	assert_eq(
+		HexMath.ring(Vector2i(3, -2), 1),
+		_axials([
+			Vector2i(4, -2),
+			Vector2i(4, -3),
+			Vector2i(3, -3),
+			Vector2i(2, -2),
+			Vector2i(2, -1),
+			Vector2i(3, -1),
+		]),
+		"§13.4 (E): the ring traversal is translation-invariant"
+	)
+
+
+## §13.4 (F) — radius 0 is the centre alone and a NEGATIVE radius is the EMPTY array, for both
+## functions. Total functions (same spirit as (B)): a bad radius must never abort a headless run.
+func test_ring_and_range_degenerate_radii_are_total() -> void:
+	assert_eq(HexMath.ring(Vector2i(0, 0), 0), _axials([Vector2i(0, 0)]), "§13.4 (F): ring(c,0) == [c]")
+	assert_eq(HexMath.ring(Vector2i(3, -2), 0), _axials([Vector2i(3, -2)]), "§13.4 (F): ring(c,0) == [c]")
+	assert_eq(HexMath.ring(Vector2i(0, 0), -1), _axials([]), "§13.4 (F): a negative radius is the empty ring")
+	assert_eq(HexMath.ring(Vector2i(0, 0), -7), _axials([]), "§13.4 (F): a negative radius is the empty ring")
+	assert_eq(
+		HexMath.hexes_in_range(Vector2i(0, 0), 0),
+		_axials([Vector2i(0, 0)]),
+		"§13.4 (F): hexes_in_range(c,0) == [c]"
+	)
+	assert_eq(
+		HexMath.hexes_in_range(Vector2i(0, 0), -1),
+		_axials([]),
+		"§13.4 (F): a negative radius is the empty range"
+	)
+
+
+## §13.4 (G) — `hexes_in_range` is the spiral composition `[c] + ring(c,1) + … + ring(c,r)`, in
+## that order: the centre first, then whole rings outward. Pinned literally at radius 1 and then
+## against the composition itself out to radius 5, so the ordering contract cannot drift.
+func test_hexes_in_range_is_the_spiral_composition_of_rings() -> void:
+	assert_eq(
+		HexMath.hexes_in_range(Vector2i(0, 0), 1),
+		_axials([
+			Vector2i(0, 0),
+			Vector2i(1, 0),
+			Vector2i(1, -1),
+			Vector2i(0, -1),
+			Vector2i(-1, 0),
+			Vector2i(-1, 1),
+			Vector2i(0, 1),
+		]),
+		"§13.4 (G): centre first, then ring 1 in fixed §4.1 direction order"
+	)
+	for centre: Vector2i in [Vector2i(0, 0), Vector2i(-5, 3)]:
+		for radius: int in range(0, 6):
+			var expected: Array[Vector2i] = _axials([centre])
+			for r: int in range(1, radius + 1):
+				expected.append_array(HexMath.ring(centre, r))
+			assert_eq(
+				HexMath.hexes_in_range(centre, radius),
+				expected,
+				"§13.4 (G): hexes_in_range(%s, %d) == [c] + ring(1) + … + ring(%d)" % [centre, radius, radius]
+			)
+
+
+## §4.1 map-size formula — the range size must equal `hex_count_for_radius(r) == 3*r*(r+1)+1` for
+## every radius. Asserted against the FUNCTION, so the two independent formulations (enumerate the
+## spiral vs. evaluate the closed form) cross-check each other; the three literals are the
+## hand-computed anchors 19 / 37 / 217 for radii 2 / 3 / 8.
+func test_hexes_in_range_size_matches_the_hex_count_formula() -> void:
+	assert_eq(HexMath.hexes_in_range(Vector2i(0, 0), 2).size(), 19, "§4.1: 3*2*3+1 == 19 hexes")
+	assert_eq(HexMath.hexes_in_range(Vector2i(0, 0), 3).size(), 37, "§4.1: 3*3*4+1 == 37 hexes")
+	assert_eq(HexMath.hexes_in_range(Vector2i(0, 0), 8).size(), 217, "§4.1: 3*8*9+1 == 217 hexes")
+	for radius: int in range(0, 9):
+		assert_eq(
+			HexMath.hexes_in_range(Vector2i(0, 0), radius).size(),
+			HexMath.hex_count_for_radius(radius),
+			"§4.1: |hexes_in_range(c, %d)| == hex_count_for_radius(%d)" % [radius, radius]
+		)
+
+
+# =============================================================================================
+# L. LINE AND RING PROPERTIES (§14 M1 asks for property tests; this is the line/ring half — the
+#    LOS half arrives with `scripts/core/los.gd` at M1-T3)
+# =============================================================================================
+
+## §4.1 + §13.4 (D) — the five line properties, swept over EVERY ordered pair drawn from the
+## radius-4 disc around the origin (61 hexes, 3,721 pairs):
+##   P1 |line(a,b)| == distance(a,b) + 1        P2 the line starts at a and ends at b
+##   P3 consecutive hexes are at distance exactly 1 (the line is a walk of unit steps)
+##   P4 line(a,b) == reverse(line(b,a))         P5 distance(a,h) + distance(h,b) == distance(a,b)
+## P4 is the one an epsilon-nudge float implementation fails, which is precisely why it is here.
+## Violations are collected and asserted once, so a break reports its own coordinates instead of
+## drowning the run in 3,721 assertions.
+func test_line_properties_over_the_radius_four_disc() -> void:
+	var disc: Array[Vector2i] = _disc(4)
+	assert_eq(disc.size(), 61, "sanity: the radius-4 disc holds 3*4*5+1 == 61 hexes")
+
+	var pairs: int = 0
+	var p1: Array[String] = []
+	var p2: Array[String] = []
+	var p3: Array[String] = []
+	var p4: Array[String] = []
+	var p5: Array[String] = []
+	for a: Vector2i in disc:
+		for b: Vector2i in disc:
+			pairs += 1
+			var forward: Array[Vector2i] = HexMath.line(a, b)
+			var span: int = HexMath.distance(a, b)
+			if forward.size() != span + 1:
+				p1.append("%s..%s: %d hexes for distance %d" % [a, b, forward.size(), span])
+				continue
+			if forward[0] != a or forward[forward.size() - 1] != b:
+				p2.append("%s..%s: endpoints %s..%s" % [a, b, forward[0], forward[forward.size() - 1]])
+			for i: int in range(forward.size() - 1):
+				if HexMath.distance(forward[i], forward[i + 1]) != 1:
+					p3.append("%s..%s: step %d is %s -> %s" % [a, b, i, forward[i], forward[i + 1]])
+			var backward: Array[Vector2i] = HexMath.line(b, a)
+			backward.reverse()
+			if forward != backward:
+				p4.append("%s..%s: %s vs %s" % [a, b, forward, backward])
+			for h: Vector2i in forward:
+				if HexMath.distance(a, h) + HexMath.distance(h, b) != span:
+					p5.append("%s..%s: %s is off the geodesic" % [a, b, h])
+
+	assert_eq(pairs, 3721, "sanity: all 61x61 ordered pairs of the radius-4 disc were swept")
+	assert_eq(
+		p1.size(),
+		0,
+		"P1 §4.1: |line(a,b)| == distance(a,b) + 1; first breaks: %s" % [str(p1.slice(0, 3))]
+	)
+	assert_eq(
+		p2.size(),
+		0,
+		"P2 §4.1: a line starts at a and ends at b; first breaks: %s" % [str(p2.slice(0, 3))]
+	)
+	assert_eq(
+		p3.size(),
+		0,
+		"P3 §4.1: a line is a walk of unit steps; first breaks: %s" % [str(p3.slice(0, 3))]
+	)
+	assert_eq(
+		p4.size(),
+		0,
+		"P4 §13.4 (D): exact rationals make line(a,b) == reverse(line(b,a)); first breaks: %s" % [str(p4.slice(0, 3))]
+	)
+	assert_eq(
+		p5.size(),
+		0,
+		"P5 §4.1: every hex on a line is between its endpoints; first breaks: %s" % [str(p5.slice(0, 3))]
+	)
+
+
+## §13.4 (E)/(F) — P6: for r >= 1 a ring holds exactly 6*r DISTINCT hexes, every one at distance
+## exactly r from the centre (r == 0 holds the centre alone). Checked at the origin and off it, so
+## the property is the geometry and not an artefact of c == (0,0).
+func test_ring_properties_out_to_radius_eight() -> void:
+	var checked: int = 0
+	var size_breaks: Array[String] = []
+	var duplicate_breaks: Array[String] = []
+	var distance_breaks: Array[String] = []
+	for centre: Vector2i in [Vector2i(0, 0), Vector2i(-5, 3)]:
+		for radius: int in range(0, 9):
+			checked += 1
+			var walked: Array[Vector2i] = HexMath.ring(centre, radius)
+			var expected_size: int = 6 * radius if radius >= 1 else 1
+			if walked.size() != expected_size:
+				size_breaks.append("ring(%s, %d): %d entries, expected %d" % [centre, radius, walked.size(), expected_size])
+			var seen: Dictionary = {}
+			for h: Vector2i in walked:
+				seen[h] = true
+				if HexMath.distance(centre, h) != radius:
+					distance_breaks.append("ring(%s, %d): %s is at distance %d" % [centre, radius, h, HexMath.distance(centre, h)])
+			if seen.size() != walked.size():
+				duplicate_breaks.append("ring(%s, %d): %d distinct of %d" % [centre, radius, seen.size(), walked.size()])
+
+	assert_eq(checked, 18, "sanity: radii 0..8 were checked at two centres")
+	assert_eq(
+		size_breaks.size(),
+		0,
+		"P6 §13.4 (E): |ring(c,r)| == 6*r for r >= 1, 1 for r == 0; first breaks: %s" % [str(size_breaks.slice(0, 3))]
+	)
+	assert_eq(
+		duplicate_breaks.size(),
+		0,
+		"P6 §13.4 (E): a ring never repeats a hex; first breaks: %s" % [str(duplicate_breaks.slice(0, 3))]
+	)
+	assert_eq(
+		distance_breaks.size(),
+		0,
+		"P6 §4.1: every hex of ring(c,r) is at cube distance exactly r; first breaks: %s" % [str(distance_breaks.slice(0, 3))]
+	)
+
+
+## §13.4 (F)/(G) — P7: `hexes_in_range(c, r)` holds exactly `hex_count_for_radius(r)` DISTINCT
+## hexes, all within distance r, and its first element is the centre.
+func test_hexes_in_range_properties_out_to_radius_eight() -> void:
+	var checked: int = 0
+	var size_breaks: Array[String] = []
+	var duplicate_breaks: Array[String] = []
+	var distance_breaks: Array[String] = []
+	var centre_breaks: Array[String] = []
+	for centre: Vector2i in [Vector2i(0, 0), Vector2i(-5, 3)]:
+		for radius: int in range(0, 9):
+			checked += 1
+			var covered: Array[Vector2i] = HexMath.hexes_in_range(centre, radius)
+			if covered.size() != HexMath.hex_count_for_radius(radius):
+				size_breaks.append("range(%s, %d): %d entries, expected %d" % [
+					centre, radius, covered.size(), HexMath.hex_count_for_radius(radius)
+				])
+			if covered.is_empty() or covered[0] != centre:
+				centre_breaks.append("range(%s, %d) does not start at the centre" % [centre, radius])
+			var seen: Dictionary = {}
+			for h: Vector2i in covered:
+				seen[h] = true
+				if HexMath.distance(centre, h) > radius:
+					distance_breaks.append("range(%s, %d): %s is at distance %d" % [centre, radius, h, HexMath.distance(centre, h)])
+			if seen.size() != covered.size():
+				duplicate_breaks.append("range(%s, %d): %d distinct of %d" % [centre, radius, seen.size(), covered.size()])
+
+	assert_eq(checked, 18, "sanity: radii 0..8 were checked at two centres")
+	assert_eq(
+		size_breaks.size(),
+		0,
+		"P7 §4.1: |hexes_in_range(c,r)| == hex_count_for_radius(r); first breaks: %s" % [str(size_breaks.slice(0, 3))]
+	)
+	assert_eq(
+		centre_breaks.size(),
+		0,
+		"P7 §13.4 (G): the spiral starts at the centre; first breaks: %s" % [str(centre_breaks.slice(0, 3))]
+	)
+	assert_eq(
+		duplicate_breaks.size(),
+		0,
+		"P7 §13.4 (G): the spiral never repeats a hex; first breaks: %s" % [str(duplicate_breaks.slice(0, 3))]
+	)
+	assert_eq(
+		distance_breaks.size(),
+		0,
+		"P7 §4.1: every hex of hexes_in_range(c,r) is within distance r; first breaks: %s" % [str(distance_breaks.slice(0, 3))]
+	)
+
+
+# =============================================================================================
+# M. FRESHNESS AND DETERMINISM FOR THE SLICE-2 ARRAYS (§11.1) — the same contract `neighbors()`
+#    already carries. A `const`/`static` cached array is not deeply immutable in GDScript, so a
+#    shared return value lets one caller's mutation corrupt every later caller and every golden.
+# =============================================================================================
+
+## §11.1 — F1: `line`, `ring` and `hexes_in_range` each hand back a FRESH `Array[Vector2i]` per
+## call. Two calls must not be the same object, and element-assigning, appending to and finally
+## clearing the first result must leave a concurrently-held second result — and every later call —
+## untouched.
+func test_line_ring_and_range_return_fresh_arrays_each_call() -> void:
+	var line_expected: Array[Vector2i] = _axials([Vector2i(0, 0), Vector2i(1, -1), Vector2i(2, -1)])
+	_assert_fresh_pair(
+		HexMath.line(Vector2i(0, 0), Vector2i(2, -1)),
+		HexMath.line(Vector2i(0, 0), Vector2i(2, -1)),
+		line_expected,
+		"line((0,0),(2,-1))"
+	)
+	assert_eq(
+		HexMath.line(Vector2i(0, 0), Vector2i(2, -1)),
+		line_expected,
+		"§11.1: mutating a line() result must not corrupt later calls"
+	)
+
+	var ring_expected: Array[Vector2i] = _axials([
+		Vector2i(1, 0),
+		Vector2i(1, -1),
+		Vector2i(0, -1),
+		Vector2i(-1, 0),
+		Vector2i(-1, 1),
+		Vector2i(0, 1),
+	])
+	_assert_fresh_pair(
+		HexMath.ring(Vector2i(0, 0), 1),
+		HexMath.ring(Vector2i(0, 0), 1),
+		ring_expected,
+		"ring((0,0),1)"
+	)
+	assert_eq(
+		HexMath.ring(Vector2i(0, 0), 1),
+		ring_expected,
+		"§11.1: mutating a ring() result must not corrupt later calls"
+	)
+	if HexMath.DIRECTIONS.size() == 6:
+		assert_eq(
+			HexMath.DIRECTIONS[0],
+			EXPECTED_DIRECTIONS[0],
+			"§4.1: the shared direction table survives a caller mutating a ring() result"
+		)
+
+	var range_expected: Array[Vector2i] = _axials([Vector2i(0, 0)])
+	range_expected.append_array(ring_expected)
+	_assert_fresh_pair(
+		HexMath.hexes_in_range(Vector2i(0, 0), 1),
+		HexMath.hexes_in_range(Vector2i(0, 0), 1),
+		range_expected,
+		"hexes_in_range((0,0),1)"
+	)
+	assert_eq(
+		HexMath.hexes_in_range(Vector2i(0, 0), 1),
+		range_expected,
+		"§11.1: mutating a hexes_in_range() result must not corrupt later calls"
+	)
+
+
+## §11.1 "the core must run headless byte-identically" — F2: repeating the same slice-2 calls on
+## the same inputs yields equal arrays. Compared run-against-run, so it pins the rule (no hidden
+## state, no RNG, no wall clock, no Dictionary iteration order) rather than any particular value.
+func test_slice_two_calls_are_repeatable() -> void:
+	for a: Vector2i in SAMPLE_HEXES:
+		assert_eq(
+			HexMath.ring(a, 3),
+			HexMath.ring(a, 3),
+			"§11.1: ring(%s, 3) is repeatable" % [a]
+		)
+		assert_eq(
+			HexMath.hexes_in_range(a, 2),
+			HexMath.hexes_in_range(a, 2),
+			"§11.1: hexes_in_range(%s, 2) is repeatable" % [a]
+		)
+		for b: Vector2i in SAMPLE_HEXES:
+			assert_eq(
+				HexMath.line(a, b),
+				HexMath.line(a, b),
+				"§11.1: line(%s, %s) is repeatable" % [a, b]
+			)
+
+
+# =============================================================================================
 # Helpers (never start with test_)
 # =============================================================================================
 
@@ -685,3 +1373,49 @@ func _code_text(path: String) -> String:
 		var comment_at: int = raw_line.find("#")
 		code_lines.append(raw_line if comment_at == -1 else raw_line.substr(0, comment_at))
 	return "\n".join(code_lines)
+
+
+## Builds a typed `Array[Vector2i]` from an inline literal, so an expected value can be written at
+## the assertion site while still comparing typed array against typed array.
+func _axials(items: Array) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for item: Vector2i in items:
+		out.append(item)
+	return out
+
+
+## Every hex within `radius` of the origin, built from the already-pinned §4.1 cube distance (not
+## from `hexes_in_range`, which is one of the things under test here).
+func _disc(radius: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for q: int in range(-radius, radius + 1):
+		for r: int in range(-radius, radius + 1):
+			var h: Vector2i = Vector2i(q, r)
+			if HexMath.distance(Vector2i.ZERO, h) <= radius:
+				out.append(h)
+	return out
+
+
+## §11.1 freshness contract, shared by `line` / `ring` / `hexes_in_range`: two calls with identical
+## arguments must be two DISTINCT arrays, and element-assigning, appending to and finally clearing
+## the first must leave the second completely untouched.
+func _assert_fresh_pair(
+	first: Array[Vector2i],
+	second: Array[Vector2i],
+	expected: Array[Vector2i],
+	label: String
+) -> void:
+	assert_false(
+		is_same(first, second),
+		"§11.1: %s must return a fresh array, not a shared/cached one" % [label]
+	)
+	assert_eq(first, expected, "sanity: %s returned the expected hexes" % [label])
+	if not first.is_empty():
+		first[0] = Vector2i(999, 999)
+	first.append(Vector2i(999, 999))
+	first.clear()
+	assert_eq(
+		second,
+		expected,
+		"§11.1: mutating one %s result must not corrupt another live result" % [label]
+	)
