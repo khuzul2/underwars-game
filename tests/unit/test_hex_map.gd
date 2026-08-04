@@ -35,6 +35,20 @@
 ##         (L): a bad argument must never tear down a headless run. Off-disc, `get_elevation`
 ##         returns the sentinel -1, `index_of` returns -1, `set_elevation` is a silent no-op and
 ##         `is_in_bounds` is false. A negative radius is the empty map.
+##   (U) M1-T5 — THE TERRAIN-TYPE FIELD AND `content_hash()`.
+##       - §4.2's terrain-type id is stored in ONE PackedStringArray over the SAME (O) index
+##         scheme; no Dictionary, and still no band array (band stays derivable from distance and
+##         is therefore not state). The default AND the out-of-bounds value is the EMPTY id "";
+##         `set_terrain_type` off-disc is a silent no-op, exactly like `set_elevation`.
+##       - `content_hash() -> int` is a reproducible FNV hash (§11.1: "GameState.hash() (FNV over
+##         canonical serialization) must be reproducible") folded over `hexes()` in the (O)
+##         canonical order, covering the radius, every hex coordinate, every elevation and every
+##         terrain-type id. It is deliberately NOT named `hash` — overriding `Object.hash()`
+##         trips `native_method_override`, which is level 2 (an error) under the M0-T4 gate.
+##       - **THIS IS THE VALUE THE PROJECT'S FIRST GOLDEN RECORDS** (§14 M1 acceptance criterion
+##         (a), "Golden mapgen test (seed => terrain hash)"), so from M1-T5 onward any change to
+##         the fold order, the canonical order or the stored fields is a §13.6 golden re-record
+##         needing a dated docs/decisions.md reason in the SAME commit.
 ##
 ## §13.6 "constants read from data, not code" — `hex_map.gd` carries no radius constant: the
 ## radius is a constructor argument fed from `data/mapgen/*.json` (§4.4 line 238). §13.6 "events
@@ -61,11 +75,29 @@ const LARGE_HEXES: int = 4921
 ## Out-of-bounds sentinel shared by get_elevation() and index_of() (resolution (O)).
 const OUT_OF_BOUNDS: int = -1
 
+## (U) — the empty terrain-type id: both the default of a fresh map and the out-of-bounds answer.
+const NO_TERRAIN: String = ""
+
+## §4.2 terrain-type ids used by the storage round-trip below. They are §4.2's own Solid row ids;
+## which of them the GENERATOR may emit is `tests/unit/test_map_generator.gd`'s business — HexMap
+## is a container and holds opaque strings.
+const SAMPLE_TERRAIN_IDS: Array[String] = [
+	"soft_dirt",
+	"hard_rock",
+	"dense_granite",
+	"gold_vein",
+]
+
 ## §11.1 — tokens that would make the sim core engine-bound. Checked against source with comments
 ## stripped, so a doc comment quoting the rule is never a false failure.
+##
+## M1-T5 AMENDMENT (a STRENGTHENING, logged — decisions.md M1-T4 resolution (Q) deliberately
+## carved no RNG exception): `RandomNumberGenerator` joins the list. `scripts/core/rng.gd` is the
+## project's SINGLE home of the engine RNG (resolution (R)); a container must never touch it.
 const ENGINE_BOUND_TOKENS: Array[String] = [
 	"randi(",
 	"randf(",
+	"RandomNumberGenerator",
 	"extends Node",
 	"SceneTree",
 	"get_tree",
@@ -78,8 +110,9 @@ const ENGINE_BOUND_TOKENS: Array[String] = [
 ## live in data/mapgen/*.json). None of these may appear in hex_map.gd.
 const MAP_SIZE_TOKENS: Array[String] = ["24", "32", "40", "1801", "3169", "4921"]
 
-## The COMPLETE public function surface of HexMap. Exactly these six, in any order, and nothing
-## else — a terrain-type array, a band array or a features array would pre-empt M1-T5 (§13.4).
+## The COMPLETE public function surface of HexMap after M1-T5. Exactly these nine, in any order,
+## and nothing else — a features array, a light/stress accessor or a vein-node entry point would
+## pre-empt M2/M3 (§13.4: invent nothing ahead of its milestone).
 const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"hex_count",
 	"is_in_bounds",
@@ -87,12 +120,19 @@ const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"hexes",
 	"get_elevation",
 	"set_elevation",
+	"get_terrain_type",
+	"set_terrain_type",
+	"content_hash",
 ]
 
-## The COMPLETE public FIELD surface of HexMap. Slice 1 stores elevation only, and band is
-## derivable from distance rather than state (§11.1's field list does not include it), so a
-## second public array here would pre-empt M1-T5 (§13.4).
+## The COMPLETE public FIELD surface of HexMap. M1-T5 adds terrain TYPE storage but no new public
+## field: band stays derivable from distance rather than state (§11.1's field list does not
+## include it), and the type array is private behind the two accessors.
 const REQUIRED_PUBLIC_VARS: Array[String] = ["radius"]
+
+## Doc-comment sections accepted by scan S4 (§11.3). §4.2 joins the list with M1-T5's terrain-type
+## field; §11.1 covers `content_hash` (the FNV reproducibility clause).
+const DOC_SECTIONS: Array[String] = ["§4.1", "§4.2", "§4.4", "§11.1"]
 
 ## Small radii used by the exhaustive sweeps, so every ordered pair stays cheap.
 const SWEEP_RADIUS: int = 6
@@ -418,6 +458,185 @@ func test_out_of_bounds_access_is_total_and_never_corrupts_the_map() -> void:
 
 
 # =============================================================================================
+# E2. TERRAIN-TYPE STORAGE (§4.2 hex types; resolution (U)) — M1-T5
+# =============================================================================================
+
+## (U)/§4.2 — a fresh map reads the EMPTY id everywhere in bounds (a map has no terrain until the
+## generator writes one), and a written id reads back exactly, independently, on every hex.
+func test_terrain_type_defaults_to_empty_and_round_trips_per_hex() -> void:
+	var map: HexMap = HexMap.new(SWEEP_RADIUS)
+	assert_eq(
+		map.hexes().size(),
+		HexMath.hex_count_for_radius(SWEEP_RADIUS),
+		"sanity: this sweep must actually visit the whole disc, never pass vacuously"
+	)
+	var non_empty: Array[String] = []
+	for hex: Vector2i in map.hexes():
+		if map.get_terrain_type(hex) != NO_TERRAIN:
+			non_empty.append("%s -> %s" % [hex, map.get_terrain_type(hex)])
+	assert_eq(non_empty.size(), 0, "(U): a fresh map carries no terrain type; %s" % [
+		str(non_empty.slice(0, 5))
+	])
+
+	for hex: Vector2i in map.hexes():
+		map.set_terrain_type(hex, _sample_terrain_for(hex))
+	var mismatches: Array[String] = []
+	for hex: Vector2i in map.hexes():
+		var expected: String = _sample_terrain_for(hex)
+		if map.get_terrain_type(hex) != expected:
+			mismatches.append("%s -> %s, expected %s" % [hex, map.get_terrain_type(hex), expected])
+	assert_eq(mismatches.size(), 0, "(U): every hex stores its own terrain type; %s" % [
+		str(mismatches.slice(0, 5))
+	])
+
+
+## (U) — terrain type and elevation are INDEPENDENT fields over the same index: writing one must
+## never disturb the other. A single shared array (or a swapped index) fails here.
+func test_terrain_type_and_elevation_do_not_alias_each_other() -> void:
+	var map: HexMap = HexMap.new(SWEEP_RADIUS)
+	for hex: Vector2i in map.hexes():
+		map.set_elevation(hex, posmod(hex.x * 2 + hex.y * 7, 4))
+		map.set_terrain_type(hex, _sample_terrain_for(hex))
+	var breaks: Array[String] = []
+	for hex: Vector2i in map.hexes():
+		if map.get_elevation(hex) != posmod(hex.x * 2 + hex.y * 7, 4):
+			breaks.append("elevation clobbered at %s" % [hex])
+		if map.get_terrain_type(hex) != _sample_terrain_for(hex):
+			breaks.append("terrain clobbered at %s" % [hex])
+	assert_eq(breaks.size(), 0, "(U): the two per-hex fields are independent; %s" % [
+		str(breaks.slice(0, 5))
+	])
+
+
+## (U) — out-of-bounds terrain reads are the EMPTY id and out-of-bounds writes are SILENT NO-OPS,
+## exactly like elevation (M1-T1 (B) / M1-T3 (L)): a bad argument must never tear down a headless
+## run, and must never corrupt an in-bounds hex either.
+func test_out_of_bounds_terrain_access_is_total_and_never_corrupts_the_map() -> void:
+	var map: HexMap = HexMap.new(SWEEP_RADIUS)
+	map.set_terrain_type(Vector2i.ZERO, SAMPLE_TERRAIN_IDS[0])
+	for hex: Vector2i in _off_disc_probes(SWEEP_RADIUS):
+		assert_eq(
+			map.get_terrain_type(hex),
+			NO_TERRAIN,
+			"(U): get_terrain_type(%s) off the disc is the empty id" % [hex]
+		)
+		map.set_terrain_type(hex, SAMPLE_TERRAIN_IDS[1])
+		assert_eq(
+			map.get_terrain_type(hex),
+			NO_TERRAIN,
+			"(U): set_terrain_type(%s) off the disc is a silent no-op" % [hex]
+		)
+	assert_eq(
+		map.get_terrain_type(Vector2i.ZERO),
+		SAMPLE_TERRAIN_IDS[0],
+		"(U): an off-disc write must not alias an in-bounds hex"
+	)
+	var empty: HexMap = HexMap.new(-1)
+	assert_eq(
+		empty.get_terrain_type(Vector2i.ZERO),
+		NO_TERRAIN,
+		"(U): nothing is readable on a negative-radius map"
+	)
+
+
+## §11.1 — two HexMap instances share no terrain storage either (the M1-T2 trap-1 family).
+func test_two_maps_do_not_share_terrain_storage() -> void:
+	var first: HexMap = HexMap.new(SWEEP_RADIUS)
+	var second: HexMap = HexMap.new(SWEEP_RADIUS)
+	first.set_terrain_type(Vector2i.ZERO, SAMPLE_TERRAIN_IDS[2])
+	assert_eq(
+		first.get_terrain_type(Vector2i.ZERO),
+		SAMPLE_TERRAIN_IDS[2],
+		"sanity: the write landed on the first map"
+	)
+	assert_eq(
+		second.get_terrain_type(Vector2i.ZERO),
+		NO_TERRAIN,
+		"§11.1: two HexMap instances must not share terrain storage"
+	)
+
+
+# =============================================================================================
+# E3. content_hash() — §11.1 "GameState.hash() (FNV over canonical serialization) must be
+#     reproducible"; resolution (U). THIS IS WHAT THE PROJECT'S FIRST GOLDEN RECORDS (§14 M1).
+# =============================================================================================
+
+## §11.1 — the hash is a pure function of CONTENT: two independently built maps carrying the same
+## radius, elevations and terrain types hash identically, and the value is stable across repeated
+## calls on the same instance (no counter, no clock, no allocation address in the fold).
+func test_content_hash_is_stable_and_content_addressed() -> void:
+	var first: HexMap = _populated(SWEEP_RADIUS)
+	var second: HexMap = _populated(SWEEP_RADIUS)
+	var value: int = first.content_hash()
+	assert_eq(typeof(value), TYPE_INT, "§11.1: content_hash() is a plain int, never a float")
+	assert_eq(first.content_hash(), value, "§11.1: content_hash() is stable across calls")
+	assert_eq(
+		second.content_hash(),
+		value,
+		"§11.1: two independently built identical maps must hash identically"
+	)
+
+
+## §11.1 — the hash covers TERRAIN TYPE: changing exactly one hex's type must change it. Without
+## this the M1 golden would be blind to the very field the acceptance criterion names
+## ("seed => TERRAIN hash").
+func test_content_hash_changes_when_a_single_terrain_type_changes() -> void:
+	var map: HexMap = _populated(SWEEP_RADIUS)
+	var before: int = map.content_hash()
+	map.set_terrain_type(Vector2i(1, -1), "mithril_seam")
+	assert_ne(
+		map.content_hash(),
+		before,
+		"§11.1/(U): the hash must cover every hex's terrain type"
+	)
+
+
+## §11.1 — the hash also covers ELEVATION, so the M1-T4 bowl cannot drift underneath the golden.
+func test_content_hash_changes_when_a_single_elevation_changes() -> void:
+	var map: HexMap = _populated(SWEEP_RADIUS)
+	var before: int = map.content_hash()
+	var hex: Vector2i = Vector2i(-2, 1)
+	map.set_elevation(hex, map.get_elevation(hex) + 1)
+	assert_ne(map.content_hash(), before, "§11.1/(U): the hash must cover every hex's elevation")
+
+
+## §11.1 — the hash covers the map's SHAPE: two empty maps of different radii must not collide,
+## even though every stored value in both is the default.
+func test_content_hash_distinguishes_map_radii() -> void:
+	var values: Dictionary = {}
+	for radius: int in [0, 1, 2, 3]:
+		var map: HexMap = HexMap.new(radius)
+		var value: int = map.content_hash()
+		assert_false(
+			values.has(value),
+			"§11.1: radius %d collides with radius %s" % [radius, str(values.get(value, -1))]
+		)
+		values[value] = radius
+	assert_eq(values.size(), 4, "§11.1: four distinct radii give four distinct hashes")
+
+
+## §11.1 "canonical serialization" — the hash depends on the map's CONTENT and on HexMap's own
+## canonical order, never on the order in which a caller happened to write the cells. The
+## generator writes in canonical order; a later system (or a test) will not.
+func test_content_hash_is_independent_of_write_order() -> void:
+	var forward: HexMap = HexMap.new(SWEEP_RADIUS)
+	for hex: Vector2i in forward.hexes():
+		forward.set_elevation(hex, posmod(hex.x * 2 + hex.y * 7, 4))
+		forward.set_terrain_type(hex, _sample_terrain_for(hex))
+	var backward: HexMap = HexMap.new(SWEEP_RADIUS)
+	var reversed_hexes: Array[Vector2i] = backward.hexes()
+	reversed_hexes.reverse()
+	for hex: Vector2i in reversed_hexes:
+		backward.set_terrain_type(hex, _sample_terrain_for(hex))
+		backward.set_elevation(hex, posmod(hex.x * 2 + hex.y * 7, 4))
+	assert_eq(
+		backward.content_hash(),
+		forward.content_hash(),
+		"§11.1: the hash is over canonical content, not over write order"
+	)
+
+
+# =============================================================================================
 # F. MECHANICAL SOURCE SCANS ON scripts/sim/hex_map.gd (§11.1, §11.2, §11.3, §13.6)
 #    `test_hex_math.gd` and `test_los.gd` scan their own files ONLY — a new file inherits
 #    NOTHING — so all five scans are re-written here against hex_map.gd.
@@ -452,9 +671,10 @@ func test_source_contains_no_float_math_and_no_division() -> void:
 
 
 ## S2 §11.1 "the core must run headless byte-identically": no Node, no Scene Tree, no engine
-## singletons, no randi()/randf(), no wall-clock input. NOTE FOR M1-T5: the composition slice
-## will need seeded rolls through `state.rng`; it must AMEND this scan with a logged reason,
-## never delete it. Slice 1 uses no RNG at all, so no exception is carved today.
+## singletons, no randi()/randf(), no wall-clock input — and, from M1-T5, no
+## `RandomNumberGenerator` either. That token was ADDED (never a token removed) because
+## `scripts/core/rng.gd` is now the project's single sanctioned home for the seeded engine RNG
+## (resolution (R)); a per-hex container has no business owning randomness at all.
 func test_source_is_engine_free() -> void:
 	var code: String = _code_text(HEX_MAP_PATH)
 	assert_false(code.is_empty(), "sanity: %s must be readable and non-empty" % HEX_MAP_PATH)
@@ -488,11 +708,11 @@ func test_source_carries_no_map_size_constant() -> void:
 
 
 ## S4 §11.3 "public rule functions documented with the GDD section they implement" — every public
-## function of hex_map.gd carries a `## §4.1` (or `## §4.4`) doc-comment block. The scan is also
-## TIGHTENED the way M1-T2 item 11 / M1-T3 item 13 tightened theirs: the expected public surface
-## is listed explicitly, so a MISSING member fails the scan instead of passing vacuously and an
-## EXTRA member (a terrain-type array accessor pre-empting M1-T5) fails it too.
-func test_public_api_is_exactly_the_six_documented_functions() -> void:
+## function of hex_map.gd carries a DOC_SECTIONS doc-comment block. The scan is also TIGHTENED the
+## way M1-T2 item 11 / M1-T3 item 13 tightened theirs: the expected public surface is listed
+## explicitly, so a MISSING member fails the scan instead of passing vacuously and an EXTRA member
+## (a features/light/stress accessor pre-empting M2 or M3) fails it too.
+func test_public_api_is_exactly_the_nine_documented_functions() -> void:
 	var public_functions: Array[String] = []
 	var undocumented: Array[String] = []
 	_collect_public_functions(HEX_MAP_PATH, public_functions, undocumented)
@@ -512,14 +732,14 @@ func test_public_api_is_exactly_the_six_documented_functions() -> void:
 	assert_eq(
 		undocumented.size(),
 		0,
-		"§11.3: every public rule function needs a '## §4.1'/'## §4.4' doc comment; missing on: %s" % [
-			str(undocumented)
+		"§11.3: every public rule function needs a %s doc comment; missing on: %s" % [
+			str(DOC_SECTIONS), str(undocumented)
 		]
 	)
 	assert_eq(
 		_collect_public_vars(HEX_MAP_PATH),
 		REQUIRED_PUBLIC_VARS,
-		"§13.4: slice 1 stores ELEVATION ONLY — the public field surface of %s is exactly %s" % [
+		"§13.4: band is derivable, not state — the public field surface of %s is exactly %s" % [
 			HEX_MAP_PATH, str(REQUIRED_PUBLIC_VARS)
 		]
 	)
@@ -569,6 +789,21 @@ func _off_disc_probes(radius: int) -> Array[Vector2i]:
 	return out
 
 
+## A deterministic §4.2 terrain-type id per hex, so the storage round-trip cannot pass by writing
+## one id everywhere. No RNG here — the fixture must be reproducible (§11.1).
+func _sample_terrain_for(hex: Vector2i) -> String:
+	return SAMPLE_TERRAIN_IDS[posmod(hex.x * 3 + hex.y * 5, SAMPLE_TERRAIN_IDS.size())]
+
+
+## A map with BOTH per-hex fields populated deterministically, for the content_hash properties.
+func _populated(radius: int) -> HexMap:
+	var map: HexMap = HexMap.new(radius)
+	for hex: Vector2i in map.hexes():
+		map.set_elevation(hex, posmod(hex.x * 2 + hex.y * 7, 4))
+		map.set_terrain_type(hex, _sample_terrain_for(hex))
+	return map
+
+
 ## Builds a typed `Array[Vector2i]` from an inline literal, so an expected value can be written
 ## at the assertion site while still comparing typed array against typed array.
 func _axials(items: Array) -> Array[Vector2i]:
@@ -579,8 +814,7 @@ func _axials(items: Array) -> Array[Vector2i]:
 
 
 ## Walks a source file and fills `public_functions` with every public function name (in source
-## order) and `undocumented` with those whose preceding comment block cites neither §4.1 nor
-## §4.4. Shared by the S4 scans of both M1-T4 files.
+## order) and `undocumented` with those whose preceding comment block cites no DOC_SECTIONS entry.
 func _collect_public_functions(
 	path: String,
 	public_functions: Array[String],
@@ -604,7 +838,11 @@ func _collect_public_functions(
 		while j >= 0 and lines[j].strip_edges().begins_with("#"):
 			doc_block = lines[j] + "\n" + doc_block
 			j -= 1
-		if not (doc_block.contains("§4.1") or doc_block.contains("§4.4")):
+		var documented: bool = false
+		for section: String in DOC_SECTIONS:
+			if doc_block.contains(section):
+				documented = true
+		if not documented:
 			undocumented.append(function_name)
 
 

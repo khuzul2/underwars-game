@@ -1200,3 +1200,239 @@ cross-referenced by the header doc blocks of `scripts/sim/hex_map.gd`,
   generator is **partial** (slice 1 of 2); the chunked MultiMesh renderer, camera rig and hex picking
   are not started.** Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit accompanies
   this entry, because no numeric table value changed.**
+
+## 2026-08-04 — M1-T5 — Seeded `Rng`, the §4.4 terrain-type composition (generator slice 2), `content_hash` and THE PROJECT'S FIRST GOLDEN; resolutions (R)–(U); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 13 / Tests 234 /
+Passing 234 / Failing 0 / Asserts 2268** (the M1-T4 baseline was 11 / 183 / 183 / 0 / 1879);
+`bash tools/typecheck.sh` exits 0 over **22** files (was 19); `bash tools/ci.sh` exits 0 (PASS) with
+the three documented not-yet-built skips. All ran headless through the `tools/` scripts on the
+repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3).
+`sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5) were correctly **SKIPped, not failed**,
+per CLAUDE.md's applicability rule. `Scripts 13` equals the number of `test_*.gd` on disk, so the
+M0-T5 enumeration guard is satisfied and nothing was silently un-collected.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §4.2 (the
+hex-type table — the nine **Solid** row ids are the terrain vocabulary; `mithril_seam` is *"Deep Core
+only"*; `artificial_granite` is *"Dwarf-built; §7.1"* and `rubble` is the *"Result of collapses"*, so
+**neither may ever be produced by mapgen**), §4.4 lines 232–234 (the band table's composition
+column), §4.1 lines 173–174 (elevation 0–3; Small 24 = 1,801 hexes), §12.6 line 980 (the example
+seed **1337**, used for the golden — GDD-sourced, not invented), §11.1–§11.3, §13.2, §13.4, §13.6,
+§14 line 1097. `docs/decisions.md` was re-scanned end to end: **no logged override touches §4.1, §4.2
+or §4.4** (the only §4.2-adjacent entry is M0-T2 item 10, the `artificial_granite` `dig_yields` gap,
+explicitly deferred to M2), so the printed tables govern unamended.
+
+**§4.4 prints exactly FOUR percentages and one ordinal, and nothing else.** Safe Rim: *"70% Soft
+Dirt, 20% Hard Rock, plentiful small Iron/Gold veins, Fungal Groves"*; Mid-Mantle: *"55% Hard Rock,
+15% Granite, Magestone crusts, rivers/chasms, minor creep lairs, Ruins"*; Deep Core:
+*"Granite-dominant, exposed Mithril Seams, Ancient Throne at center, major lairs"*. So the binding
+numbers are **70 / 20 / 55 / 15** plus the **ordinal** *granite-dominant*. All four are transcribed
+**verbatim into `data/mapgen/concentric_bowl.json`** and re-confirmed against the printed lines at
+Verify; the ordinal is satisfied **strictly** (`dense_granite 70` > `hard_rock 25` > `mithril_seam
+5`). Everything else in the shipped table is **new tunable content** realising §4.4's own prose, not
+an edit to a printed value — see (T).
+
+The resolutions below are §13.4 decisions closing §4.4's and §11.1's silences, **not** deviations
+from a printed value. Their lettering continues M1-T1's (A)/(B), M1-T2's (C)–(G), M1-T3's (H)–(L)
+and M1-T4's (M)–(Q) and is cross-referenced by the header doc blocks of `scripts/core/rng.gd`,
+`scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd` and their test files — **keep it stable;
+M1-T6 continues at (V)**.
+
+- **What changed / was decided:**
+  1. **(R) `Rng` — `scripts/core/rng.gd` is the SINGLE home of the engine `RandomNumberGenerator` in
+     the whole project.** §11.2 lists `Rng` among `scripts/core/`'s pure unit-tested classes and
+     §11.1 names *"one `RandomNumberGenerator` seeded at match start (the only RNG in the program;
+     every roll goes through `state.rng`)"*, but gives **no roll API** — that surface is this §13.4
+     resolution. `class_name Rng extends RefCounted`; public surface is **exactly**
+     `roll_percent() -> int` and `rolls_drawn() -> int`, **no public vars**. `roll_percent()` is
+     `_rng.randi_range(1, 100)` — the **integer-only** PCG path, inclusive at both ends; `randf`/
+     `randf_range` are forbidden outright because a float in a rule breaks §11.1's byte-identical
+     headless determinism. `_init(seed_value: int)` **assigns `_rng.seed` explicitly** (a
+     default-constructed `RandomNumberGenerator` is **randomly** seeded, and `randomize()` is never
+     called). The constructor parameter **must not be named `seed`** — GDScript's global `seed()`
+     makes that `shadowed_global_identifier`, which is level 2 = a hard error under the live M0-T4
+     gate. **`state.rng` will be an `Rng` when `GameState` lands**; nothing else in the project may
+     ever name `RandomNumberGenerator` again (mechanically enforced — see item 6).
+  2. **(S) COMPOSITION RULE — how a band's weights become a per-hex terrain type.** Each band carries
+     an **ordered** list of `{type, pct}` rows summing to **exactly 100**.
+     `terrain_type_at(band_index: int, roll: int) -> String` walks the rows **in listed order**
+     accumulating `pct` and returns the **first** row with `roll <= cumulative` — pure integer math,
+     no division, and **no RNG inside the rule**, which is what makes an exhaustive 300-roll boundary
+     sweep possible. `generate(map_radius: int, rng: Rng)` draws **exactly one** `roll_percent()` per
+     hex, **unconditionally and before any branch**, iterating `HexMap`'s (O) canonical order (`r`
+     ascending `-R..+R`, then `q` ascending) — so the stream position is a function of the hex index
+     **alone** and can never drift with terrain content. A `null` rng or an unconfigured generator
+     returns the empty map (`HexMap.new(-1)`) and draws **zero** rolls. The `<=` and the
+     unconditional draw are both proven load-bearing by live probes (item 11 A and B).
+     Resulting boundaries on the shipped table: rim `1-70` soft_dirt / `71-90` hard_rock / `91-95`
+     iron_vein / `96-100` gold_vein; mantle `1-55` hard_rock / `56-70` dense_granite / `71-75`
+     magestone_crust / `76-100` soft_dirt; core `1-70` dense_granite / `71-95` hard_rock / `96-100`
+     mithril_seam.
+  3. **(T) THE SHIPPED RESIDUAL WEIGHTS, and NO TERRAIN-TYPE WHITELIST IN ENGINE CODE.** §4.4's four
+     printed percentages leave a residual in every band (rim 10, mantle 30, core 100 minus the
+     ordinal). Those residuals are **new tunable CONTENT** in `data/mapgen/concentric_bowl.json`,
+     chosen to realise §4.4's own prose, and are **not** edits to any printed value:
+     rim `iron_vein 5` + `gold_vein 5` (§4.4 *"plentiful small Iron/Gold veins"*, split evenly);
+     mantle `magestone_crust 5` (§4.4 *"Magestone crusts"*, small density) + `soft_dirt 25` (the rest,
+     so the contest zone stays flankable — pillar §1.1.2); core `dense_granite 70` / `hard_rock 25` /
+     `mithril_seam 5` (§4.4 *"Granite-dominant"* + *"exposed Mithril Seams"*, §4.2 *"Deep Core
+     only"*). **There is NO terrain-type whitelist anywhere in engine code** (the EventBus resolution
+     (f) precedent): type ids are **opaque strings** to the generator, so adding a type is a data
+     edit. §4.2's nine-id vocabulary, `mithril_seam`'s Deep-Core-only confinement and the
+     `artificial_granite`/`rubble` exclusion are therefore pinned **BY TEST**, never by an enum or a
+     `const` in `.gd`. §4.4 prose the composition deliberately does **not** yet realise (Fungal
+     Groves, rivers/chasms, Ruins, creep lairs, the Ancient Throne) is §4.2's **cave-feature** table
+     and belongs to M2/M5 — see item 13.
+  4. **(U) `HexMap.content_hash()` — FNV-1a 32-bit — and the golden's format.** Basis `2166136261`,
+     prime `16777619`, and **every** step masked `& 0xffffffff` (never relying on int64 overflow).
+     Folded over `hexes()` in the (O) canonical order: `radius` **once** up front, then per hex
+     `x`, `y`, `elevation` (each masked to 32 bits and folded as **4 little-endian bytes**), then the
+     type id's `to_utf8_buffer()` bytes, then a fixed separator byte `0x1f`. It is named
+     **`content_hash`, NOT `hash`** — overriding `Object.hash()` trips `native_method_override`,
+     level 2 = error under the M0-T4 gate. This is the §11.1 *"FNV over canonical serialization"*
+     shape that `GameState.hash()` will reuse.
+  5. **THE PROJECT'S FIRST GOLDEN IS RECORDED, and §13.6's re-record rule is LIVE FROM THIS COMMIT
+     FOREVER.** `tests/golden/mapgen_concentric_bowl_small_seed1337.json` records
+     `generator "mapgen/concentric_bowl.json"`, `size_id "small"`, `radius 24`, `seed 1337`,
+     `hex_count 1801` and `content_hash "0xcad24923"` — the hash as a **lowercase 8-hex-digit
+     STRING**, never a JSON number (Godot 4.7 parses every JSON number as `TYPE_FLOAT`, M0-T2 item 8),
+     and the surrounding fields so a mismatch is **diagnosable** rather than just red.
+     `tests/golden/test_mapgen_golden.gd` **fails loudly when the file is absent and never
+     auto-records**; its failure message prints the recorded and the observed hash, the exact document
+     to write, and the verbatim sentence *"re-record ONLY with a dated `docs/decisions.md` reason in
+     the SAME commit (§13.6)"* — **that message IS the recording procedure**. **This entry is the
+     logged reason for the initial record.** `0xcad24923` was measured **three times independently**
+     (the Tests stage's throwaway trial implementation, the Implement stage's real one, and Verify's
+     own probe-F run) and agreed every time, so it is a cross-confirmed value, not a self-consistent
+     one. **Nothing was re-recorded this commit — this is a first-time record.**
+  6. **SCAN AMENDMENT — STRENGTHENING ONLY, and demanded by M1-T4 resolution (Q).** (Q) deliberately
+     carved **no** RNG exception into `map_generator.gd`'s engine-free source scan, so slice 2 had to
+     amend it rather than quietly rely on it. `"RandomNumberGenerator"` was **ADDED** to
+     `ENGINE_BOUND_TOKENS` in **both** `tests/unit/test_map_generator.gd` (the spec's S6) **and**
+     `tests/unit/test_hex_map.gd` (a container has no business owning randomness); **every
+     pre-existing token is kept verbatim and none was removed**. `tests/unit/test_rng.gd` carries the
+     **positive half**: `rng.gd` **must** contain `RandomNumberGenerator` **and** `randi_range(`,
+     while `randi(` / `randf(` / `randomize(` stay forbidden even there. Verified live: a grep over
+     `scripts/` and `tools/` finds the token in `scripts/core/rng.gd` **only**. Two further
+     test-file refactors, both widenings rather than relaxations: a `DOC_SECTIONS` const replaces the
+     previously hard-coded `§4.1`/`§4.4` doc-comment check (now §4.1/§4.2/§4.4/§11.1 in
+     `test_hex_map.gd`, §4.1/§4.2/§4.4 in `test_map_generator.gd`, §11.1/§11.2 in the new
+     `test_rng.gd`) so the §4.2 terrain-type and §11.1 hash/RNG doc blocks are accepted; and the S4
+     **exact** public-surface lists were widened in lockstep (`HexMap` 6 → 9 functions,
+     `MapGenerator` 8 → 9, `Rng` 2, all still failing on a **missing OR extra** member).
+  7. **FNV ALGORITHM CONSTANTS STAY AS `.gd` LITERALS — recorded explicitly so a future reader does
+     not misread it as a §13.6 violation.** `2166136261` / `16777619` / `0xffffffff` / `0x1f` live as
+     `const` in `scripts/sim/hex_map.gd` rather than in `data/*.json`. They are **hash-algorithm**
+     constants, not GDD game content — §13.6's *"constants read from data, not code"* has no subject
+     matter here, and moving them to data would make the golden's identity a tunable, which is the
+     opposite of what a golden is for.
+  8. **`_fold_int` computes `shift = 8 * byte_index` in a `range(4)` loop instead of the obvious
+     literal `[0, 8, 16, 24]` shift array.** The bare token `24` would trip `test_hex_map.gd`'s
+     pre-existing `MAP_SIZE_TOKENS` source scan (§4.1's radii must never appear in engine code).
+     Purely a code-shape choice with **no behavioural difference** — the resulting hash matches the
+     independently-measured value from a trial implementation that did not share this shape.
+  9. **HARNESS TRAP FOUND LIVE AT THE TESTS STAGE, recorded because it will bite again.**
+     `tools/run_tests.sh`'s refusal grep scans the **whole run output** for
+     `Nothing was run|does not exist|have not been imported|Failed to load script|Ignoring script`.
+     The golden's original missing-file message contained the words *"does not exist"*, so the runner
+     exited 1 with *"GUT reported a diagnostic …"* even though GUT had run everything correctly. The
+     message was reworded to *"is MISSING"*; **the harness was NOT weakened to accommodate it**
+     (SETUP-5). **Rule for every future test author: never put any of those five phrases into a test
+     failure message.** Verify's probe F re-confirmed the fix: with the golden file deleted, the run
+     failed on the two real golden assertions and the refusal message did **not** fire.
+  10. **NON-BLOCKING OBSERVATION (no action taken, no test weakened).** `_validate_composition` can
+     emit **cascading** composition errors when a `bands` fixture drops a band id, because the
+     composition entries then reference ids absent from the local band-id list built by
+     `_validate_bands`. Harmless: `_assert_rejected` only requires ≥1 error at the offending
+     top-level key's line, **none** on the reserved line 0, and every error line inside the document
+     — all three still hold. It is consistent with resolution (P)'s *all errors collected*
+     philosophy. **M1-T4 item 13(a)'s latent trap was heeded**: validation writes into **locals** and
+     commits only when `errors.is_empty()`, and `_validate_composition` matches on the **local**
+     band-id list, never on a committed parallel array.
+  11. **SIX ADVERSARIAL MUTATION PROBES RUN LIVE at Verify, with the md5 of all nine touched files
+     captured before and re-verified byte-identical after every restore** (the M1-T1 item 8 → M1-T4
+     item 8 standard, five iterations running). **(A)** flip `roll <= cumulative` to `roll <
+     cumulative` → RED in 5 (`terrain_type_at_walks_the_band_weights_in_listed_order`,
+     `composition_boundaries_are_pinned_as_adjacent_pairs`,
+     `generated_terrain_is_confined_to_its_own_band`, `composition_weights_are_read_from_data`, and
+     the golden). **(B)** consume rolls in **REVERSED** hex order — same multiset, same distribution,
+     same roll count → RED in **exactly 2**: `rolls_are_consumed_in_the_canonical_hex_order` and the
+     golden. **Confinement, distribution, determinism and the roll COUNT all stayed green**, so the
+     canonical-order oracle is the **only** pin that catches a stream-order slip — never "simplify" it
+     away as a slow restatement of the other tests. **(C)** let the composition pass clobber elevation
+     → RED in 3 including `the_composition_pass_leaves_the_bowl_untouched`, so the M1-T4 bowl is
+     genuinely protected. **(D)** perturb the **SHIPPED** data (rim 70/20 → 65/25, engine code
+     untouched) → RED in 5 including the verbatim-transcription and distribution tests, proving the
+     rule tests read **shipped content**, not merely the inline fixture. **(E)** neuter `Rng._init`
+     so the seed is ignored → RED in 3 (`a_different_seed_produces_a_different_sequence`,
+     `a_different_seed_produces_a_different_map`, the golden), proving the stream is really seeded
+     **and** really consumed. **(F)** delete the golden file → RED in 2, the test did **not**
+     auto-record (no file reappeared), and the failure message printed the observed hash, the exact
+     document to write and the §13.6 sentence.
+  12. **§13.6 CLAUSES RE-CHECKED RATHER THAN ASSUMED.** *Tests green headless*: MET (13 / 234 / 234 /
+     0 / 2268, exit 0). *Static typing clean*: MET, mechanically — `typecheck.sh` exit 0 over 22
+     files. *Constants read from data, not code*: MET and proven by mutation — neither `.gd` file
+     carries `24|32|40|1801|3169|4921`, the §4.4 percentages and every residual live in
+     `data/mapgen/concentric_bowl.json`, and property P10 mutates the params **in text** (rim
+     70 → 40, 20 → 50) and asserts `terrain_type_at(0, 45)` moves `soft_dirt` → `hard_rock`, so a
+     shadowing code literal is **caught**, not merely forbidden. *Events emitted for every state
+     change*: **VACUOUS and stated explicitly** — this slice mutates no `GameState` and touches no
+     `EventBus`; no `Command`/`validate`/`apply` surface exists yet to violate. *Goldens re-recorded
+     only with a logged reason*: **none re-recorded**; the single golden is a **first-time record**
+     and item 5 is its logged reason. *Relevant GDD table cell updated if numbers moved*: **no number
+     moved** — see the GDD-section line below.
+  13. **SCOPE HELD (§13.4).** Deliberately **not** written, and none of it appears in the diff: vein
+     **NODES** (stock/rate — M2, §5.2), Extractors, dig times or yields wiring; §4.2's **cave-feature**
+     table (Fungal Grove, Chasm, Deep Water, Geothermal Vent, Ruins, Slope, Depleted Vein); rivers;
+     creep lairs (M5); the Ancient Throne; player spawns; pocket-cavern/breach marking (§4.6);
+     `GameState`, any `Command`, any concrete `Event` subclass; the chunked MultiMesh renderer, camera
+     rig or hex picking (still-open M1 deliverables); any new key in `data/ruleset.json`; any edit to
+     `scripts/core/los.gd` or `scripts/core/hex_math.gd`; any `addons/` change.
+  14. **STAGE-BOUNDARY NOTE**, the same call M0-T5 item (i) / M1-T2 item 9 / M1-T3 item 17 / M1-T4
+     item 14 record: `docs/PROGRESS.md` and `docs/decisions.md` are **Land**-stage artefacts, and the
+     Tests/Implement/Verify stages correctly left both untouched. Verify made **zero** fixes this
+     iteration — the Implement stage's tree was already green and byte-identical to what it landed.
+- **Why:** §4.4 gives three prose sentences of composition and exactly four numbers; it legislates no
+  residual weights, no roll mechanism and no ordering, so the generator could not assign a single
+  terrain type without closing those silences — and closing them as **ordered weights in data with a
+  cumulative integer walk** keeps §11.1's determinism true and keeps the vocabulary out of engine
+  code, which is what makes M6's *"adding content requires zero engine-code changes"* canary
+  reachable. (R) is recorded because *"the only RNG in the program"* is a whole-project invariant that
+  is worthless unless something enforces it — hence the token scan in every sibling file rather than a
+  comment. (S)'s *"exactly one roll per hex, unconditionally, in canonical order"* is recorded at
+  length because probe B showed a reversed stream is invisible to confinement, distribution,
+  determinism **and** the roll count: without that one oracle the golden would be the only witness,
+  and a golden tells you *something* changed, never *what*. (U) and item 5 are recorded because from
+  this commit the project has a golden, and every future re-record is a logged event forever — the
+  procedure had to be written down **in the failure message itself**, where the person who needs it
+  will actually be standing. Item 9 is recorded because a test-authoring convention that silently
+  inverts the harness's refusal guard is exactly the class of false signal M0-T5 exists to prevent.
+- **GDD section affected:** §4.2 (its **Solid** row ids adopted verbatim as the terrain vocabulary and
+  its two exclusions — `artificial_granite` *Dwarf-built* and `rubble` *result of collapses* — plus
+  `mithril_seam`'s *"Deep Core only"* confinement **enforced by test**; **no table value moved, no
+  cell edited**; the M0-T2 item 10 `dig_yields` gap remains M2's); §4.4 (its composition column
+  **implemented**; the four printed percentages **70/20/55/15 transcribed verbatim into data** and the
+  *"Granite-dominant"* ordinal satisfied strictly; its silences resolved under §13.4 as (S) and (T);
+  **no printed percentage changed, no cell edited**); §4.1 (Small radius 24 ⇒ 1,801 hexes and the
+  0–3 elevation range re-confirmed as the golden's frame; unchanged); §11.1 (the *"one seeded
+  `RandomNumberGenerator`"* sentence **implemented** as (R) and now mechanically enforced project-wide;
+  integer-only rolls, stable canonical iteration, and the *"FNV over canonical serialization"*
+  hash shape realised as (U)); §11.2 (`scripts/core/rng.gd` created exactly where §11.2 lists `Rng`);
+  §11.3 (typing gate green over **22** files; every public function carries its `## §` doc comment;
+  the public surfaces are **exactly** the enumerated members — `Rng` 2 + 0 vars, `HexMap` 9 +
+  `radius`, `MapGenerator` 9 + `errors`); §12.6 (its example **seed 1337** used for the golden, and
+  its `"generator": "mapgen/concentric_bowl.json"` reference recorded inside the golden document);
+  §13.2 (tier-1 property sweeps: 300-roll boundary sweep, band confinement, pooled 8-seed
+  distribution within ±5pp, determinism, seed sensitivity, roll accounting, canonical stream order,
+  elevation regression, totality, 11 schema-rejection fixtures, data-driven mutation proof, plus
+  **tier-3 golden**); §13.4 (procedure exercised: four silences resolved (R)–(U), nothing stalled);
+  §13.6 (definition of done **MET**, every clause re-checked in item 12; the golden's re-record rule
+  is now **live forever**); **§14 M1 row — now TWO of three acceptance criteria MET: *"Golden mapgen
+  test (seed ⇒ terrain hash)"* is **MET** as of this commit (`tests/golden/test_mapgen_golden.gd` +
+  `mapgen_concentric_bowl_small_seed1337.json`, green headless) and *"LOS property tests"* remains MET
+  (M1-T3). *"60 fps on Medium map greybox"* remains **NOT met** — no renderer, camera rig or greybox
+  scene exists. The concentric-bowl generator deliverable is now **COMPLETE** (both slices); the
+  chunked MultiMesh renderer, camera rig and hex picking are not started, so **M1 is NOT done**.**
+  Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit accompanies this entry,
+  because no numeric table value changed: the four printed percentages are transcribed verbatim and
+  every residual weight is new tunable content, not an edit to a printed value.**

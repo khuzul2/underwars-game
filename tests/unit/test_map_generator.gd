@@ -15,6 +15,16 @@
 ##                  "**Deep Core** (inner 30%)".
 ##   §4.4 line 238: "Generator parameters (ring shares, vein densities, lair counts, seed) live
 ##                  in data/mapgen/*.json".
+##   §4.4 table, COMPOSITION column — the ONLY printed percentages, transcribed verbatim:
+##                  Safe Rim: "70% Soft Dirt, 20% Hard Rock, plentiful small Iron/Gold veins,
+##                  Fungal Groves"; Mid-Mantle: "55% Hard Rock, 15% Granite, Magestone crusts,
+##                  rivers/chasms, minor creep lairs, Ruins"; Deep Core: "Granite-dominant,
+##                  exposed Mithril Seams, Ancient Throne at center, major lairs".
+##   §4.2 Solid rows (the terrain-type vocabulary): Soft Dirt · Hard Rock · Dense Granite ·
+##                  Artificial Granite ("Dwarf-built; §7.1") · Rubble ("Result of collapses") ·
+##                  Gold Vein · Iron Vein · Magestone Crust · Mithril Seam ("Deep Core only").
+##   §12.6 line 980: the map/scenario example carries `"seed": 1337` — the golden's seed is
+##                  GDD-sourced, not invented.
 ##
 ## `docs/decisions.md` was re-scanned end to end this iteration: **NO logged override touches
 ## §4.1 or §4.4**, so the printed text above governs unamended. §4.4 prints three share
@@ -56,10 +66,32 @@
 ##       to the first line whose text carries the JSON key token of the offending TOP-LEVEL key,
 ##       falling back to line 1 — deliberately simpler than `RulesLoader._attribute_line`,
 ##       because the mapgen file has a different schema.
-##   (Q) NO RNG AND NO GOLDEN IN THIS SLICE. The bowl skeleton is a pure function of distance, so
-##       there is nothing to seed; terrain-type composition (§4.2), veins, features, lairs and
+##   (Q) NO RNG AND NO GOLDEN IN SLICE 1. The bowl skeleton is a pure function of distance, so
+##       there was nothing to seed; terrain-type composition (§4.2), veins, features, lairs and
 ##       spawns — and the project's FIRST GOLDEN — are M1-T5. §13.6's
 ##       re-record-only-with-a-logged-reason rule starts applying from that moment, not before.
+##       **M1-T5 AMENDS (Q)'s S2 scan, as (Q) itself demanded — by ADDING
+##       `RandomNumberGenerator` to ENGINE_BOUND_TOKENS, never by removing a token.** The
+##       generator must not own randomness at all: it RECEIVES an `Rng` (resolution (R)), whose
+##       file `scripts/core/rng.gd` is the project's single sanctioned home for the engine RNG.
+##       That is a STRENGTHENING of the scan, and it is logged.
+##   (S) M1-T5 COMPOSITION RULE. Each band carries an ordered list of `{type, pct}` weight rows
+##       summing to exactly 100. `terrain_type_at(band_index, roll)` walks that band's rows IN
+##       LISTED ORDER accumulating `pct` and returns the first row whose cumulative total is
+##       `>= roll`, i.e. the first row with `roll <= cumulative`. Pure integer math, no division,
+##       no RNG inside the rule — which is what makes the 300-roll boundary sweep below possible
+##       at all. `generate(map_radius, rng)` draws EXACTLY ONE `roll_percent()` per hex,
+##       UNCONDITIONALLY and BEFORE any branch, in HexMap's (O) canonical order, so the stream
+##       position is a function of the hex index alone.
+##   (T) M1-T5 SHIPPED WEIGHTS AND THE §4.2 VOCABULARY. §4.4 prints only four percentages
+##       (rim 70/20, mantle 55/15) plus the ordinal "Granite-dominant" for the Core; the residual
+##       weights below are §13.4 resolutions realising §4.4's own prose ("plentiful small
+##       Iron/Gold veins", "Magestone crusts", "exposed Mithril Seams") and are TUNABLE CONTENT in
+##       `data/mapgen/concentric_bowl.json`, never `.gd` literals. §4.2's "Deep Core only" makes
+##       `mithril_seam` legal in the innermost band alone; `artificial_granite` ("Dwarf-built") and
+##       `rubble` ("Result of collapses") are produced by PLAY, never by mapgen. There is NO
+##       terrain-type whitelist anywhere in engine code (the EventBus resolution (f) precedent):
+##       ids are opaque strings to the generator and the vocabulary is pinned BY TEST.
 ##
 ## §13.6 "events emitted for every state change" is VACUOUS here and deliberately so: this slice
 ## mutates no GameState and touches no EventBus. Goldens: none re-recorded — none exist yet.
@@ -124,6 +156,58 @@ const MIN_ELEVATION: int = 0
 const MAX_ELEVATION: int = 3
 
 # ---------------------------------------------------------------------------------------------
+# §4.4's COMPOSITION column and §4.2's Solid rows (resolutions (S)/(T)). The four printed
+# percentages are VERBATIM; the residuals are the §13.4-resolved tunable content that must appear
+# in data/mapgen/concentric_bowl.json. Rows are listed in the order the cumulative walk uses.
+# ---------------------------------------------------------------------------------------------
+const RIM_TYPES: Array[String] = ["soft_dirt", "hard_rock", "iron_vein", "gold_vein"]
+const RIM_PCTS: Array[int] = [70, 20, 5, 5]
+const MANTLE_TYPES: Array[String] = ["hard_rock", "dense_granite", "magestone_crust", "soft_dirt"]
+const MANTLE_PCTS: Array[int] = [55, 15, 5, 25]
+const CORE_TYPES: Array[String] = ["dense_granite", "hard_rock", "mithril_seam"]
+const CORE_PCTS: Array[int] = [70, 25, 5]
+
+## §4.4's printed percentages, pinned separately from the tables above so a residual retune can
+## never quietly move a number the GDD actually prints.
+const PRINTED_RIM_SOFT_DIRT_PCT: int = 70
+const PRINTED_RIM_HARD_ROCK_PCT: int = 20
+const PRINTED_MANTLE_HARD_ROCK_PCT: int = 55
+const PRINTED_MANTLE_GRANITE_PCT: int = 15
+const WEIGHTS_TOTAL: int = 100
+
+## §4.2's nine Solid row ids — the complete terrain-type vocabulary of the game.
+const SOLID_TYPE_IDS: Array[String] = [
+	"soft_dirt",
+	"hard_rock",
+	"dense_granite",
+	"artificial_granite",
+	"rubble",
+	"gold_vein",
+	"iron_vein",
+	"magestone_crust",
+	"mithril_seam",
+]
+
+## §4.2 — "Dwarf-built; §7.1" and "Result of collapses": produced by PLAY, never by map generation.
+const NEVER_GENERATED_TYPE_IDS: Array[String] = ["artificial_granite", "rubble"]
+
+## §4.2 — "Mithril Seam ... Deep Core only".
+const DEEP_CORE_ONLY_TYPE_ID: String = "mithril_seam"
+
+## The empty terrain-type id, returned by every out-of-domain query (resolution (S) totality).
+const NO_TERRAIN: String = ""
+
+## §12.6's example seed, and a neighbour used to prove the stream is genuinely consumed.
+const GOLDEN_SEED: int = 1337
+const OTHER_SEED: int = 1338
+
+## Pooled-distribution sweep (§13.2 tier-1 property test). Eight seeds over the R=24 map pool
+## 8 * 984 = 7,872 rim, 8 * 648 = 5,184 mantle and 8 * 169 = 1,352 core rolls; the tightest case
+## (p = 0.70 on the core) has sd ~1.25 pp, so a +/- 5 pp tolerance is ~4 sigma and cannot flake.
+const DISTRIBUTION_SEEDS: Array[int] = [1, 2, 3, 4, 5, 6, 7, 8]
+const DISTRIBUTION_TOLERANCE_PP: int = 5
+
+# ---------------------------------------------------------------------------------------------
 # The canonical params document. Layout follows data/ruleset.json's LOAD-BEARING convention
 # (decisions.md M0-T2 item 7): line 1 is a lone `{` and each top-level group occupies exactly ONE
 # line, so a single-line defect is plantable and every expected error line is computed from the
@@ -134,19 +218,25 @@ const PARAMS_LINES: Array[String] = [
 	'  "id": "concentric_bowl",',
 	'  "map_sizes": [{"id": "small", "radius": 24}, {"id": "medium", "radius": 32}, {"id": "large", "radius": 40}],',
 	'  "bands": [{"id": "safe_rim", "share_pct": 30}, {"id": "mid_mantle", "share_pct": 40}, {"id": "deep_core", "share_pct": 30}],',
+	'  "composition": [{"band": "safe_rim", "weights": [{"type": "soft_dirt", "pct": 70}, {"type": "hard_rock", "pct": 20}, {"type": "iron_vein", "pct": 5}, {"type": "gold_vein", "pct": 5}]}, {"band": "mid_mantle", "weights": [{"type": "hard_rock", "pct": 55}, {"type": "dense_granite", "pct": 15}, {"type": "magestone_crust", "pct": 5}, {"type": "soft_dirt", "pct": 25}]}, {"band": "deep_core", "weights": [{"type": "dense_granite", "pct": 70}, {"type": "hard_rock", "pct": 25}, {"type": "mithril_seam", "pct": 5}]}],',
 	'  "terraces": [{"from_share_pct": 85, "elevation": 3}, {"from_share_pct": 70, "elevation": 2}, {"from_share_pct": 30, "elevation": 1}, {"from_share_pct": 0, "elevation": 0}]',
 	'}',
 ]
 
-const TOP_LEVEL_KEYS: Array[String] = ["id", "map_sizes", "bands", "terraces"]
+const TOP_LEVEL_KEYS: Array[String] = ["id", "map_sizes", "bands", "composition", "terraces"]
 
 ## §11.1 — tokens that would make the sim core engine-bound. FileAccess and JSON are permitted
-## (scripts/sim/rules_loader.gd sets that precedent). NOTE FOR M1-T5: the composition slice needs
-## seeded rolls through `state.rng` and must AMEND this scan with a logged reason, never delete
-## it — resolution (Q): slice 1 uses no RNG at all, so no exception is carved today.
+## (scripts/sim/rules_loader.gd sets that precedent).
+##
+## M1-T5 AMENDMENT, demanded by resolution (Q) and STRENGTHENING-ONLY: `RandomNumberGenerator` is
+## ADDED and every pre-existing token is kept verbatim. The composition slice needs seeded rolls,
+## and the sanctioned shape is an INJECTED `Rng` (resolution (R)) — `scripts/core/rng.gd` is the
+## single file in the project allowed to name the engine RNG, and `tests/unit/test_rng.gd`
+## asserts the positive half of that rule.
 const ENGINE_BOUND_TOKENS: Array[String] = [
 	"randi(",
 	"randf(",
+	"RandomNumberGenerator",
 	"extends Node",
 	"SceneTree",
 	"get_tree",
@@ -157,8 +247,9 @@ const ENGINE_BOUND_TOKENS: Array[String] = [
 
 const MAP_SIZE_TOKENS: Array[String] = ["24", "32", "40", "1801", "3169", "4921"]
 
-## The COMPLETE public function surface of MapGenerator (§13.4: invent nothing ahead of its
-## milestone — no terrain-type, vein, feature, lair or spawn entry point until M1-T5).
+## The COMPLETE public function surface of MapGenerator after M1-T5 (§13.4: invent nothing ahead
+## of its milestone — no vein NODE, Extractor, feature, river, lair, throne or spawn entry point,
+## those are M2/M5).
 const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"load_params_text",
 	"load_params_file",
@@ -167,11 +258,16 @@ const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"band_id",
 	"band_index_at",
 	"elevation_at",
+	"terrain_type_at",
 	"generate",
 ]
 
 ## The COMPLETE public field surface — the existing §12.1 error type, and nothing else.
 const REQUIRED_PUBLIC_VARS: Array[String] = ["errors"]
+
+## Doc-comment sections accepted by scan S4 (§11.3). §4.2 joins the list with M1-T5's composition
+## rule, which implements §4.2's hex-type vocabulary inside §4.4's bands.
+const DOC_SECTIONS: Array[String] = ["§4.1", "§4.2", "§4.4"]
 
 
 # =============================================================================================
@@ -338,6 +434,110 @@ func test_the_shipped_params_file_transcribes_the_gdd_tables_verbatim() -> void:
 		)
 
 
+## P13 §4.4 COMPOSITION COLUMN / §4.2 VOCABULARY — the four percentages the GDD actually PRINTS
+## must appear verbatim in the SHIPPED file, the Deep Core must be "Granite-dominant" as an
+## ordinal fact (dense_granite strictly exceeds every other weight in that band), every band must
+## sum to 100, every id used must be one of §4.2's nine Solid rows, and the two play-only types
+## must be unused. Parsed here directly, independently of MapGenerator, so a generator bug cannot
+## mask a content typo (resolutions (S)/(T)).
+func test_the_shipped_composition_transcribes_the_section_4_4_percentages() -> void:
+	var root: Dictionary = _parsed_shipped_params()
+	if root.is_empty():
+		return
+	assert_true(root.has("composition"), "§4.4: the params document carries a composition table")
+	var composition: Array = root.get("composition", [])
+	assert_eq(composition.size(), BAND_IDS.size(), "§4.4: one composition entry per printed ring")
+
+	var used_ids: Dictionary = {}
+	for i: int in range(mini(composition.size(), BAND_IDS.size())):
+		var entry: Dictionary = _as_dictionary(composition[i])
+		assert_eq(
+			str(entry.get("band", "")),
+			BAND_IDS[i],
+			"§4.4: composition %d belongs to %s (rows listed outer to inner)" % [i, BAND_IDS[i]]
+		)
+		var weights: Array = entry.get("weights", [])
+		assert_true(weights.size() >= 1, "(S): %s carries at least one weight row" % BAND_IDS[i])
+		var total: int = 0
+		var by_type: Dictionary = {}
+		var largest_pct: int = -1
+		var largest_type: String = ""
+		for weight: Variant in weights:
+			var row: Dictionary = _as_dictionary(weight)
+			var type_id: String = str(row.get("type", ""))
+			var pct: int = _integral(row.get("pct", -1))
+			assert_true(
+				SOLID_TYPE_IDS.has(type_id),
+				"§4.2: %s is not one of the nine printed Solid row ids" % type_id
+			)
+			assert_true(pct > 0, "(S): every shipped weight is positive (%s -> %d)" % [type_id, pct])
+			used_ids[type_id] = true
+			by_type[type_id] = pct
+			total += pct
+			if pct > largest_pct:
+				largest_pct = pct
+				largest_type = type_id
+		assert_eq(total, WEIGHTS_TOTAL, "(S): %s weights must sum to 100" % BAND_IDS[i])
+
+		if BAND_IDS[i] == "safe_rim":
+			assert_eq(
+				int(by_type.get("soft_dirt", -1)),
+				PRINTED_RIM_SOFT_DIRT_PCT,
+				"§4.4 PRINTED: Safe Rim is \"70%% Soft Dirt\""
+			)
+			assert_eq(
+				int(by_type.get("hard_rock", -1)),
+				PRINTED_RIM_HARD_ROCK_PCT,
+				"§4.4 PRINTED: Safe Rim is \"20%% Hard Rock\""
+			)
+			assert_true(
+				by_type.has("iron_vein") and by_type.has("gold_vein"),
+				"§4.4 PROSE: the Safe Rim carries \"plentiful small Iron/Gold veins\""
+			)
+		elif BAND_IDS[i] == "mid_mantle":
+			assert_eq(
+				int(by_type.get("hard_rock", -1)),
+				PRINTED_MANTLE_HARD_ROCK_PCT,
+				"§4.4 PRINTED: Mid-Mantle is \"55%% Hard Rock\""
+			)
+			assert_eq(
+				int(by_type.get("dense_granite", -1)),
+				PRINTED_MANTLE_GRANITE_PCT,
+				"§4.4 PRINTED: Mid-Mantle is \"15%% Granite\""
+			)
+			assert_true(
+				by_type.has("magestone_crust"),
+				"§4.4 PROSE: the Mid-Mantle carries \"Magestone crusts\""
+			)
+		else:
+			assert_eq(
+				largest_type,
+				"dense_granite",
+				"§4.4 PRINTED: the Deep Core is \"Granite-dominant\" (largest weight was %s)" % largest_type
+			)
+			var ties: int = 0
+			var granite_pct: int = int(by_type.get("dense_granite", 0))
+			for key: Variant in by_type.keys():
+				var other_id: String = str(key)
+				if other_id != "dense_granite" and int(by_type.get(other_id, 0)) >= granite_pct:
+					ties += 1
+			assert_eq(ties, 0, "§4.4: \"Granite-dominant\" is STRICT — no other Core weight may match it")
+			assert_true(
+				by_type.has(DEEP_CORE_ONLY_TYPE_ID),
+				"§4.4 PRINTED: the Deep Core carries \"exposed Mithril Seams\""
+			)
+
+	for forbidden: String in NEVER_GENERATED_TYPE_IDS:
+		assert_false(
+			used_ids.has(forbidden),
+			"§4.2: %s is produced by play (Dwarf-built / collapse), never by map generation" % forbidden
+		)
+	assert_false(
+		_composition_bands_other_than(root, "deep_core").has(DEEP_CORE_ONLY_TYPE_ID),
+		"§4.2: \"Mithril Seam ... Deep Core only\""
+	)
+
+
 ## decisions.md M0-T2 item 7, applied to the new file: line 1 is a lone `{` and each top-level
 ## group occupies exactly ONE line, so schema-error line attribution is meaningful and the load
 ## tests below can compute their expected line numbers from the document itself.
@@ -380,7 +580,7 @@ func test_map_radii_and_hex_counts_match_the_section_4_1_table() -> void:
 			"§4.1 line 174: radius %d is %d hexes" % [r, HEX_COUNTS[i]]
 		)
 		assert_eq(
-			generator.generate(r).hex_count(),
+			generator.generate(r, Rng.new(GOLDEN_SEED)).hex_count(),
 			HEX_COUNTS[i],
 			"§4.4: generate(%d) produces exactly %d in-bounds hexes" % [r, HEX_COUNTS[i]]
 		)
@@ -567,7 +767,7 @@ func test_generate_fills_the_descending_terraced_bowl_on_every_map_size() -> voi
 	var generator: MapGenerator = _loaded()
 	for i: int in range(RADII.size()):
 		var r: int = RADII[i]
-		var map: HexMap = generator.generate(r)
+		var map: HexMap = generator.generate(r, Rng.new(GOLDEN_SEED))
 		assert_eq(map.radius, r, "§4.4: generate(%d) returns a radius-%d map" % [r, r])
 		assert_eq(map.hex_count(), HEX_COUNTS[i], "§4.1 line 174: radius %d holds %d hexes" % [r, HEX_COUNTS[i]])
 
@@ -621,7 +821,7 @@ func test_generate_fills_the_descending_terraced_bowl_on_every_map_size() -> voi
 func test_elevation_is_constant_on_every_ring() -> void:
 	var generator: MapGenerator = _loaded()
 	for r: int in [RADII[0], RADII[1]]:
-		var map: HexMap = generator.generate(r)
+		var map: HexMap = generator.generate(r, Rng.new(GOLDEN_SEED))
 		var by_distance: Dictionary = {}
 		var breaks: Array[String] = []
 		for hex: Vector2i in map.hexes():
@@ -647,12 +847,12 @@ func test_two_independent_generators_produce_identical_maps() -> void:
 	var first: MapGenerator = _loaded()
 	var second: MapGenerator = _loaded()
 	for r: int in [RADII[0], RADII[1]]:
-		var a: PackedInt32Array = _elevation_sequence(first.generate(r))
-		var b: PackedInt32Array = _elevation_sequence(second.generate(r))
+		var a: PackedInt32Array = _elevation_sequence(first.generate(r, Rng.new(GOLDEN_SEED)))
+		var b: PackedInt32Array = _elevation_sequence(second.generate(r, Rng.new(GOLDEN_SEED)))
 		assert_eq(a.size(), HexMath.hex_count_for_radius(r), "sanity: the R=%d sequence is complete" % r)
 		assert_eq(a, b, "§11.1: two fresh generators must produce byte-identical R=%d maps" % r)
 		assert_eq(
-			_elevation_sequence(first.generate(r)),
+			_elevation_sequence(first.generate(r, Rng.new(GOLDEN_SEED))),
 			a,
 			"§11.1: regenerating on the SAME generator reproduces the R=%d map" % r
 		)
@@ -662,12 +862,343 @@ func test_two_independent_generators_produce_identical_maps() -> void:
 func test_generate_is_total_on_degenerate_radii() -> void:
 	var generator: MapGenerator = _loaded()
 	for negative: int in [-1, -40]:
-		var empty: HexMap = generator.generate(negative)
+		var empty: HexMap = generator.generate(negative, Rng.new(GOLDEN_SEED))
 		assert_eq(empty.hex_count(), 0, "(P): generate(%d) is the empty map" % negative)
 		assert_true(empty.hexes().is_empty(), "(P): generate(%d) has no hexes" % negative)
-	var single: HexMap = generator.generate(0)
+	var single: HexMap = generator.generate(0, Rng.new(GOLDEN_SEED))
 	assert_eq(single.hex_count(), 1, "(P): generate(0) is the single origin hex")
 	assert_eq(single.get_elevation(Vector2i.ZERO), 0, "§4.4: the centre sits at 'Core 0'")
+
+
+# =============================================================================================
+# C2. TERRAIN-TYPE COMPOSITION — §4.2's hex types inside §4.4's bands; resolutions (S)/(T).
+#     This is the half of the §14 M1 acceptance criterion the golden hashes ("seed => TERRAIN
+#     hash"), so every rule below is pinned before the golden is recorded, never after.
+# =============================================================================================
+
+## (S) THE COMPOSITION RULE, SWEPT OVER ALL 300 ROLLS. `terrain_type_at(band, roll)` walks the
+## band's weight rows in LISTED ORDER accumulating pct and returns the first row with
+## `roll <= cumulative`. Every roll 1..100 of every band is pinned — not sampled — because a
+## `<` / `<=` slip moves exactly one roll per boundary and a boundary-only probe set can miss it.
+## Expected values are computed here from the §4.4/§4.2 tables alone, never from the generator.
+func test_terrain_type_at_walks_the_band_weights_in_listed_order() -> void:
+	var generator: MapGenerator = _loaded()
+	var mismatches: Array[String] = []
+	for band: int in range(BAND_IDS.size()):
+		for roll: int in range(1, WEIGHTS_TOTAL + 1):
+			var expected: String = _expected_type(band, roll)
+			var actual: String = generator.terrain_type_at(band, roll)
+			if actual != expected:
+				mismatches.append("%s roll %d -> %s, expected %s" % [
+					BAND_IDS[band], roll, actual, expected
+				])
+	assert_eq(mismatches.size(), 0, "(S): the cumulative walk over all 300 rolls; %s" % [
+		str(mismatches.slice(0, 8))
+	])
+
+
+## (S) — the boundaries stated explicitly, so a failure names the rule rather than a sweep index:
+## rim 1-70 soft_dirt | 71-90 hard_rock | 91-95 iron_vein | 96-100 gold_vein; mantle 1-55
+## hard_rock | 56-70 dense_granite | 71-75 magestone_crust | 76-100 soft_dirt; core 1-70
+## dense_granite | 71-95 hard_rock | 96-100 mithril_seam. Pinned as ADJACENT PAIRS.
+func test_composition_boundaries_are_pinned_as_adjacent_pairs() -> void:
+	var generator: MapGenerator = _loaded()
+	for band: int in range(BAND_IDS.size()):
+		var types: Array[String] = _band_types(band)
+		var pcts: Array[int] = _band_pcts(band)
+		var cumulative: int = 0
+		for row: int in range(types.size()):
+			cumulative += pcts[row]
+			assert_eq(
+				generator.terrain_type_at(band, cumulative),
+				types[row],
+				"(S): %s roll %d is the last %s" % [BAND_IDS[band], cumulative, types[row]]
+			)
+			if row + 1 < types.size():
+				assert_eq(
+					generator.terrain_type_at(band, cumulative + 1),
+					types[row + 1],
+					"(S): %s roll %d steps to %s" % [BAND_IDS[band], cumulative + 1, types[row + 1]]
+				)
+		assert_eq(cumulative, WEIGHTS_TOTAL, "(S): %s weights sum to 100" % BAND_IDS[band])
+		assert_eq(
+			generator.terrain_type_at(band, 1),
+			types[0],
+			"(S): %s roll 1 is the first listed row" % BAND_IDS[band]
+		)
+
+
+## (S)/§13.4 TOTALITY — every out-of-domain query answers the EMPTY id: no crash, no assert abort
+## headless, no silently plausible terrain (the spirit of M1-T1 (B), M1-T3 (L) and M1-T4 (O)).
+func test_terrain_type_at_is_total_off_its_domain() -> void:
+	var generator: MapGenerator = _loaded()
+	for band: int in [-1, BAND_IDS.size(), 99]:
+		assert_eq(
+			generator.terrain_type_at(band, 1),
+			NO_TERRAIN,
+			"(S): band %d is out of range" % band
+		)
+	for roll: int in [0, -1, WEIGHTS_TOTAL + 1, 1000]:
+		assert_eq(
+			generator.terrain_type_at(SAFE_RIM, roll),
+			NO_TERRAIN,
+			"(S): roll %d is outside 1..100" % roll
+		)
+	var unconfigured: MapGenerator = MapGenerator.new()
+	assert_eq(
+		unconfigured.terrain_type_at(SAFE_RIM, 1),
+		NO_TERRAIN,
+		"(P): an UNCONFIGURED generator has no composition table to walk"
+	)
+
+
+## P1/P2 §4.2 + §4.4 — BAND CONFINEMENT, strictly stronger than a membership check: every
+## generated hex's type must be one of ITS OWN band's rows, so a type can never leak across a
+## band boundary. Swept over every hex of the R=24 map. §4.2's two play-only types
+## (artificial_granite, rubble) must appear nowhere at all.
+func test_generated_terrain_is_confined_to_its_own_band() -> void:
+	var generator: MapGenerator = _loaded()
+	var r: int = RADII[0]
+	var map: HexMap = generator.generate(r, Rng.new(GOLDEN_SEED))
+	var strangers: Array[String] = []
+	var unknown: Array[String] = []
+	var forbidden: Array[String] = []
+	var empty: int = 0
+	for hex: Vector2i in map.hexes():
+		var d: int = HexMath.distance(Vector2i.ZERO, hex)
+		var band: int = generator.band_index_at(d, r)
+		var type_id: String = map.get_terrain_type(hex)
+		if type_id == NO_TERRAIN:
+			empty += 1
+			continue
+		if not SOLID_TYPE_IDS.has(type_id):
+			unknown.append("%s -> %s" % [hex, type_id])
+		if NEVER_GENERATED_TYPE_IDS.has(type_id):
+			forbidden.append("%s -> %s" % [hex, type_id])
+		if not _band_types(band).has(type_id):
+			strangers.append("%s(%s) -> %s" % [hex, BAND_IDS[band], type_id])
+	assert_eq(empty, 0, "§4.4: every hex of a generated map carries a terrain type (%d empty)" % empty)
+	assert_eq(unknown.size(), 0, "§4.2: every type is one of the nine Solid rows; %s" % [
+		str(unknown.slice(0, 5))
+	])
+	assert_eq(forbidden.size(), 0, "§4.2: artificial_granite/rubble are never generated; %s" % [
+		str(forbidden.slice(0, 5))
+	])
+	assert_eq(strangers.size(), 0, "§4.4: every type belongs to its own band's rows; %s" % [
+		str(strangers.slice(0, 5))
+	])
+
+
+## P3 §4.2 "Mithril Seam ... **Deep Core only**" — the seam occurs ONLY where the band index is
+## the Deep Core, and (the other half, which a confinement test alone does not give) it DOES
+## occur on the R=24 seed-1337 map, so the rule is not satisfied vacuously.
+func test_mithril_seam_occurs_only_in_the_deep_core_and_does_occur() -> void:
+	var generator: MapGenerator = _loaded()
+	var r: int = RADII[0]
+	var map: HexMap = generator.generate(r, Rng.new(GOLDEN_SEED))
+	var outside: Array[String] = []
+	var seams: int = 0
+	for hex: Vector2i in map.hexes():
+		if map.get_terrain_type(hex) != DEEP_CORE_ONLY_TYPE_ID:
+			continue
+		seams += 1
+		var d: int = HexMath.distance(Vector2i.ZERO, hex)
+		if generator.band_index_at(d, r) != DEEP_CORE:
+			outside.append("%s(d=%d)" % [hex, d])
+	assert_eq(outside.size(), 0, "§4.2: Mithril Seams are Deep Core only; %s" % [
+		str(outside.slice(0, 5))
+	])
+	assert_true(seams > 0, "§4.4: \"exposed Mithril Seams\" must actually appear in the Deep Core")
+
+
+## P4 DISTRIBUTION (§13.2 tier-1 property test) — pooled over eight seeds on the R=24 map, each
+## band's observed share of each type is within +/- 5 percentage points of its table weight. This
+## is what catches a walk that is correct at the boundaries but skewed in the middle (e.g. a roll
+## drawn from the wrong range, or a per-hex roll reused across hexes).
+func test_terrain_distribution_matches_the_table_within_tolerance() -> void:
+	var generator: MapGenerator = _loaded()
+	var r: int = RADII[0]
+	var counts: Array[Dictionary] = [{}, {}, {}]
+	var totals: Array[int] = [0, 0, 0]
+	for rng_seed: int in DISTRIBUTION_SEEDS:
+		var map: HexMap = generator.generate(r, Rng.new(rng_seed))
+		for hex: Vector2i in map.hexes():
+			var band: int = generator.band_index_at(HexMath.distance(Vector2i.ZERO, hex), r)
+			if band < SAFE_RIM or band > DEEP_CORE:
+				continue
+			var type_id: String = map.get_terrain_type(hex)
+			counts[band][type_id] = int(counts[band].get(type_id, 0)) + 1
+			totals[band] += 1
+
+	var deviations: Array[String] = []
+	for band: int in range(BAND_IDS.size()):
+		assert_true(totals[band] > 0, "sanity: band %s was actually sampled" % BAND_IDS[band])
+		var types: Array[String] = _band_types(band)
+		var pcts: Array[int] = _band_pcts(band)
+		for row: int in range(types.size()):
+			var observed: int = int(counts[band].get(types[row], 0))
+			# Integer CROSS-MULTIPLICATION, the M1-T4 (M)/(N) style: no division anywhere, so the
+			# tolerance check needs no rounding convention and no `integer_division` ignore.
+			# |observed/total - pct/100| <= tol/100  <=>  |observed*100 - pct*total| <= tol*total.
+			var slack: int = absi(observed * WEIGHTS_TOTAL - pcts[row] * totals[band])
+			if slack > DISTRIBUTION_TOLERANCE_PP * totals[band]:
+				deviations.append("%s %s: %d of %d observed vs %d%% expected" % [
+					BAND_IDS[band], types[row], observed, totals[band], pcts[row]
+				])
+	assert_eq(deviations.size(), 0, "§4.4: the pooled composition must match the table; %s" % [
+		str(deviations.slice(0, 8))
+	])
+
+
+## P5 DETERMINISM (§11.1 "the core must run headless byte-identically") — now that the pass is
+## SEEDED, this is the property the golden rests on: two fresh generators fed two fresh
+## `Rng.new(1337)` produce element-identical terrain AND identical content_hash(), and
+## regenerating on the SAME generator with a fresh Rng reproduces it.
+func test_the_seeded_composition_is_deterministic() -> void:
+	var first: MapGenerator = _loaded()
+	var second: MapGenerator = _loaded()
+	var r: int = RADII[0]
+	var a: HexMap = first.generate(r, Rng.new(GOLDEN_SEED))
+	var b: HexMap = second.generate(r, Rng.new(GOLDEN_SEED))
+	assert_eq(
+		_terrain_sequence(a),
+		_terrain_sequence(b),
+		"§11.1: two fresh generators on seed %d must produce identical terrain" % GOLDEN_SEED
+	)
+	assert_eq(
+		a.content_hash(),
+		b.content_hash(),
+		"§11.1: ... and therefore identical content_hash()"
+	)
+	var again: HexMap = first.generate(r, Rng.new(GOLDEN_SEED))
+	assert_eq(
+		again.content_hash(),
+		a.content_hash(),
+		"§11.1: regenerating with a fresh Rng on the SAME generator reproduces the map"
+	)
+
+
+## P6 SEED SENSITIVITY — a different seed must give a different map. Without this, a generator
+## that silently ignored its Rng would pass every determinism test above and record a golden that
+## proves nothing about seeding.
+func test_a_different_seed_produces_a_different_map() -> void:
+	var generator: MapGenerator = _loaded()
+	var r: int = RADII[0]
+	var a: HexMap = generator.generate(r, Rng.new(GOLDEN_SEED))
+	var b: HexMap = generator.generate(r, Rng.new(OTHER_SEED))
+	assert_ne(
+		a.content_hash(),
+		b.content_hash(),
+		"§11.1: seeds %d and %d must not produce the same terrain hash" % [GOLDEN_SEED, OTHER_SEED]
+	)
+	assert_eq(
+		a.hex_count(),
+		b.hex_count(),
+		"sanity: only the terrain differs — both maps are the same shape"
+	)
+
+
+## P7 ROLL ACCOUNTING (resolution (S)) — EXACTLY ONE roll per hex, drawn UNCONDITIONALLY, so the
+## stream position is a function of the hex index alone. A generator that skipped the roll for
+## (say) the band's first row would still look correct hex-by-hex while making every later hex's
+## terrain depend on its predecessors' outcomes — and the golden would then be unreproducible
+## after any weight retune. A degenerate or unconfigured generate() must draw ZERO rolls.
+func test_generate_draws_exactly_one_roll_per_hex() -> void:
+	var generator: MapGenerator = _loaded()
+	for i: int in range(RADII.size()):
+		var r: int = RADII[i]
+		var rng: Rng = Rng.new(GOLDEN_SEED)
+		assert_eq(rng.rolls_drawn(), 0, "(S): no roll is drawn before generate()")
+		var map: HexMap = generator.generate(r, rng)
+		assert_eq(
+			rng.rolls_drawn(),
+			map.hex_count(),
+			"(S): exactly one roll per hex at R=%d (%d hexes)" % [r, HEX_COUNTS[i]]
+		)
+
+	var negative_rng: Rng = Rng.new(GOLDEN_SEED)
+	var empty: HexMap = generator.generate(-1, negative_rng)
+	assert_eq(empty.hex_count(), 0, "(P): a negative radius is the empty map")
+	assert_eq(negative_rng.rolls_drawn(), 0, "(S): the empty map draws no rolls")
+
+	var unconfigured: MapGenerator = MapGenerator.new()
+	var idle_rng: Rng = Rng.new(GOLDEN_SEED)
+	assert_eq(
+		unconfigured.generate(RADII[0], idle_rng).hex_count(),
+		0,
+		"(P): an UNCONFIGURED generator produces the empty map"
+	)
+	assert_eq(idle_rng.rolls_drawn(), 0, "(S): and consumes nothing from the stream")
+
+
+## P9 CANONICAL ORDER (resolution (O), which M1-T4 pinned precisely so the golden could rest on
+## it) — the rolls are consumed in HexMap's canonical order (`r` ascending, then `q` ascending).
+## Proven by replaying the SAME seed through an independent oracle Rng and matching every hex's
+## type against `terrain_type_at(band, oracle_roll[index])`. This single test welds the golden to
+## the order, the rule and the stream simultaneously; a q/r swap, a reversed walk or an off-by-one
+## in the stream all fail it.
+func test_rolls_are_consumed_in_the_canonical_hex_order() -> void:
+	var generator: MapGenerator = _loaded()
+	var r: int = RADII[0]
+	var map: HexMap = generator.generate(r, Rng.new(GOLDEN_SEED))
+	var oracle: Rng = Rng.new(GOLDEN_SEED)
+	var mismatches: Array[String] = []
+	var index: int = 0
+	for hex: Vector2i in map.hexes():
+		var roll: int = oracle.roll_percent()
+		var band: int = generator.band_index_at(HexMath.distance(Vector2i.ZERO, hex), r)
+		var expected: String = generator.terrain_type_at(band, roll)
+		if map.get_terrain_type(hex) != expected:
+			mismatches.append("#%d %s: %s, expected %s (roll %d)" % [
+				index, hex, map.get_terrain_type(hex), expected, roll
+			])
+		index += 1
+	assert_eq(index, map.hex_count(), "sanity: the oracle walked the whole map")
+	assert_eq(
+		oracle.rolls_drawn(),
+		map.hex_count(),
+		"(S): the oracle consumed exactly as many rolls as the generator"
+	)
+	assert_eq(mismatches.size(), 0, "(O)/(S): rolls are consumed in canonical order; %s" % [
+		str(mismatches.slice(0, 5))
+	])
+
+
+## P8 ELEVATION REGRESSION — the M1-T4 bowl must be UNTOUCHED by the composition pass. Swept over
+## every hex of ALL THREE map sizes: a pass that writes terrain through the elevation array (or
+## that resets elevation while writing type) is invisible to every composition assertion above.
+func test_the_composition_pass_leaves_the_bowl_untouched() -> void:
+	var generator: MapGenerator = _loaded()
+	for i: int in range(RADII.size()):
+		var r: int = RADII[i]
+		var map: HexMap = generator.generate(r, Rng.new(GOLDEN_SEED))
+		var breaks: Array[String] = []
+		var elevation_counts: Array[int] = [0, 0, 0, 0]
+		for hex: Vector2i in map.hexes():
+			var d: int = HexMath.distance(Vector2i.ZERO, hex)
+			var e: int = map.get_elevation(hex)
+			if e < MIN_ELEVATION or e > MAX_ELEVATION:
+				breaks.append("%s -> %d out of §4.1's 0-3" % [hex, e])
+				continue
+			elevation_counts[e] += 1
+			if e != generator.elevation_at(d, r):
+				breaks.append("%s(d=%d) -> %d, (N) says %d" % [hex, d, e, generator.elevation_at(d, r)])
+		assert_eq(breaks.size(), 0, "(N): the seeded pass must not disturb elevation at R=%d; %s" % [
+			r, str(breaks.slice(0, 5))
+		])
+		assert_eq(elevation_counts[0], ELEV0_COUNTS[i], "(N): elevation-0 population at R=%d" % r)
+		assert_eq(elevation_counts[1], ELEV1_COUNTS[i], "(N): elevation-1 population at R=%d" % r)
+		assert_eq(elevation_counts[2], ELEV2_COUNTS[i], "(N): elevation-2 population at R=%d" % r)
+		assert_eq(elevation_counts[3], ELEV3_COUNTS[i], "(N): elevation-3 population at R=%d" % r)
+
+
+## (P)/§13.4 TOTALITY — a null Rng is not a crash: `generate` answers the empty map, exactly as an
+## unconfigured generator does. A headless run must never be torn down by a missing argument.
+func test_generate_with_a_null_rng_is_total() -> void:
+	var generator: MapGenerator = _loaded()
+	var map: HexMap = generator.generate(RADII[0], null)
+	assert_eq(map.hex_count(), 0, "(P): generate(r, null) is the empty map")
+	assert_true(map.hexes().is_empty(), "(P): generate(r, null) has no hexes")
 
 
 # =============================================================================================
@@ -781,6 +1312,123 @@ func test_reject_malformed_json_with_a_one_based_line() -> void:
 
 
 # =============================================================================================
+# D2. THE COMPOSITION SCHEMA — resolution (P) applied to M1-T5's new top-level key. Every fixture
+#     below differs from a VALID document by exactly one planted defect, must be rejected with a
+#     1-based error on the "composition" line, must never emit the reserved line 0, and must leave
+#     the generator UNCONFIGURED even though it had just loaded successfully.
+# =============================================================================================
+
+## (P)/(S) — a params document with no composition table cannot generate terrain at all, so it is
+## not the §4.4 bowl. (Attributed to line 1, the fallback for an absent top-level key.)
+func test_reject_a_missing_composition_table() -> void:
+	_assert_rejected(
+		_without_line("composition"),
+		"composition",
+		"(S): the composition table is required"
+	)
+
+
+## (P) — the composition table is an ARRAY of per-band entries, mirroring "bands"/"terraces".
+func test_reject_a_composition_that_is_not_an_array() -> void:
+	_assert_rejected(
+		_with_line_replaced("composition", '  "composition": 7,'),
+		"composition",
+		"(S): composition must be an array"
+	)
+
+
+## (P) — every entry is an object carrying `band` and `weights`.
+func test_reject_a_composition_entry_that_is_not_an_object() -> void:
+	_assert_rejected(
+		_mutated('"composition": [{"band": "safe_rim"', '"composition": ["safe_rim", {"band": "safe_rim"'),
+		"composition",
+		"(S): each composition entry must be an object"
+	)
+
+
+## (P) — a composition entry naming a band that §4.4 does not print is content drift, not a bowl.
+func test_reject_a_composition_entry_for_an_unknown_band() -> void:
+	_assert_rejected(
+		_mutated('{"band": "safe_rim"', '{"band": "outer_shell"'),
+		"composition",
+		"(S): a composition band must be one of the printed rings"
+	)
+
+
+## (P) — the converse: every printed ring needs its own composition entry, or the generator would
+## silently leave a whole band untyped.
+func test_reject_a_band_with_no_composition_entry() -> void:
+	_assert_rejected(
+		_mutated(
+			', {"band": "deep_core", "weights": [{"type": "dense_granite", "pct": 70}, {"type": "hard_rock", "pct": 25}, {"type": "mithril_seam", "pct": 5}]}',
+			""
+		),
+		"composition",
+		"(S): every band needs a composition entry"
+	)
+
+
+## (P) — two entries for the same band make "the band's weight rows" ambiguous.
+func test_reject_two_composition_entries_for_the_same_band() -> void:
+	_assert_rejected(
+		_mutated('{"band": "mid_mantle"', '{"band": "safe_rim"'),
+		"composition",
+		"(S): a band may carry only one composition entry"
+	)
+
+
+## (S) — the weights of a band are a partition of the 1..100 roll space: anything but 100 leaves
+## rolls unassigned (or double-assigned) and silently biases the map.
+func test_reject_weights_that_do_not_sum_to_one_hundred() -> void:
+	_assert_rejected(
+		_mutated('{"type": "soft_dirt", "pct": 70}', '{"type": "soft_dirt", "pct": 69}'),
+		"composition",
+		"(S): a band's weights must sum to 100"
+	)
+
+
+## (P) + decisions.md M0-T2 item 8 — every JSON number arrives as TYPE_FLOAT, so an int leaf must
+## ACCEPT an integral float and REJECT a fractional one, never truncate. The two fractional
+## weights below still sum to 100, which isolates integrality from the sum rule.
+func test_reject_a_fractional_weight_percentage() -> void:
+	var text: String = _mutated('{"type": "soft_dirt", "pct": 70}', '{"type": "soft_dirt", "pct": 69.5}')
+	text = text.replace('{"type": "hard_rock", "pct": 20}', '{"type": "hard_rock", "pct": 20.5}')
+	_assert_rejected(text, "composition", "M0-T2 item 8: a fractional pct is rejected, never truncated")
+
+
+## (P) — a weight row without a string type id cannot name a §4.2 hex type.
+func test_reject_a_non_string_type_id() -> void:
+	_assert_rejected(
+		_mutated('{"type": "soft_dirt", "pct": 70}', '{"type": 7, "pct": 70}'),
+		"composition",
+		"(S): every weight row needs a string type id"
+	)
+
+
+## (P) — the EMPTY id is the generator's "no terrain" answer (resolution (S) totality), so it can
+## never be a legitimate content value.
+func test_reject_an_empty_type_id() -> void:
+	_assert_rejected(
+		_mutated('{"type": "soft_dirt", "pct": 70}', '{"type": "", "pct": 70}'),
+		"composition",
+		"(S): the empty id is the no-terrain sentinel, never content"
+	)
+
+
+## (P) — an empty weights array cannot answer any roll, so it is rejected at LOAD rather than
+## silently producing empty terrain at generate() time.
+func test_reject_an_empty_weights_array() -> void:
+	_assert_rejected(
+		_mutated(
+			'"weights": [{"type": "dense_granite", "pct": 70}, {"type": "hard_rock", "pct": 25}, {"type": "mithril_seam", "pct": 5}]',
+			'"weights": []'
+		),
+		"composition",
+		"(S): a band needs at least one weight row"
+	)
+
+
+# =============================================================================================
 # E. §13.6 "constants read from data, not code" — proven by MUTATING THE DATA
 # =============================================================================================
 
@@ -796,7 +1444,7 @@ func test_map_radii_are_read_from_data() -> void:
 	assert_true(ok, "sanity: the mutated params text is still valid: %s" % [str(_error_lines(generator))])
 	assert_eq(generator.radius_for_size("medium"), 30, "§13.6: the radius comes from data")
 	assert_eq(
-		generator.generate(30).hex_count(),
+		generator.generate(30, Rng.new(GOLDEN_SEED)).hex_count(),
 		HexMath.hex_count_for_radius(30),
 		"§13.6: the generated map follows the data-supplied radius"
 	)
@@ -832,6 +1480,60 @@ func test_terrace_thresholds_are_read_from_data() -> void:
 	var r: int = RADII[0]
 	assert_eq(generator.elevation_at(21, r), 2, "§13.6: a 90%% split leaves d=21 at elevation 2")
 	assert_eq(generator.elevation_at(22, r), 3, "§13.6: and starts elevation 3 at d=22")
+
+
+## P10 §13.6 — THE central data-vs-code pin of M1-T5, in the M1-T4 mutate-the-params-in-text form
+## rather than as a forbidding regex: move the Safe Rim's printed 70/20 split to 40/50 in the
+## params TEXT and roll 45 must move from soft_dirt to hard_rock. If the percentages were shadowed
+## by a `.gd` literal the mutated document would still answer soft_dirt.
+func test_composition_weights_are_read_from_data() -> void:
+	var baseline: MapGenerator = MapGenerator.new()
+	var loaded: bool = baseline.load_params_text(_params_text(), SOURCE)
+	assert_true(loaded, "sanity: the canonical document loads: %s" % [str(_error_lines(baseline))])
+	assert_eq(
+		baseline.terrain_type_at(SAFE_RIM, 45),
+		"soft_dirt",
+		"§4.4 PRINTED: with 70%% Soft Dirt, roll 45 is soft_dirt"
+	)
+
+	var generator: MapGenerator = MapGenerator.new()
+	var text: String = _mutated('{"type": "soft_dirt", "pct": 70}', '{"type": "soft_dirt", "pct": 40}')
+	text = text.replace('{"type": "hard_rock", "pct": 20}', '{"type": "hard_rock", "pct": 50}')
+	var ok: bool = generator.load_params_text(text, SOURCE)
+	assert_true(ok, "sanity: 40 + 50 + 5 + 5 still sums to 100: %s" % [str(_error_lines(generator))])
+	assert_eq(
+		generator.terrain_type_at(SAFE_RIM, 40),
+		"soft_dirt",
+		"§13.6: the retuned split still ends soft_dirt at its own cumulative"
+	)
+	assert_eq(
+		generator.terrain_type_at(SAFE_RIM, 45),
+		"hard_rock",
+		"§13.6: the composition percentages come from data, not from a code literal"
+	)
+	assert_eq(
+		generator.terrain_type_at(SAFE_RIM, 90),
+		"hard_rock",
+		"§13.6: ... and hard_rock now runs to 90"
+	)
+
+
+## P10/(T) §4.2 — the terrain-type VOCABULARY is data too: there is no whitelist, enum or literal
+## in engine code (the EventBus resolution (f) precedent), so a params file naming an id the GDD
+## never printed still loads and is returned verbatim. The §4.2 vocabulary is pinned by TEST — see
+## `test_the_shipped_composition_transcribes_the_section_4_4_percentages` — not by engine code.
+func test_terrain_type_ids_are_opaque_strings_to_the_generator() -> void:
+	var generator: MapGenerator = MapGenerator.new()
+	var ok: bool = generator.load_params_text(
+		_mutated('{"type": "soft_dirt", "pct": 70}', '{"type": "unobtanium", "pct": 70}'),
+		SOURCE
+	)
+	assert_true(ok, "(T): ids are opaque to the generator: %s" % [str(_error_lines(generator))])
+	assert_eq(
+		generator.terrain_type_at(SAFE_RIM, 45),
+		"unobtanium",
+		"(T): no terrain-type whitelist may exist in engine code"
+	)
 
 
 # =============================================================================================
@@ -924,10 +1626,10 @@ func test_source_carries_no_map_size_constant() -> void:
 
 ## S4 §11.3 "public rule functions documented with the GDD section they implement", tightened the
 ## M1-T2 item 11 / M1-T3 item 13 way: the expected public surface is listed explicitly, so a
-## MISSING member fails instead of passing vacuously and an EXTRA member (a vein or terrain-type
-## entry point pre-empting M1-T5) fails too. The generator must also DELEGATE distance to
-## `HexMath.distance(`, never re-derive the metric.
-func test_public_api_is_exactly_the_eight_documented_functions() -> void:
+## MISSING member fails instead of passing vacuously and an EXTRA member (a vein NODE, Extractor
+## or feature entry point pre-empting M2/M5) fails too. The generator must also DELEGATE distance
+## to `HexMath.distance(`, never re-derive the metric.
+func test_public_api_is_exactly_the_nine_documented_functions() -> void:
 	var public_functions: Array[String] = []
 	var undocumented: Array[String] = []
 	_collect_public_functions(MAP_GENERATOR_PATH, public_functions, undocumented)
@@ -947,8 +1649,8 @@ func test_public_api_is_exactly_the_eight_documented_functions() -> void:
 	assert_eq(
 		undocumented.size(),
 		0,
-		"§11.3: every public rule function needs a '## §4.1'/'## §4.4' doc comment; missing on: %s" % [
-			str(undocumented)
+		"§11.3: every public rule function needs a %s doc comment; missing on: %s" % [
+			str(DOC_SECTIONS), str(undocumented)
 		]
 	)
 	assert_eq(
@@ -1028,7 +1730,7 @@ func _assert_rejected(text: String, key: String, label: String) -> void:
 		"(P) [%s]: a rejected document leaves the generator UNCONFIGURED" % label
 	)
 	assert_eq(
-		generator.generate(RADII[1]).hex_count(),
+		generator.generate(RADII[1], Rng.new(GOLDEN_SEED)).hex_count(),
 		0,
 		"(P) [%s]: an unconfigured generator produces the empty map" % label
 	)
@@ -1045,6 +1747,36 @@ func _joined(source_lines: Array[String]) -> String:
 	for line: String in source_lines:
 		packed.append(line)
 	return "\n".join(packed)
+
+
+## The canonical document with the top-level group `key` replaced by `new_line` verbatim — used
+## when the defect is the SHAPE of a whole group rather than a value inside it.
+func _with_line_replaced(key: String, new_line: String) -> String:
+	var lines: Array[String] = []
+	var replaced: int = 0
+	for line: String in PARAMS_LINES:
+		if line.strip_edges().begins_with('"%s":' % key):
+			lines.append(new_line)
+			replaced += 1
+		else:
+			lines.append(line)
+	assert_eq(replaced, 1, "sanity: the fixture carries exactly one top-level %s line" % key)
+	return _joined(lines)
+
+
+## The canonical document with the whole top-level group `key` DELETED — the "missing required
+## key" fixture. Only valid for a group that is not the last one (the previous line's trailing
+## comma stays correct), which is why "composition" sits between "bands" and "terraces".
+func _without_line(key: String) -> String:
+	var lines: Array[String] = []
+	var dropped: int = 0
+	for line: String in PARAMS_LINES:
+		if line.strip_edges().begins_with('"%s":' % key):
+			dropped += 1
+			continue
+		lines.append(line)
+	assert_eq(dropped, 1, "sanity: the fixture carries exactly one top-level %s line" % key)
+	return _joined(lines)
 
 
 ## The canonical document with exactly one substring replaced — one planted defect per fixture.
@@ -1149,12 +1881,71 @@ func _aligned(band: int, elevation: int) -> bool:
 	return false
 
 
-## Every elevation of a map in HexMap's canonical order — the sequence the M1-T5 golden will
-## hash, and the thing determinism is compared over.
+## Every elevation of a map in HexMap's canonical order — part of what the M1-T5 golden hashes,
+## and the thing elevation determinism is compared over.
 func _elevation_sequence(map: HexMap) -> PackedInt32Array:
 	var out: PackedInt32Array = PackedInt32Array()
 	for hex: Vector2i in map.hexes():
 		out.append(map.get_elevation(hex))
+	return out
+
+
+## Every terrain-type id of a map in HexMap's canonical order — the other half of what the golden
+## hashes, compared as a whole sequence so a single drifting hex fails.
+func _terrain_sequence(map: HexMap) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for hex: Vector2i in map.hexes():
+		out.append(map.get_terrain_type(hex))
+	return out
+
+
+## §4.4's composition rows for a band, in the order the cumulative walk uses (resolution (S)).
+func _band_types(band: int) -> Array[String]:
+	if band == MID_MANTLE:
+		return MANTLE_TYPES
+	if band == DEEP_CORE:
+		return CORE_TYPES
+	return RIM_TYPES
+
+
+## The weights matching [method _band_types], element for element.
+func _band_pcts(band: int) -> Array[int]:
+	if band == MID_MANTLE:
+		return MANTLE_PCTS
+	if band == DEEP_CORE:
+		return CORE_PCTS
+	return RIM_PCTS
+
+
+## Resolution (S)'s rule, computed HERE from the §4.4/§4.2 tables alone: walk the band's rows in
+## listed order accumulating pct and take the first row with `roll <= cumulative`. "" outside the
+## 1..100 domain. Never consults MapGenerator, so it is a genuine oracle.
+func _expected_type(band: int, roll: int) -> String:
+	if roll < 1 or roll > WEIGHTS_TOTAL:
+		return NO_TERRAIN
+	var types: Array[String] = _band_types(band)
+	var pcts: Array[int] = _band_pcts(band)
+	var cumulative: int = 0
+	for row: int in range(types.size()):
+		cumulative += pcts[row]
+		if roll <= cumulative:
+			return types[row]
+	return NO_TERRAIN
+
+
+## Every terrain-type id used by the SHIPPED composition table outside the named band — the "Deep
+## Core only" check reads this rather than trusting the per-band loop above.
+func _composition_bands_other_than(root: Dictionary, band_id_text: String) -> Array[String]:
+	var out: Array[String] = []
+	var composition: Array = root.get("composition", [])
+	for entry: Variant in composition:
+		var dict: Dictionary = _as_dictionary(entry)
+		if str(dict.get("band", "")) == band_id_text:
+			continue
+		var weights: Array = dict.get("weights", [])
+		for weight: Variant in weights:
+			var row: Dictionary = _as_dictionary(weight)
+			out.append(str(row.get("type", "")))
 	return out
 
 
@@ -1236,7 +2027,11 @@ func _collect_public_functions(
 		while j >= 0 and lines[j].strip_edges().begins_with("#"):
 			doc_block = lines[j] + "\n" + doc_block
 			j -= 1
-		if not (doc_block.contains("§4.1") or doc_block.contains("§4.4")):
+		var documented: bool = false
+		for section: String in DOC_SECTIONS:
+			if doc_block.contains(section):
+				documented = true
+		if not documented:
 			undocumented.append(function_name)
 
 

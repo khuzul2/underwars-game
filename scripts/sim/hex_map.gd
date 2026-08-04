@@ -37,18 +37,31 @@ var radius: int = 0
 ## always go through [method get_elevation]/[method set_elevation].
 var _elevations: PackedInt32Array = PackedInt32Array()
 
+## §4.2 terrain-type ids over the SAME index scheme (M1-T5). One PackedStringArray, never a
+## Dictionary. The default and out-of-bounds value is the empty id "".
+var _terrain_types: PackedStringArray = PackedStringArray()
+
 ## Side length of the axial bounding square, `2 * radius + 1`; 0 when `radius` is negative.
 var _side: int = 0
+
+## FNV-1a 32-bit constants for [method content_hash] (resolution (U)). Algorithm constants, not
+## GDD game content, so they stay as code literals rather than moving to data/*.json.
+const FNV_OFFSET_BASIS: int = 2166136261
+const FNV_PRIME: int = 16777619
+const FNV_MASK: int = 0xffffffff
+const FNV_SEPARATOR: int = 0x1f
 
 
 func _init(map_radius: int) -> void:
 	radius = map_radius
 	_elevations = PackedInt32Array()
+	_terrain_types = PackedStringArray()
 	if radius < 0:
 		_side = 0
 		return
 	_side = 2 * radius + 1
 	_elevations.resize(_side * _side)
+	_terrain_types.resize(_side * _side)
 
 
 ## §4.1 — number of in-bounds hexes, i.e. `3 * radius * (radius + 1) + 1` for a non-negative
@@ -101,3 +114,62 @@ func set_elevation(hex: Vector2i, value: int) -> void:
 	if index == -1:
 		return
 	_elevations[index] = value
+
+
+## §4.2 — terrain-type id at `hex` ("" when unset or out of bounds).
+func get_terrain_type(hex: Vector2i) -> String:
+	var index: int = index_of(hex)
+	if index == -1:
+		return ""
+	return _terrain_types[index]
+
+
+## §4.2 — writes the terrain-type id at `hex`; a silent no-op when `hex` is out of bounds.
+func set_terrain_type(hex: Vector2i, value: String) -> void:
+	var index: int = index_of(hex)
+	if index == -1:
+		return
+	_terrain_types[index] = value
+
+
+## §11.1 — reproducible FNV-1a 32-bit content hash over this map in canonical order (resolution
+## (U)): the radius, then every hex's coordinates, elevation and terrain-type id, in [method hexes]
+## order. This is the value the M1 golden records (§14 M1: "Golden mapgen test (seed => terrain
+## hash)").
+func content_hash() -> int:
+	var hash_value: int = FNV_OFFSET_BASIS
+	hash_value = _fold_int(hash_value, radius)
+	for hex: Vector2i in hexes():
+		hash_value = _fold_int(hash_value, hex.x)
+		hash_value = _fold_int(hash_value, hex.y)
+		hash_value = _fold_int(hash_value, get_elevation(hex))
+		hash_value = _fold_bytes(hash_value, get_terrain_type(hex).to_utf8_buffer())
+		hash_value = _fold_byte(hash_value, FNV_SEPARATOR)
+	return hash_value
+
+
+## Folds `value`'s 4 little-endian bytes (masked to 32 bits first) into `hash_value` via FNV-1a,
+## masking after every multiply so the result never escapes 32 bits (resolution (U)).
+func _fold_int(hash_value: int, value: int) -> int:
+	var masked: int = value & FNV_MASK
+	var result: int = hash_value
+	var byte_width: int = 8
+	for byte_index: int in range(4):
+		var shift: int = byte_width * byte_index
+		result = _fold_byte(result, (masked >> shift) & 0xff)
+	return result
+
+
+## Folds every byte of `data` into `hash_value` via FNV-1a, in order.
+func _fold_bytes(hash_value: int, data: PackedByteArray) -> int:
+	var result: int = hash_value
+	for byte: int in data:
+		result = _fold_byte(result, byte)
+	return result
+
+
+## One FNV-1a step: xor the byte in, multiply by the prime, mask to 32 bits.
+func _fold_byte(hash_value: int, byte: int) -> int:
+	var result: int = (hash_value ^ byte) & FNV_MASK
+	result = (result * FNV_PRIME) & FNV_MASK
+	return result

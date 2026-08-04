@@ -1,14 +1,14 @@
 ## MapGenerator — GDD §4.4 (Map Generation — the Concentric Bowl, binding table), §4.1 (map
-## radii and "Elevation: integer 0-3 per hex"), §11.1 (sim core is engine-free, integer-only and
-## deterministic), §11.2 (`scripts/sim/` — GameState + systems), §11.3, §12.6 (a map/scenario
-## references `"generator": "mapgen/concentric_bowl.json"`, so the bowl is a DATA FILE and this
-## class is the one data-driven generator), §13.6.
+## radii and "Elevation: integer 0-3 per hex"), §4.2 (the terrain-type vocabulary), §11.1 (sim
+## core is engine-free, integer-only and deterministic), §11.2 (`scripts/sim/` — GameState +
+## systems), §11.3, §12.6 (a map/scenario references `"generator": "mapgen/concentric_bowl.json"`,
+## so the bowl is a DATA FILE and this class is the one data-driven generator), §13.6.
 ##
-## SLICE 1 (M1-T4) BUILDS THE BAND + ELEVATION SKELETON ONLY: the §4.4 concentric bands and the
-## descending terraced bowl. Terrain-type composition (§4.2's 70% Soft Dirt / 20% Hard Rock,
-## 55% Hard Rock / 15% Granite, granite-dominant Core), veins, Fungal Groves, chasms, rivers,
-## Ruins, lairs, the Ancient Throne and player spawns are M1-T5 — and so is the project's first
-## GOLDEN. §13.4: invent nothing ahead of its milestone. THIS SLICE USES NO RNG AT ALL.
+## SLICE 1 (M1-T4) BUILT the §4.4 concentric bands and the descending terraced bowl (pure
+## function of distance, no RNG). SLICE 2 (M1-T5) ADDS the §4.2 terrain-type composition pass —
+## resolutions (S)/(T) below — and with it the project's first GOLDEN. Veins, Fungal Groves,
+## chasms, rivers, Ruins, lairs, the Ancient Throne and player spawns remain out of scope
+## (§13.4: invent nothing ahead of its milestone).
 ##
 ## §13.4 resolutions (logged in docs/decisions.md; the lettering continues M1-T3's (H)-(L) —
 ## keep it stable, `tests/unit/test_map_generator.gd` cross-references it):
@@ -30,6 +30,18 @@
 ##       UNCONFIGURED — a half-valid params set can never be read. Line 0 stays RESERVED for
 ##       missing/unreadable files (M0-T2 item 2). Schema errors are attributed to the first line
 ##       whose text carries the JSON key token of the offending TOP-LEVEL key, falling back to 1.
+##   (S) M1-T5 COMPOSITION RULE. Each band carries an ordered list of `{type, pct}` weight rows
+##       summing to exactly 100. `terrain_type_at(band_index, roll)` walks that band's rows IN
+##       LISTED ORDER accumulating `pct` and returns the first row with `roll <= cumulative`. Pure
+##       integer math, no division, no RNG inside the rule. `generate(map_radius, rng)` draws
+##       EXACTLY ONE `roll_percent()` per hex, UNCONDITIONALLY and BEFORE any branch, in HexMap's
+##       (O) canonical order, so the stream position is a function of the hex index alone.
+##   (T) M1-T5 SHIPPED WEIGHTS AND THE §4.2 VOCABULARY. §4.4 prints only four percentages
+##       (rim 70/20, mantle 55/15) plus the ordinal "Granite-dominant" for the Core; the residual
+##       weights are §13.4 resolutions realising §4.4's own prose and are TUNABLE CONTENT in
+##       `data/mapgen/concentric_bowl.json`, never `.gd` literals. There is NO terrain-type
+##       whitelist anywhere in engine code: ids are opaque strings to the generator and the
+##       vocabulary is pinned BY TEST.
 ##
 ## §13.6 "events emitted for every state change" is VACUOUS here: this slice mutates no
 ## GameState and touches no EventBus, so there is no state change to emit an event for.
@@ -55,6 +67,11 @@ var _band_share_pct: PackedInt32Array = PackedInt32Array()
 ## decreasing `from_share_pct`.
 var _terrace_from_pct: PackedInt32Array = PackedInt32Array()
 var _terrace_elevation: PackedInt32Array = PackedInt32Array()
+
+## Resolution (S) composition table, INDEXED BY BAND INDEX (not by JSON order): band k's weight
+## rows are `_composition_types[k]`/`_composition_pcts[k]`, listed in cumulative-walk order.
+var _composition_types: Array[PackedStringArray] = []
+var _composition_pcts: Array[PackedInt32Array] = []
 
 
 ## §4.4 — validates a whole mapgen params document and, on success, configures this generator.
@@ -92,9 +109,12 @@ func load_params_text(text: String, _source: String) -> bool:
 	var new_band_share_pct: PackedInt32Array = PackedInt32Array()
 	var new_terrace_from_pct: PackedInt32Array = PackedInt32Array()
 	var new_terrace_elevation: PackedInt32Array = PackedInt32Array()
+	var new_composition_types: Array[PackedStringArray] = []
+	var new_composition_pcts: Array[PackedInt32Array] = []
 
 	_validate_map_sizes(root, lines, new_size_ids, new_size_radii)
 	_validate_bands(root, lines, new_band_ids, new_band_share_pct)
+	_validate_composition(root, lines, new_band_ids, new_composition_types, new_composition_pcts)
 	_validate_terraces(root, lines, new_terrace_from_pct, new_terrace_elevation)
 
 	if not errors.is_empty():
@@ -106,6 +126,8 @@ func load_params_text(text: String, _source: String) -> bool:
 	_band_share_pct = new_band_share_pct
 	_terrace_from_pct = new_terrace_from_pct
 	_terrace_elevation = new_terrace_elevation
+	_composition_types = new_composition_types
+	_composition_pcts = new_composition_pcts
 	_configured = true
 	return true
 
@@ -188,15 +210,37 @@ func elevation_at(distance: int, map_radius: int) -> int:
 	return _terrace_elevation[_terrace_elevation.size() - 1]
 
 
-## §4.4 — builds the descending terraced bowl of radius `map_radius`. Returns an empty map when
-## this generator is UNCONFIGURED (resolution (P)), regardless of `map_radius`.
-func generate(map_radius: int) -> HexMap:
-	if not _configured:
+## §4.2/§4.4 — resolution (S): the pure composition rule. Walks band `band_index`'s weight rows
+## in listed order, accumulating `pct`, and returns the first row with `roll <= cumulative`
+## (1..100). "" for an out-of-range band, an out-of-range roll, or an unconfigured generator.
+func terrain_type_at(band_index: int, roll: int) -> String:
+	if band_index < 0 or band_index >= _composition_types.size():
+		return ""
+	if roll < 1 or roll > 100:
+		return ""
+	var types: PackedStringArray = _composition_types[band_index]
+	var pcts: PackedInt32Array = _composition_pcts[band_index]
+	var cumulative: int = 0
+	for i: int in range(types.size()):
+		cumulative += pcts[i]
+		if roll <= cumulative:
+			return types[i]
+	return ""
+
+
+## §4.4 — builds the descending terraced bowl of radius `map_radius`, drawing exactly one
+## percent roll per hex from `rng` in HexMap's canonical order and assigning each hex's §4.2
+## terrain type via [method terrain_type_at] (resolution (S)). Returns an empty map, and draws
+## ZERO rolls, when this generator is UNCONFIGURED or `rng` is null (resolution (P)).
+func generate(map_radius: int, rng: Rng) -> HexMap:
+	if not _configured or rng == null:
 		return HexMap.new(-1)
 	var map: HexMap = HexMap.new(map_radius)
 	for hex: Vector2i in map.hexes():
+		var roll: int = rng.roll_percent()
 		var d: int = HexMath.distance(Vector2i.ZERO, hex)
 		map.set_elevation(hex, elevation_at(d, map_radius))
+		map.set_terrain_type(hex, terrain_type_at(band_index_at(d, map_radius), roll))
 	return map
 
 
@@ -214,6 +258,8 @@ func _clear_configuration() -> void:
 	_band_share_pct = PackedInt32Array()
 	_terrace_from_pct = PackedInt32Array()
 	_terrace_elevation = PackedInt32Array()
+	_composition_types = []
+	_composition_pcts = []
 
 
 ## Validates the top-level "map_sizes" array: every entry needs a string id and a positive
@@ -291,6 +337,109 @@ func _validate_bands(
 		total += share
 	if total != 100:
 		_add_error("bands", lines, "ring shares must sum to 100 (got %d)" % total)
+
+
+## Validates the top-level "composition" array: one entry per band listed in `band_ids` (the
+## LOCAL list just built by [method _validate_bands], never the committed `_band_ids` —
+## decisions.md M1-T4 item 13(a)), each carrying weight rows that sum to 100 (resolution (S)).
+## Errors are attributed to the "composition" line (resolution (P)).
+func _validate_composition(
+	root: Dictionary,
+	lines: PackedStringArray,
+	band_ids: PackedStringArray,
+	out_types: Array[PackedStringArray],
+	out_pcts: Array[PackedInt32Array]
+) -> void:
+	for i: int in range(band_ids.size()):
+		out_types.append(PackedStringArray())
+		out_pcts.append(PackedInt32Array())
+
+	if not root.has("composition"):
+		_add_error("composition", lines, "missing required key \"composition\"")
+		return
+	var raw: Variant = root["composition"]
+	if not (raw is Array):
+		_add_error("composition", lines, "\"composition\" must be an array")
+		return
+	var entries: Array = raw
+	var seen_bands: Dictionary = {}
+	for entry: Variant in entries:
+		if not (entry is Dictionary):
+			_add_error("composition", lines, "each composition entry must be an object")
+			continue
+		var dict: Dictionary = entry
+		var band_value: Variant = dict.get("band", null)
+		var band_text: String = ""
+		if band_value is String:
+			band_text = band_value
+		var band_index: int = band_ids.find(band_text)
+		if band_index == -1:
+			_add_error(
+				"composition",
+				lines,
+				"composition band \"%s\" is not one of the printed rings" % band_text
+			)
+			continue
+		if seen_bands.has(band_index):
+			_add_error(
+				"composition", lines, "band %s carries more than one composition entry" % band_text
+			)
+			continue
+		seen_bands[band_index] = true
+
+		var weights_value: Variant = dict.get("weights", null)
+		if not (weights_value is Array):
+			_add_error("composition", lines, "composition entry for %s needs a weights array" % band_text)
+			continue
+		var weights: Array = weights_value
+		if weights.is_empty():
+			_add_error(
+				"composition", lines, "composition entry for %s needs at least one weight row" % band_text
+			)
+			continue
+
+		var types: PackedStringArray = PackedStringArray()
+		var pcts: PackedInt32Array = PackedInt32Array()
+		var total: int = 0
+		var rows_ok: bool = true
+		for weight: Variant in weights:
+			if not (weight is Dictionary):
+				_add_error("composition", lines, "each weight row must be an object")
+				rows_ok = false
+				continue
+			var row: Dictionary = weight
+			var type_value: Variant = row.get("type", null)
+			if not (type_value is String):
+				_add_error("composition", lines, "every weight row needs a string type id")
+				rows_ok = false
+				continue
+			var type_text: String = type_value
+			if type_text.is_empty():
+				_add_error("composition", lines, "the type id must not be empty")
+				rows_ok = false
+				continue
+			var pct_value: Variant = row.get("pct", null)
+			if not _is_integral(pct_value):
+				_add_error("composition", lines, "weight pct must be an integer")
+				rows_ok = false
+				continue
+			var pct: int = _as_int(pct_value)
+			types.append(type_text)
+			pcts.append(pct)
+			total += pct
+		if not rows_ok:
+			continue
+		if total != 100:
+			_add_error(
+				"composition", lines, "band %s weights must sum to 100 (got %d)" % [band_text, total]
+			)
+			continue
+		out_types[band_index] = types
+		out_pcts[band_index] = pcts
+
+	for i: int in range(band_ids.size()):
+		if not seen_bands.has(i):
+			_add_error("composition", lines, "band %s needs a composition entry" % band_ids[i])
 
 
 ## Validates the top-level "terraces" array: every entry needs an integral `from_share_pct` and
