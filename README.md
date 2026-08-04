@@ -46,6 +46,25 @@ Delivered by **M0** (the harness script already exists as the contract; M0 makes
 bash tools/run_tests.sh
 ```
 
+## CI (GDD §14 M0 deliverable)
+
+`tools/ci.sh` is the project's CI entry point: it runs the §11.3 static-typing gate, then the
+§13.1 GUT suite, and mechanizes CLAUDE.md's applicability rule by skipping — non-fatally, with a
+printed notice — the §13.1 tools that later milestones deliver. It exits non-zero if any
+*applicable* stage fails.
+
+```bash
+bash tools/ci.sh          # typecheck + tests; the one command a reviewer runs
+bash tools/typecheck.sh   # §11.3 gate alone: --check-only every project .gd outside addons/
+bash tools/typecheck.sh --self-test   # two-way proof: plant a violation, require red, re-verify green
+bash tools/verify_harness.sh          # two-way proof of run_tests.sh (§14 M0 acceptance)
+```
+
+Godot 4.7 ships **no** `--warnings-as-errors` CLI flag, so the §11.3 gate lives in
+`project.godot`'s `[debug]` section (46 GDScript warnings at level 2 = error, 3 documented
+exclusions at level 0, `res://addons` exempt) and is surfaced headlessly by
+`--check-only --script`, which refuses to load an offending file. See `docs/decisions.md` (M0-T4).
+
 Delivered by **M7** (needs M6 factions + M7 AI; the tool may exist earlier but this run is M7's
 acceptance bar):
 

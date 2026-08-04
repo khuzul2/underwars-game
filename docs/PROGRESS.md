@@ -10,24 +10,28 @@ not-yet-committed.
 ## Current position
 
 - **Phase:** 1 (MVP, GDD §14)
-- **Milestone:** M0 — Bootstrap (**in progress** — **both** §14 acceptance clauses pass headless;
-  the milestone stays open because one §14 M0 *deliverable* is not built yet: the **CI script**.
-  EventBus landed with M0-T3)
-- **Next task:** M0-T4 — **CI script including the §11.3 static-typing gate**, per the §14 M0
-  deliverables. Until it lands, typing is verified by diff review (§13.6). Cite §11.3, §13.1,
-  §13.6, §14. **Read the M0-T4 intel note below before speccing it** — Godot 4.7 has no
-  `--warnings-as-errors` CLI flag, and a maximal warning set does not pass on already-landed code.
-- **Remaining M0 scope after T4:**
-  - **M0-T5 (harness hardening)** — make `tools/run_tests.sh` refuse the
-    "GUT skipped a test script it could not parse" false green (see Known risk below). This is a
-    *strengthening* of the harness contract, which is permitted; weakening is not.
+- **Milestone:** M0 — Bootstrap (**in progress** — **every** §14 M0 *deliverable* is now built
+  (CI script landed with M0-T4) and **both** §14 acceptance clauses pass headless, re-verified this
+  iteration. The milestone is **deliberately held open for exactly one task, M0-T5**: this
+  iteration *measured* a false-green mode in `run_tests.sh` itself — the very signal that reports
+  clause (a) as passing (see Known risk below). Closing that before declaring M0 done is the
+  honest call, not a §14 requirement; strictly by the §14 row, M0's criteria are satisfied.)
+- **Next task:** M0-T5 — **harness hardening: make `tools/run_tests.sh` refuse the "GUT skipped /
+  could not parse a test script" false green.** A *strengthening* of the harness contract, which is
+  permitted; weakening is not. Cite §13.1, §13.6, §14. **Read decisions.md M0-T4 item (i) before
+  speccing it — it supersedes the M0-T2 assumption:** the planned `Ignoring script` /
+  `Failed to load script` refusal grep closes only ONE of two variants. A **syntactic** parse error
+  in a test file prints *no diagnostic at all* and yields *identical* Scripts/Tests counts, so
+  M0-T5 must **also** assert an expected script/test-count floor (or invoke `typecheck.sh`, which
+  does catch both). Both variants are measured and reproduced twice.
+- **Remaining M0 scope after T5:** none — the milestone closes there.
 - **Blockers:** none
 
 ## Milestone tracker
 
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
-| M0 Bootstrap | **in progress** | **acceptance criteria: BOTH clauses MET headless** — (a) harness two-way proof (`verify_harness.sh` exit 0: real suite green, planted red canary ⇒ exit 1, tree clean); (b) invalid ruleset rejected with a line-numbered error (`run_tests.sh` exit 0, Scripts 5 / Tests 51 / Passing 51 / Asserts 341, no skipped scripts). **Milestone NOT done:** the §14 M0 deliverable *CI script* (M0-T4) is still outstanding. Deliverables built so far: Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, **EventBus (M0-T3)**, `decisions.md` |
+| M0 Bootstrap | **in progress** | **acceptance criteria: BOTH clauses MET headless** — (a) harness two-way proof (`verify_harness.sh` exit 0: real suite green, planted red canary ⇒ exit 1, tree clean); (b) invalid ruleset rejected with a line-numbered error (`run_tests.sh` exit 0, Scripts 6 / Tests 57 / Passing 57 / Asserts 418, no skipped scripts). **ALL §14 M0 deliverables are now built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), **CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate)**, `decisions.md`. **Not marked done:** held open for **M0-T5** only, because M0-T4 measured a false-green mode inside `run_tests.sh` — the signal that reports clause (a) (decisions.md M0-T4 item (i)). Nothing in the §14 row itself is outstanding. |
 | M1 World | not started | — |
 | M2 Dig & Economy | not started | — |
 | M3 Build, Light, Structure | not started | — |
@@ -50,32 +54,37 @@ not-yet-committed.
 | 2026-08-04 | SETUP-4 | Allowlist `verify_harness.sh` for unattended runs | landed | SETUP-4: allowlist verify_harness.sh for unattended runs |
 | 2026-08-04 | M0-T2 | RulesLoader and data/ruleset.json with line-numbered validation errors | landed | M0-T2: RulesLoader and data/ruleset.json with line-numbered validation errors |
 | 2026-08-04 | M0-T3 | EventBus and typed Event base with deterministic delivery order | landed | M0-T3: EventBus and typed Event base with deterministic delivery order |
+| 2026-08-04 | M0-T4 | CI script and the static-typing warnings-as-errors gate | landed | M0-T4: CI script and the static-typing warnings-as-errors gate |
 
 ## Notes for the next iteration
 
-- **Pick up:** M0-T4 (CI script + the §11.3 static-typing gate) — the last M0 deliverable.
+- **Pick up:** M0-T5 (harness hardening — see Current position for the *measured correction* that
+  changes its scope). It is the last task in M0.
   `scripts/` now holds `sim/rules_loader.gd` + `sim/rules_error.gd` and `core/event.gd` +
   `core/event_bus.gd`, and nothing else, deliberately (§13.4: invent nothing ahead of its
   milestone). No GameState, Command, hex or map code exists yet, and **no concrete `Event`
   subclass exists** — those belong to the milestones that emit them.
-- **M0-T4 intel (measured this iteration on the pinned repo-local 4.7 binary — read before
-  speccing):**
-  - Godot 4.7 has **no `--warnings-as-errors` CLI flag** (checked `--help`). The §11.3 gate must be
-    project-setting driven: `debug/gdscript/warnings/<name>=2` plus
-    `--check-only --script <file>`, which exits 1 and prints `Warning treated as error`.
-  - Under a **maximal** warning set (every warning at level 2) the two new sim-core files are the
-    only clean ones in the repo. Already-landed code trips it: `scripts/sim/rules_loader.gd`
-    (unsafe `Variant`→`Dictionary`/`Array` casts at ~57/135/155/310/314/339; `int()`/`float()` on
-    `Variant` at ~107/117/139), `tests/unit/test_rules_loader.gd` (discarded `insert()` return,
-    ~528), `tests/unit/test_sentinel.gd` (`int(Variant)`, ~23–24), `tests/unit/test_event_bus.gd`
-    (four `unsafe_call_argument` against GUT's own untyped `assert_eq`, plus a discarded
-    `PackedStringArray.append()`). M0-T4 must therefore **curate** the warning set —
-    `unsafe_call_argument` and `return_value_discarded` are effectively incompatible with GUT's
-    assert API — or fix those files. It cannot simply flip everything to error.
-  - Related trap already fixed once: passing a `Variant` (e.g. `Array.pop_front()`) into a
-    statically-typed parameter is a **hard parse error** under the gate, not a warning — the script
-    fails to load, which in a test file is the silent-skip false green below. Assign through a
-    typed local first.
+- **The §11.3 static-typing gate is LIVE from M0-T4 — every `.gd` you write must pass it.** Read
+  decisions.md M0-T4 for the full contract; the operational facts:
+  - Run it with `bash tools/typecheck.sh` (all project `.gd` outside `addons/`), or just
+    `bash tools/ci.sh` (gate + suite + non-fatal skips for the not-yet-built §13.1 tools). Both
+    are hardened: `typecheck.sh` aggregates **all** failures (never stops at the first) and fails
+    loudly if enumeration finds **zero** files; `bash tools/typecheck.sh --self-test` is its
+    two-way proof and drives the **tool**, not a bare engine call.
+  - Config lives in `project.godot`'s `[debug]` section: **46 warnings at level 2**, **3 at level
+    0** (`unsafe_cast`, `unsafe_call_argument`, `return_value_discarded` — each justified in
+    decisions.md M0-T4 item c), `res://addons` exempt via `directory_rules`, **no project tree
+    exempt**. `tests/unit/test_typing_gate.gd` pins all of it, including an anti-rot test that goes
+    red if a future Godot adds a warning **or if a warning name is typo'd** in `project.godot`
+    (a typo registers as a brand-new setting). Downgrading anything requires a decisions.md entry.
+  - **`inferred_declaration` and `untyped_declaration` are errors**, so `:=` and bare `var x = …`
+    are both rejected — always write `var x: T = …`. **`integer_division` is an error too, and
+    deliberately so** (§11.1 round-half-up): from M2 every intentional `int/int` division needs an
+    explicit `@warning_ignore("integer_division")` at the site.
+  - Trap that predates the gate and still bites: passing a `Variant` (e.g. `Array.pop_front()`,
+    or a `get_property_list()` element) into a statically-typed parameter is a **hard parse error**,
+    not a warning — the script fails to load, which in a test file is the silent-skip false green
+    below. Assign through a typed local first.
 - **EventBus contract (`scripts/core/event_bus.gd`, `scripts/core/event.gd`) — read
   decisions.md M0-T3 (a)–(f) before using it.** Public API: `subscribe`/`unsubscribe`/`emit`/
   `emit_all`/`clear`/`subscriber_count`/`is_dispatching`. Delivery is per-type registration order,
@@ -95,30 +104,43 @@ not-yet-committed.
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 with
-  Scripts 5 / Tests 51 / Passing 51 / Asserts 341, and `bash tools/verify_harness.sh` → exit 0
+  Scripts 6 / Tests 57 / Passing 57 / Asserts 418, and `bash tools/verify_harness.sh` → exit 0
   (it proves the red direction by planting a temporary failing canary, then self-cleans via
-  `trap`). Run both.
+  `trap`). Run both — plus `bash tools/typecheck.sh` and `bash tools/ci.sh` from M0-T4 onward.
 - `tools/run_tests.sh` is the harness **contract** — make it pass, do not rewrite or weaken it.
   It exits 2 while `project.godot` is missing (no longer reachable), 1 if GUT collects zero
   tests, and runs `--import` before GUT (GUT 9.7.1 exits 0 without that cache — decisions.md
   SETUP-2). The zero-collected guard is load-bearing: dropping `-ginclude_subdirs` collects
   **zero** scripts because no test sits directly in `res://tests` — verified by probe.
+- **Debt handoff for M7 / E4 / E5 — read when you build `sim_smoke.gd`, `content_cli.gd` or
+  `balance_lab.gd`:** `tools/ci.sh` currently skips each of the three by a plain **file-existence**
+  check. The moment one of those files lands, `ci.sh` stops skipping it and prints a NOTE that it
+  does not know how to invoke it — **wiring the real invocation (with the §13.1 argument list) is
+  part of the task that creates the file**, not a later cleanup.
 - Godot is repo-local: `godot/Godot_v4.7-stable_win64_console.exe` — the ONLY binary any agent
   may use (decisions.md SETUP-3). Never the `godot` PATH shim.
 - `project.godot` deliberately has **no** `run/main_scene` (no scene exists; a dangling path
-  breaks `--import`) and **no** gdscript warning settings — the §11.3 static-typing gate is
-  **M0-T4's** deliverable. Until it lands, typing is verified by diff review (§13.6).
+  breaks `--import`). Its `[debug]` section is the §11.3 gate (M0-T4, above) and is **hand-written
+  and `--import`-stable**: Godot re-saves it byte-identically, *including* lines whose value equals
+  its own default — which is what makes the "explicitly off" exclusion assertions possible. Do not
+  "tidy" those lines away.
 - Commit the `.gd.uid` sidecars Godot 4.4+ generates next to each `.gd`; never commit `.godot/`
   (gitignored). `.json` data files get no `.import` sidecar in Godot 4.7.
-- **Known risk (non-blocking, real, hit live in M0-T2):** a GDScript **parse error inside a test
-  file** makes GUT log `Ignoring script … because it does not extend GutTest` and still exit 0 —
-  the whole suite silently vanishes while the run reports "All tests passed!". `run_tests.sh`'s
-  zero-collected guard does not catch it (other scripts still run). Until M0-T5 lands, every
-  Verify stage must check the **Scripts/Tests counts**, not the exit code alone, and grep the
-  output for `Ignoring script` / `Failed to load`. Note also that
-  `loader is Node` cannot be written in GDScript against a `RefCounted` — it is a statically
-  impossible cast, rejected at parse time, and is exactly what triggered this in M0-T2; assert
-  non-Node-ness via `get_class()` instead.
+- **Known risk (non-blocking, real, hit live in M0-T2; scope CORRECTED by M0-T4 measurement):** a
+  GDScript **parse error inside a test file** silently un-collects that whole file while
+  `run_tests.sh` exits 0 and reports "All tests passed!" — `run_tests.sh`'s zero-collected guard
+  does not catch it (other scripts still run). There are **two variants**, and they differ:
+  1. **Statically-impossible construct** (M0-T2's live case, `loader is Node` against a
+     `RefCounted`) → GUT logs `Ignoring script … because it does not extend GutTest`. Greppable.
+  2. **Syntactic parse error** (M0-T4 probe, `var x: int = (`) → **no diagnostic whatsoever**: no
+     `Ignoring script`, no `Failed to load script`, no filename anywhere in the output, and the
+     Scripts/Tests/Asserts counts are **identical to the healthy tree**. Reproduced twice.
+  So until M0-T5 lands, checking counts alone is **not** sufficient either — run
+  `bash tools/typecheck.sh` (or `ci.sh`), which catches **both** variants (exit 1,
+  `Failed to load script … with error "Parse error"`). M0-T5 must add a count **floor** to
+  `run_tests.sh`, not merely the refusal grep the M0-T2 note assumed. Note also that
+  `loader is Node` cannot be written in GDScript against a `RefCounted`; assert non-Node-ness via
+  `get_class()` instead.
 - **Godot 4.7 JSON facts** (probed on the pinned repo-local binary, twice, independently — the
   docs disagree, see decisions.md M0-T2): `JSON.get_error_line()` is **0-based** (RulesLoader
   normalizes to 1-based); the parser **accepts trailing commas**, so they are useless as a

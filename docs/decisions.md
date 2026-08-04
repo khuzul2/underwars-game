@@ -147,3 +147,137 @@ messages cite these letters — **keep the lettering stable**.
   now built**; the two acceptance clauses were already MET and their printed text is unchanged.
   **No table value moved and no `docs/GAME_DESIGN.md` cell was edited** — nothing numeric exists in
   this task.
+
+## 2026-08-04 — M0-T4 — The §11.3 static-typing gate: mechanism, curated warning set, CI script
+
+§11.3 is **prose**, not a table: *"Static typing everywhere (`--warnings-as-errors` in CI where
+feasible)"*. It names neither a mechanism nor a warning set, and its own **"where feasible"**
+qualifier is what authorises the three exclusions below. Everything here is therefore a §13.4
+resolution, not a deviation, and every value was **measured** this iteration on the pinned
+repo-local `godot/Godot_v4.7-stable_win64_console.exe` (4.7.stable.official.5b4e0cb0f) —
+independently by Tests and again by Verify. The gate configuration is test-pinned in
+`tests/unit/test_typing_gate.gd`, so it cannot be silently downgraded.
+
+- **What changed / was decided:**
+  1. **(a) Godot 4.7 has NO `--warnings-as-errors` CLI flag** (re-confirmed via `--help`), so the
+     §11.3 gate is **project-setting driven**: `project.godot` gains a `[debug]` section setting
+     `gdscript/warnings/enable=true` plus one level per warning, and the gate is *surfaced*
+     headlessly by `godot --headless --path <root> --check-only --script res://<file>`, which exits
+     **1** and prints `SCRIPT ERROR: Parse Error: <text> (Warning treated as error.)` followed by
+     `   at: GDScript::reload (res://<file>:<line>)`. An `--import` pass must run first (same cache
+     reason as `run_tests.sh`, decisions.md SETUP-2). **The file path and line arrive on the `at:`
+     line, not the `SCRIPT ERROR:` line** — `typecheck.sh` therefore prints the engine's captured
+     block verbatim instead of reconstructing `file:line` itself.
+  2. **(b) Only levels 0 and 2 are meaningful for a headless gate: a level-1 warning prints
+     NOTHING under `--check-only`.** This is why the three exclusions below sit at **0**, not 1 —
+     "softening" them to 1 preserves no visibility whatsoever, it only makes the config lie. The
+     gate is **46 warnings at level 2**, **3 at level 0**, out of the engine's 49 warning levels
+     (52 keys under `debug/gdscript/warnings/` minus the 3 non-level keys `enable`,
+     `directory_rules`, `renamed_in_godot_4_hint`). `test_gate_covers_every_gdscript_warning_setting`
+     asserts that partition exactly, so a future Godot adding a warning turns the suite **red**
+     instead of the gate quietly losing coverage — and a **typo'd warning name registers as a brand
+     new setting**, pushing the count to 50 and failing the same test. That is intentional.
+  3. **(c) Three documented exclusions at level 0, each because it is incompatible with vendored
+     GUT or is not a typing warning** (§11.3 "where feasible"). They are written **explicitly** as
+     `=0` rather than omitted, and the test asserts their presence at 0 citing this entry, so a
+     future agent who wants them on must log the change rather than drift into it:
+     - `unsafe_call_argument` — GUT 9.7.1's assert API (`assert_eq(v1, v2, text)`) is untyped, so
+       every assert call site in `tests/` trips it. The callee is exempt (`addons/`), the **call
+       site is not**. Unfixable without casting every assert argument. Also trips
+       `scripts/sim/rules_loader.gd`.
+     - `unsafe_cast` — trips **only** `scripts/sim/rules_loader.gd`, at ~6 `as Dictionary` / `as
+       Array` sites (≈ lines 57, 135, 155, 310, 314, 339) that are each already guarded by an
+       immediately preceding `is` check; Godot flags the cast regardless of the guard. Excluded to
+       keep M0-T4 purely additive. **A later task may tighten this to 2** once `rules_loader`'s JSON
+       `Variant` decoding is refactored — that tightening carries its own decisions.md entry.
+     - `return_value_discarded` — trips `tests/unit/test_rules_loader.gd` (`insert()`) and
+       `tests/unit/test_event_bus.gd` (`PackedStringArray.append()`); not a typing warning at all.
+  4. **(d) `integer_division` is deliberately set to 2, and the friction is the point.** §11.1
+     mandates integer/percent math with round-half-up **at the final step only**, so from M2 onward
+     every intentional `int/int` division must carry an explicit `@warning_ignore("integer_division")`
+     at the site — a per-site acknowledgement exactly where a rounding bug would break determinism.
+     If a future stage finds this obstructive, downgrading requires a **logged decision**, never a
+     silent edit.
+  5. **(e) `directory_rules` semantics (measured) and why the default must be re-stated.** The
+     setting is a `Dictionary` mapping a `res://` directory prefix to an exemption; **value 0
+     exempts that tree entirely, and value 1 does NOT downgrade a level-2 warning** (measured — a
+     level-2 warning under a rule-1 directory still errors), so it is effectively binary. Writing
+     the setting **REPLACES** Godot's default, therefore the written value keeps
+     `{"res://addons": 0}` verbatim — otherwise vendored GUT would be gated, and `addons/` is
+     read-only (CLAUDE.md). **No project tree is exempt:** the test asserts `res://scripts`,
+     `res://tests` and `res://tools` are absent from `directory_rules`.
+  6. **(f) The 46-warning set is clean on the whole tree with ZERO source changes** —
+     `--check-only` over all 10 project `.gd` files (`scripts/core/event.gd`,
+     `scripts/core/event_bus.gd`, `scripts/sim/rules_error.gd`, `scripts/sim/rules_loader.gd` and
+     the six test files) exits 0 for each, and GUT still collects everything. M0-T4 is therefore
+     purely additive: **no existing `.gd` file was refactored to satisfy the gate**, and neither
+     `tools/run_tests.sh` nor `tools/verify_harness.sh` was touched (harness contract — make it
+     pass, never weaken it; `verify_harness.sh`'s planted canary is fully typed and only trips the
+     excluded `unsafe_call_argument`). A hand-written `[debug]` section **survives `--import`
+     byte-identically**, including lines whose value equals Godot's default, which is what makes the
+     "explicitly off" assertions satisfiable at all.
+  7. **(g) `tools/ci.sh` is the §14 M0 "CI script" deliverable and mechanizes CLAUDE.md's
+     applicability rule.** It runs `typecheck.sh` then `run_tests.sh` (aggregating at stage level —
+     a failing first stage does not prevent the second from running), and **skips non-fatally, with
+     a printed notice**, the §13.1 tools that later milestones deliver (`sim_smoke` → M7,
+     `content_cli` → E4, `balance_lab` → E5). It exits non-zero **iff** an applicable stage failed.
+  8. **(h) `typecheck.sh --self-test` proves the TOOL, not the engine (hardened at Verify).** As
+     first implemented, Phase B invoked the engine *directly* on the planted probe, so it proved the
+     engine mechanism both ways but never exercised `typecheck.sh`'s own enumeration, aggregation
+     and exit-code plumbing — a `run_gate` that swallowed a failure (the exact
+     `$?`-through-a-pipeline class this task's spec warns about, and the SETUP-2 false-green class)
+     would still have produced a PASSing self-test. Phase B now runs the tool's own `run_gate` over
+     the real file list, mirroring `verify_harness.sh`'s Phase B (which re-invokes `run_tests.sh`,
+     not `godot`). **Proved load-bearing by negative control:** a copy with `run_gate` forced to
+     `return 0` fails the self-test where the old Phase B passed. `typecheck.sh` also fails loudly
+     if enumeration finds **zero** `.gd` files — the same zero-collected guard class that makes
+     `run_tests.sh` trustworthy.
+  9. **(i) MEASURED CORRECTION TO THE QUEUED M0-T5 PLAN — it contradicts the recorded assumption
+     and supersedes it.** M0-T2 item 11 recorded that a parse error in a test file makes GUT log
+     `Ignoring script … because it does not extend GutTest` and exit 0, and queued M0-T5 to add that
+     string to the runner's refusal grep. Verify measured (reproduced twice) that a **syntactic**
+     parse error (probe: `extends GutTest` + `var x: int = (`) makes `bash tools/run_tests.sh` exit
+     **0** with Scripts 6 / Tests 57 / Passing 57 — *identical to the healthy tree* — and print **no
+     diagnostic whatsoever**: zero `Ignoring script` lines, zero `Failed to load script` lines, and
+     no mention of the filename anywhere in the 106-line output. The M0-T2 case (`loader is Node`,
+     a statically-impossible cast) **did** print `Ignoring script`. **So the planned grep closes only
+     one of two variants; M0-T5 must additionally assert an expected script/test-count floor.**
+  10. **(j) Bonus, NOT a substitute for M0-T5:** because `--check-only` exits 1 on any parse error,
+     `typecheck.sh` independently catches **both** variants above (the syntactic probe yields
+     `Failed to load script "res://tests/unit/_verify_parse_error.gd" with error "Parse error"`), so
+     `ci.sh` already gives incidental coverage today. M0-T5 stays queued as the **in-harness** fix,
+     because `run_tests.sh` is what every stage runs directly.
+  11. **Known simplification, recorded not fixed:** `ci.sh`'s applicability skip is a plain
+     **file-existence** check, so it does not distinguish "built but not yet due" (e.g. a WIP
+     `sim_smoke.gd` landing before M7) from "built and due" — in that case it prints a NOTE and
+     still skips rather than running or failing. Correct against CLAUDE.md today (a not-yet-due tool
+     is never a failure); **the milestone that builds each of those three tools must wire its real
+     invocation** (with the §13.1 argument list) as part of that task.
+  12. **§13.6 clauses that are vacuous here, stated explicitly:** this task adds **zero game rules**
+     and reads **zero** §12.1 constants, so *"constants read from data, not code"* and *"events
+     emitted for every state change"* have no subject matter in M0-T4. **Goldens: none
+     re-recorded — none exist yet** (the first golden lands with M1's mapgen hash). Scope held:
+     no `GameState`, no `Command`, no hex/map code, no concrete `Event` subclass, no new keys in
+     `data/ruleset.json`, no `addons/` change.
+  13. **Doc-only:** `README.md` gained a *"CI (GDD §14 M0 deliverable)"* section documenting
+     `ci.sh` / `typecheck.sh` / `--self-test` / `verify_harness.sh` and the project-setting
+     mechanism, pointing here. The `--self-test` probe extends `RefCounted` (it is a standalone
+     `--check-only` target, not a GUT test) and uses `var v = 1` read twice, so the tripped warning
+     is unambiguously `untyped_declaration` and not also `unused_variable`.
+- **Why:** §11.3 asks for a CI typing gate but the flag it names does not exist in this engine, so
+  the mechanism had to be established empirically once and recorded so no future stage re-derives it
+  from memory and gets it wrong (items a, b, e). A maximal warning set is not reachable without
+  refactoring already-landed code and fighting vendored GUT's untyped assert API, so the set is
+  **curated and each exclusion justified individually** rather than the gate being abandoned or
+  quietly set to a level that prints nothing (item c). Item d converts an §11.1 determinism
+  requirement into a compiler-enforced per-site acknowledgement. Items h–j exist because this
+  iteration found two false-green mechanisms — one in the new tool itself, one contradicting the
+  recorded M0-T5 plan — and a false green is the single failure mode that can silently invalidate
+  every later milestone.
+- **GDD section affected:** §11.3 (prose *implemented*, not amended — the "where feasible"
+  qualifier is exercised, not overridden); §13.1 (command list unchanged; `typecheck.sh`/`ci.sh` are
+  tooling **around** it, and `ci.sh` mechanizes the applicability rule); §13.6 (mechanical typing
+  gate now exists, so "verify by diff review" no longer applies); §14 M0 row — the **"CI script"
+  deliverable is now built**, completing that row's deliverable list; both acceptance clauses were
+  already MET and their printed text is unchanged. **No numeric table value moved, so NO
+  `docs/GAME_DESIGN.md` cell was edited in this commit.**
