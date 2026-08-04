@@ -1,3 +1,42 @@
-# underwars-game
+# Underwars
 
-Work in progress.
+Turn-based 4X / base-builder / tactical warfare in a carved subterranean underworld.
+The map is solid rock: every player digs their own fortress, economy, and battlefield out of
+the dark — then meets the neighbors, and the things that live below.
+
+**Engine:** Godot 4.7 (GDScript, 3D) · **Tests:** GUT 9.7.1 (vendored at `addons/gut/`)
+**Development model:** autonomous AI agent loop with a headless test loop.
+
+## Key documents
+
+| File | Purpose |
+| --- | --- |
+| [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | GDD v2.0 — single source of truth (rules, content, architecture, milestones) |
+| [docs/PROGRESS.md](docs/PROGRESS.md) | Agent-loop state: current milestone, task log, next task |
+| [docs/decisions.md](docs/decisions.md) | Binding log of deviations & ambiguity resolutions |
+| [CLAUDE.md](CLAUDE.md) | Operating manual for the coding agents |
+| `.claude/workflows/underwars-iteration.js` | One loop iteration: Orient → Tests → Implement → Verify → Land |
+
+## The agent loop
+
+Each iteration runs one task (≤ ~300 LOC) of the current milestone (M0…M8 → E1…E5 → C1…C6):
+**Opus 5** orients (picks & specs the task), writes the tests first, verifies/fixes to green, and
+lands the commit; **Sonnet 5** does the implementation heavy lifting. State persists in
+`docs/PROGRESS.md`, so iterations resume cleanly across sessions.
+
+Start it from Claude Code by asking to run the `underwars-iteration` workflow (optionally in a
+repeating loop). One-off iterations can be steered with `args: { "taskHint": "..." }`.
+
+## Test commands (once M0 lands)
+
+```bash
+bash tools/run_tests.sh
+```
+
+```bash
+godot --headless -s tools/sim_smoke.gd -- seed=42 turns=60 map=small factions=dwarves,goblins
+```
+
+```bash
+godot --headless -s tools/content_cli.gd -- validate data/
+```

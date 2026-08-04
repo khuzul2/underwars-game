@@ -1,3 +1,11 @@
+# Godot 4
+.godot/
+*.tmp
+export_presets.cfg
+
+# Generated artifacts (balance lab, test output)
+reports/
+
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 

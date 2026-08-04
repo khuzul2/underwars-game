@@ -1,0 +1,21 @@
+# Normalize to LF in repo and working tree (Godot/GDScript convention; keeps hashes stable)
+* text=auto eol=lf
+
+# Windows scripts stay CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.webp binary
+*.ogg binary
+*.wav binary
+*.mp3 binary
+*.ttf binary
+*.otf binary
+*.glb binary
+*.blend binary
+*.exr binary
+*.hdr binary
