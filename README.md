@@ -27,16 +27,27 @@ lands the commit; **Sonnet 5** does the implementation heavy lifting. State pers
 Start it from Claude Code by asking to run the `underwars-iteration` workflow (optionally in a
 repeating loop). One-off iterations can be steered with `args: { "taskHint": "..." }`.
 
-## Test commands (once M0 lands)
+## Test commands (GDD §13.1 — availability by milestone)
+
+Delivered by **M0** (the harness script already exists as the contract; M0 makes it pass):
 
 ```bash
 bash tools/run_tests.sh
 ```
 
+Delivered by **M7** (needs M6 factions + M7 AI; the tool may exist earlier but this run is M7's
+acceptance bar):
+
 ```bash
 godot --headless -s tools/sim_smoke.gd -- seed=42 turns=60 map=small factions=dwarves,goblins
 ```
 
+Delivered by **E4** and **E5** (Phase 2):
+
 ```bash
 godot --headless -s tools/content_cli.gd -- validate data/
+```
+
+```bash
+godot --headless -s tools/balance_lab.gd -- matches=100 out=reports/balance.csv
 ```

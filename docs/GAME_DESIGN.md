@@ -1046,7 +1046,7 @@ Content composes behavior **only** from these keys. Adding a new key = code + te
 
 ### 13.1 Commands the agent runs
 
-bash tools/run\_tests.sh                \# GUT: godot --headless -s addons/gut/gut\_cmdln.gd -gdir=res://tests -gexit
+bash tools/run\_tests.sh                \# GUT: godot --headless --import, then godot --headless -s addons/gut/gut\_cmdln.gd -gdir=res://tests -ginclude\_subdirs -gexit; fails if zero tests collected (amended — see docs/decisions.md 2026-08-04 SETUP-2)
 
   
 
@@ -1093,7 +1093,7 @@ From milestone M6 onward, adding a unit/building/tech to data/ must require zero
 |  |  |  |  |
 | :-: | :-: | :-: | :-: |
 | \*\*ID\*\* | \*\*Milestone\*\* | \*\*Deliverables\*\* | \*\*Acceptance criteria (must pass headless)\*\* |
-| \*\*M0\*\* | Bootstrap | Godot project, GUT wired, run\\\_tests.sh, EventBus, RulesLoader + ruleset.json, CI script, decisions.md | Empty suite runs green headless; invalid ruleset rejected with a line-numbered error |
+| \*\*M0\*\* | Bootstrap | Godot project, GUT wired, run\\\_tests.sh, EventBus, RulesLoader + ruleset.json, CI script, decisions.md | Sentinel suite runs green headless AND a deliberately failing sentinel makes run\\\_tests.sh exit non-zero (amended — see docs/decisions.md 2026-08-04 SETUP-2); invalid ruleset rejected with a line-numbered error |
 | \*\*M1\*\* | World | HexMath (axial/cube, LOS, lines, rings), concentric-bowl generator, chunked MultiMesh renderer, camera rig, hex picking | Golden mapgen test (seed ⇒ terrain hash); 60 fps on Medium map greybox; LOS property tests |
 | \*\*M2\*\* | Dig & Economy | Workers, Dig/Cancel commands, yields, vein nodes + Extractors, stockpiles/income/upkeep, housing, Mining Zones v0 | Scripted 20-turn dig scenario matches expected stockpiles exactly; deficit-bleed test; zone assigns nearest idle worker |
 | \*\*M3\*\* | Build, Light, Structure | Build/Train commands & queues, placement validators (farm rule), Brazier/light BFS, Pillars, stress & collapse | Light overlay matches BFS oracle; collapse scenario golden; farm placement rejected/accepted correctly |

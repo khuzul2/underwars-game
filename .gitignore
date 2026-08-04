@@ -3,8 +3,10 @@
 *.tmp
 export_presets.cfg
 
-# Generated artifacts (balance lab, test output)
-reports/
+# Generated artifacts (balance lab, test output) — keep the dir, ignore contents;
+# milestone-evidence reports may be force-added deliberately (git add -f)
+reports/*
+!reports/.gitkeep
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
