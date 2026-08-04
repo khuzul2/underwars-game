@@ -62,3 +62,88 @@ Format:
   11. **Harness hole found (not fixed here; `run_tests.sh` is off-limits outside a dedicated task).** A GDScript **parse error in a test file** makes GUT log `Ignoring script … because it does not extend GutTest` and exit **0** — the same class of false green SETUP-2 hardened against, and it fired live this iteration (a `loader is Node` cast, which GDScript rejects at parse time as statically impossible, silently un-collected the entire 26-test file while the run printed "All tests passed!"). It did **not** affect the landed result (counts verified: Scripts 4 / Tests 32). Queued as **M0-T5**: add `Ignoring script` / `Failed to load script` to the runner's refusal grep — a *strengthening* of the harness contract, which is permitted.
 - **Why:** Items 2–4 and 7 resolve genuine ambiguities the GDD does not legislate (it requires a "line-numbered error" but not how a line is attributed to a schema violation, nor what "no line" means), picking the simplest deterministic interpretation per §13.4 rather than stalling. Item 6 is forced by the §12.1 data shape — the spec listed only `get_int`/`get_float`/`has`, which cannot express a String field or a fixed-length int array. Item 8 records measurements that contradict the obvious reading of the docs, so no future stage re-derives them from memory and gets them wrong. Items 1, 9, 10 and 11 are recorded so that scope re-sequencing, an untouched-goldens claim, a cross-table gap and a live false-green mode are all traceable instead of tribal knowledge.
 - **GDD section affected:** §12.1 (all values transcribed verbatim — **no table value moved, no cell edited**); §11.1/§11.2/§11.3 (conventions followed, not amended); §13.4 (ambiguity-resolution procedure exercised); §14 M0 row — the "invalid ruleset rejected with a line-numbered error" acceptance clause is now **MET** headless, with no change to the printed criterion text. **No `docs/GAME_DESIGN.md` edit accompanies this entry because no numeric value changed.**
+
+## 2026-08-04 — M0-T3 — EventBus dispatch contract (six §13.4 ambiguity resolutions)
+
+§11.1 specifies *that* there is an EventBus ("typed events emitted by `apply()` … Renderer/UI
+subscribe; the sim never calls them") but legislates **no** delivery semantics. The six
+resolutions below are therefore §13.4 decisions, not deviations: each picks the simplest
+deterministic reading and each is test-pinned in `tests/unit/test_event_bus.gd`, whose assertion
+messages cite these letters — **keep the lettering stable**.
+
+- **What changed / was decided:**
+  1. **(a) Delivery order = per-type registration order, oldest subscriber first.** The per-type
+     subscriber list is an ordered `Array[Callable]`; `_subscribers` (the `StringName → Array`
+     `Dictionary`) is **only ever touched by key lookup** — never iterated, never `.keys()` /
+     `.values()` — so `Dictionary` key order can never leak into behaviour (§11.1 "iterate
+     collections in stable ID order"). `emit_all()` delivers in array order, matching
+     `apply(state) -> Array[Event]`.
+  2. **(b) Nested emits are QUEUED FIFO, never depth-first.** An `emit()` issued from inside a
+     handler appends to a single shared queue and returns; the outer drain delivers it after the
+     current event is fully dispatched. Two handlers of `X` that each emit a `Y` therefore produce
+     `A1, A2, Y1, Y2` — never `A1, Y1, A2, Y2`. `is_dispatching()` is `false` before `emit()`,
+     `true` inside a handler, and `false` again when the outer `emit()` returns (the whole queue
+     drains before it returns). **Sub-point (b), added at Verify:** `emit_all()` queues the
+     **entire** incoming `Array[Event]` before draining, so the batch is atomic — an event nested
+     by a handler mid-batch lands *after* the whole batch, never interleaved between its elements.
+     The Implement stage flagged this as an unpinned judgement call; Verify confirmed it
+     (a Command's returned event array is one coherent result, and one shared FIFO queue is the
+     simplest deterministic reading) and test-pinned it
+     (`test_emit_all_batch_is_atomic_against_nested_emits`).
+  3. **(c) The subscriber list is snapshotted per event, with a liveness re-check, so nothing done
+     inside a handler can affect the in-flight event.** `_dispatch` prunes invalid entries, takes a
+     `duplicate()` snapshot, then re-checks each entry is still present in the **live** table
+     immediately before calling it. A `subscribe()` made during dispatch misses the in-flight event
+     and receives the next emit of that type; an `unsubscribe()` made during dispatch cancels
+     delivery to handlers that have not run yet. **WIDENED at Verify:** `clear()` is a
+     mass-unsubscribe and therefore behaves identically — handlers of the in-flight event that have
+     not run yet are skipped. As implemented, the re-check consulted a stale local reference to the
+     per-type array, so `clear()` mid-dispatch was ignored while `unsubscribe()` was honoured;
+     delivery must not depend on which teardown call an observer happens to use. Fixed by
+     re-reading `_subscribers` before each call; pinned by
+     `test_clear_during_dispatch_cancels_the_rest_of_the_event`.
+  4. **(d) `subscribe` is idempotent per `(type, Callable)` pair; the boring cases are silent
+     no-ops.** A double `subscribe` leaves `subscriber_count == 1` and yields exactly one
+     invocation per emit, and a single `unsubscribe` removes it. Unsubscribing a never-subscribed
+     Callable, unsubscribing on an unknown type, emitting with zero subscribers, `emit(null)` and
+     `emit_all([])` all complete without error and create no phantom entries.
+  5. **(e) Callables whose target has been freed are skipped AND pruned at dispatch.**
+     **WIDENED at Verify:** validity is re-checked immediately before **each** handler call, not
+     only in the pre-snapshot prune, so a target freed by an *earlier handler of the same event* is
+     skipped too (and pruned on the next dispatch of that type). As implemented this case called
+     into a freed instance and raised a live engine error ("Attempt to call function
+     `null::on_event (Callable)` on a null instance"). Pinned by
+     `test_target_freed_during_dispatch_is_skipped`.
+  6. **(f) No concrete event classes and no event-name whitelist exist at M0.** §11.1's list
+     (`hex_changed, unit_moved, …`) ends in "…" and is therefore illustrative, not a vocabulary:
+     engine code contains no enum, constant or string literal naming any of them, and the bus
+     routes an entirely unknown type correctly. Concrete `Event` subclasses belong to the
+     milestones that emit them (§13.4: invent nothing ahead of its milestone), which keeps the
+     §13.5 zero-engine-code-change rule reachable from M6. Both properties are guarded by source
+     scans in the test file (also rejecting `extends Node`, `SceneTree`, `get_tree`, `Engine.`,
+     `randi(`, `randf(`, `Time.`, `OS.` in non-comment text), so a future regression fails the
+     suite rather than rotting.
+  7. **Typing defect caught at Verify (§11.3, would have detonated M0-T4).**
+     `_dispatch(_queue.pop_front())` passes a `Variant` into a statically-typed `Event` parameter.
+     That is not a warning but a hard *Parse Error* under a warnings-as-errors gate — the script
+     **fails to load**, which in a test file is exactly the PROGRESS "Known risk" silent-skip false
+     green. Fixed with a typed local. Both sim-core files are now clean under a **maximal** warning
+     configuration (every GDScript warning at level 2).
+  8. **Goldens:** none re-recorded — none exist yet (the first golden lands with M1's mapgen hash).
+  9. **Scope, deliberately not exceeded:** no `GameState`, no `Command`, no hex/map code, no
+     concrete event class, and nothing added to or read from `data/ruleset.json` — the EventBus
+     carries **zero** §12.1 constants, so "constants read from data, not code" (§13.6) is vacuous
+     here and the only numeric literals in either core file are `-1` / `0` index arithmetic.
+- **Why:** §11.1 fixes the *direction* of the observer contract but not its ordering, re-entrancy,
+  mutation-during-dispatch or lifetime semantics — and every one of those is observable and would
+  otherwise be settled accidentally by whichever milestone first emits two events. Pinning them now
+  makes "same seed + same commands ⇒ identical delivery order" a property of the bus rather than of
+  the caller. The (b) sub-point and the (c)/(e) widenings are recorded because they resolve cases
+  the original spec text left open, in one instance inconsistently (two teardown calls disagreeing
+  about the same event) and in another incorrectly (calling into a freed instance).
+- **GDD section affected:** §11.1 (semantics *specified*, none amended); §11.2 (`scripts/core/`
+  layout — the EventBus is core infrastructure); §11.3 (conventions followed); §13.4 (procedure
+  exercised); §13.5 (open vocabulary guarded from M0); §14 M0 row — the **EventBus deliverable is
+  now built**; the two acceptance clauses were already MET and their printed text is unchanged.
+  **No table value moved and no `docs/GAME_DESIGN.md` cell was edited** — nothing numeric exists in
+  this task.
