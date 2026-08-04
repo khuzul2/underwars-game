@@ -35,12 +35,35 @@
 ##       - Totality (the (AS)/(B)/(L) spirit): `player(i)` answers null outside 0..n-1, a
 ##         non-positive player count is the empty roster, and a null map constructs cleanly.
 ##
-## DELIBERATELY NOT IN M2-T1 (§13.4 — invent nothing ahead of its milestone): the Command base
-## class, CommandError, EndTurnCommand, any concrete Event subclass, turn/current_player
-## counters, workers, dig progress, yields, vein nodes, Extractors, income/upkeep, housing,
-## Mining Zones and §3.1's starting kit. The Command spine is M2-T2. §13.6's "events emitted for
-## every state change" therefore has NO subject matter here: this slice is the state container,
-## and the EventBus is wired to the first Command, not to a constructor.
+## AMENDED BY M2-T2, resolution **(AV)** ((AU) is cross-referenced by four files — do NOT
+## renumber it). §3.3's turn position now lives here, and the fold grew to cover it:
+##   (AV) THE TURN POSITION.
+##       - Private `_turn` / `_current_player_index`, public `turn()` / `current_player_index()`
+##         and ONE mutator `set_turn_position(p_turn, p_player_index)`, documented as "§11.1 —
+##         intended to be written only from a Command's apply()" (GDScript has no
+##         package-private; `HexMap.set_elevation` is the precedent).
+##       - A fresh state starts at **turn 1, index 0**, independently of the roster size — an
+##         empty roster still reads turn 1 / index 0. §3.2 line 133's "If turn 200 is reached"
+##         counts from 1; §14/§13.2's "after N turns" is silent.
+##       - The mutator is TOTAL in the (B)/(L)/(AS) spirit: a SILENT NO-OP if `p_turn < 1` or
+##         `p_player_index` is outside `0..player_count()-1`, and **both counters are written
+##         together or neither is**, so a buggy caller can never park the state in an
+##         unreachable position.
+##       - THE ROTATION ITSELF IS NOT HERE: it is a §3.3 RULE and lives in `EndTurnCommand`.
+##         `GameState` only stores the position.
+##       - THE FOLD ORDER GAINS THE TURN POSITION, immediately after `rng.rolls_drawn()` and
+##         BEFORE the map-presence flag: private seed -> `rng.rolls_drawn()` -> turn ->
+##         current_player_index -> map-presence flag (0/1) -> `map.content_hash()` when present
+##         -> `player_count()` -> per index ascending, the index then that player's hash. No
+##         existing step is renamed or reordered, and NO GOLDEN IS RECORDED for GameState in
+##         this slice (§13.6 — recording it before units/dig/income exist would guarantee a
+##         re-record every subsequent slice; the golden is owed, not forgotten, and the replay
+##         contract lands as a property test in `tests/sim/test_turn_replay.gd`).
+##
+## STILL DELIBERATELY NOT BUILT (§13.4 — invent nothing ahead of its milestone): §3.4's nine
+## per-player start-of-turn steps and three World-phase steps, §3.2/§12.1's victory turn limit
+## and victory checks (M6), workers, dig progress, yields, vein nodes, Extractors, income/upkeep,
+## housing, Mining Zones and §3.1's starting kit (which needs its own §12.1 key and amendment).
 ##
 ## TRAP (M0-T2 item 11 / M0-T5 item (a)): `x is Node` against a RefCounted-typed variable is a
 ## statically impossible cast rejected at PARSE time, which silently un-collects the whole file.
@@ -105,11 +128,30 @@ const RESOURCE_IDS: Array[String] = [
 ## §4.1's radii and hex counts are tunable content in data/mapgen/*.json — never in sim code.
 const MAP_SIZE_TOKENS: Array[String] = ["24", "32", "40", "1801", "3169", "4921"]
 
-## The COMPLETE public surface of GameState at M2-T1 scope: two fields and three functions.
-## `turn`, `current_player`, `units`, `buildings`, `nodes`, `apply`, `serialize` and friends all
-## belong to later slices and would be invented API here (§13.4).
-const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = ["player_count", "player", "content_hash"]
+## The COMPLETE public surface of GameState at M2-T2 scope: two fields and SIX functions (EIGHT
+## members — grown from five by (AV), in the same commit that adds the turn position, per the
+## standing PROGRESS rule). `units`, `buildings`, `nodes`, `serialize` and friends all belong to
+## later slices and would be invented API here (§13.4).
+const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
+	"player_count",
+	"player",
+	"turn",
+	"current_player_index",
+	"set_turn_position",
+	"content_hash",
+]
 const REQUIRED_PUBLIC_VARS: Array[String] = ["map", "rng"]
+
+## §11.1 line 707 (AU)(vi) as amended by (AV) — the DOCUMENTED fold order, as substrings that
+## must appear in `content_hash()`'s body in exactly this sequence. A future golden will record
+## this order; until then this scan is what stops it drifting silently.
+const FOLD_ORDER_TOKENS: Array[String] = [
+	"_seed_value",
+	"rolls_drawn",
+	"turn",
+	"current_player_index",
+	"map",
+]
 
 ## Doc-comment sections accepted by the S6 scan for this file (§11.3).
 const DOC_SECTIONS: Array[String] = ["§11.1", "§3.3"]
@@ -383,6 +425,135 @@ func test_a_missing_map_never_collides_with_a_present_one() -> void:
 
 
 # =============================================================================================
+# C2. THE TURN POSITION ((AV); §3.3 line 137 "fixed order by player index")
+#     The ROTATION is a rule and lives in EndTurnCommand — GameState only STORES the position.
+# =============================================================================================
+
+## (AV) — a fresh state starts at turn 1, index 0, at EVERY roster size including the empty one.
+## §3.2 line 133 prints "If turn 200 is reached", which counts from 1.
+func test_a_fresh_state_starts_at_turn_one_player_zero() -> void:
+	for count: int in [0, -1, MIN_PLAYERS, 3, MAX_PLAYERS]:
+		var state: GameState = GameState.new(GOLDEN_SEED, null, count)
+		assert_eq(state.turn(), 1, "(AV): a fresh state is on turn 1 (roster %d)" % count)
+		assert_eq(
+			state.current_player_index(),
+			0,
+			"(AV): a fresh state is on player 0 (roster %d)" % count
+		)
+
+
+## (AV) — the one mutator writes BOTH counters, and they read back exactly.
+func test_set_turn_position_writes_both_counters() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MAX_PLAYERS)
+	state.set_turn_position(7, 3)
+	assert_eq(state.turn(), 7, "(AV): the turn is written")
+	assert_eq(state.current_player_index(), 3, "(AV): the current player index is written")
+	state.set_turn_position(1, 0)
+	assert_eq(state.turn(), 1, "(AV): turn 1 is a legal position to return to")
+	assert_eq(state.current_player_index(), 0, "(AV): index 0 is a legal position to return to")
+
+
+## (AV) totality — a turn below 1 is a SILENT NO-OP, and BOTH counters stay put: "both are
+## written together or neither is" is what stops a buggy caller parking the state in an
+## unreachable position.
+func test_set_turn_position_refuses_a_turn_below_one_atomically() -> void:
+	for bad_turn: int in [0, -1, -200]:
+		var state: GameState = GameState.new(GOLDEN_SEED, null, 3)
+		state.set_turn_position(5, 2)
+		var before: int = state.content_hash()
+		state.set_turn_position(bad_turn, 1)
+		assert_eq(state.turn(), 5, "(AV): turn %d is refused — the turn stays put" % bad_turn)
+		assert_eq(
+			state.current_player_index(),
+			2,
+			"(AV): turn %d is refused ATOMICALLY — the index stays put too" % bad_turn
+		)
+		assert_eq(state.content_hash(), before, "(AV): a refused write changes nothing at all")
+
+
+## (AV) totality — a player index outside 0..player_count()-1 is a SILENT NO-OP, atomically.
+func test_set_turn_position_refuses_an_out_of_range_index_atomically() -> void:
+	for bad_index: int in [-1, -99, 3, 4, 9999]:
+		var state: GameState = GameState.new(GOLDEN_SEED, null, 3)
+		state.set_turn_position(5, 2)
+		var before: int = state.content_hash()
+		state.set_turn_position(9, bad_index)
+		assert_eq(
+			state.turn(),
+			5,
+			"(AV): index %d is outside the roster — the turn stays put" % bad_index
+		)
+		assert_eq(
+			state.current_player_index(),
+			2,
+			"(AV): index %d is outside the roster — the index stays put" % bad_index
+		)
+		assert_eq(state.content_hash(), before, "(AV): a refused write changes nothing at all")
+
+
+## (AV) totality — on the EMPTY roster NO index is in range, so every write is refused and the
+## degenerate state stays readable at turn 1 / index 0 rather than becoming unreachable.
+func test_set_turn_position_is_a_no_op_on_the_empty_roster() -> void:
+	var state: GameState = GameState.new(GOLDEN_SEED, null, 0)
+	var before: int = state.content_hash()
+	for index: int in [0, 1, -1]:
+		state.set_turn_position(4, index)
+	assert_eq(state.turn(), 1, "(AV): the empty roster stays on turn 1")
+	assert_eq(state.current_player_index(), 0, "(AV): the empty roster stays on index 0")
+	assert_eq(state.content_hash(), before, "(AV): a refused write changes nothing at all")
+
+
+## (AV)/§11.1 — THE TURN IS PART OF THE REPLAYABLE STATE: two states identical except for the
+## turn number must not collide.
+func test_content_hash_folds_the_turn() -> void:
+	var early: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, 3)
+	var late: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, 3)
+	early.set_turn_position(1, 1)
+	late.set_turn_position(2, 1)
+	assert_eq(early.current_player_index(), late.current_player_index(), "sanity: same index")
+	assert_ne(
+		early.content_hash(),
+		late.content_hash(),
+		"(AV)/§11.1: the turn number is part of the replayable state"
+	)
+
+
+## (AV)/§3.3 — THE CURRENT PLAYER IS PART OF THE REPLAYABLE STATE: two states identical except
+## for whose turn it is must not collide (§3.3 "fixed order by player index").
+func test_content_hash_folds_the_current_player_index() -> void:
+	var first: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, 3)
+	var second: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, 3)
+	first.set_turn_position(2, 0)
+	second.set_turn_position(2, 1)
+	assert_eq(first.turn(), second.turn(), "sanity: same turn")
+	assert_ne(
+		first.content_hash(),
+		second.content_hash(),
+		"(AV)/§3.3: whose turn it is is part of the replayable state"
+	)
+
+
+## (AV) — the turn position is INDEPENDENT of the stockpiles: moving the position on two states
+## whose players differ still yields two different hashes, and the same position on two identical
+## states still yields the same hash (so the fold is a function of both, not of either alone).
+func test_the_turn_position_and_the_players_are_folded_independently() -> void:
+	var left: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, 3)
+	var right: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, 3)
+	left.set_turn_position(3, 2)
+	right.set_turn_position(3, 2)
+	assert_eq(
+		left.content_hash(), right.content_hash(), "(AV): equal states at equal positions collide"
+	)
+	if not _deposit(right, 1, SAMPLE_RESOURCE_ID, 4):
+		return
+	assert_ne(
+		left.content_hash(),
+		right.content_hash(),
+		"(AV): the position does not mask a stockpile difference"
+	)
+
+
+# =============================================================================================
 # D. MECHANICAL SOURCE SCANS ON scripts/sim/game_state.gd (§11.1, §11.2, §11.3, §13.6)
 #    Written FRESH for this file — a new file inherits NOTHING from the other scan suites.
 # =============================================================================================
@@ -502,7 +673,7 @@ func test_source_declares_no_loader_and_shadows_no_global() -> void:
 ## instead of passing vacuously and an EXTRA member (turn counters, units, buildings, a
 ## serializer, a second RNG accessor) fails too. The seed value stays PRIVATE: it is folded into
 ## content_hash, not handed out.
-func test_public_api_is_exactly_the_five_documented_members() -> void:
+func test_public_api_is_exactly_the_eight_documented_members() -> void:
 	var public_functions: Array[String] = []
 	var undocumented: Array[String] = []
 	_collect_public_functions(GAME_STATE_PATH, public_functions, undocumented)
@@ -550,6 +721,63 @@ func test_game_state_is_a_pure_refcounted_in_scripts_sim() -> void:
 		GameState.new(GOLDEN_SEED, null, MIN_PLAYERS).get_class(),
 		"RefCounted",
 		"§11.1: GameState must be a pure RefCounted"
+	)
+
+
+## S8 (AU)(vi) as amended by (AV) — THE FOLD ORDER IS DOCUMENTED AND SCANNED. §11.1 line 707 says
+## the hash must be reproducible but prints no composition, so the order is a logged decision; a
+## future golden will record it, and until that golden exists this scan is the only thing that
+## stops the order drifting silently. The turn position folds AFTER the RNG stream position and
+## BEFORE the map-presence flag, and no existing step is renamed or reordered.
+func test_source_folds_the_turn_position_in_the_documented_order() -> void:
+	var code: String = _code_text(GAME_STATE_PATH)
+	assert_false(code.is_empty(), "sanity: %s must be readable and non-empty" % GAME_STATE_PATH)
+	var at: int = code.find("func content_hash(")
+	assert_ne(at, -1, "sanity: %s declares content_hash()" % GAME_STATE_PATH)
+	if at == -1:
+		return
+	var body: String = code.substr(at)
+	var previous: int = -1
+	for token: String in FOLD_ORDER_TOKENS:
+		var found: int = body.find(token)
+		assert_ne(
+			found,
+			-1,
+			"(AV): content_hash() must fold \"%s\" — the documented order is %s" % [
+				token, str(FOLD_ORDER_TOKENS)
+			]
+		)
+		if found == -1:
+			return
+		assert_gt(
+			found,
+			previous,
+			"(AV): the fold order is %s — \"%s\" is out of place" % [
+				str(FOLD_ORDER_TOKENS), token
+			]
+		)
+		previous = found
+
+
+## S9 (AV)/§13.6 — the fold order is DOCUMENTED IN THE FILE'S HEADER (that is where a later
+## golden's author will read it), and the header must be updated in the same commit that changes
+## the fold. Checked on the RAW text, because a doc block is exactly what this asserts about.
+func test_the_header_documents_the_turn_position_in_the_fold() -> void:
+	var raw: String = _raw_text(GAME_STATE_PATH)
+	var class_at: int = raw.find("class_name GameState")
+	assert_ne(class_at, -1, "sanity: %s declares class_name GameState" % GAME_STATE_PATH)
+	if class_at == -1:
+		return
+	var header: String = raw.substr(0, class_at)
+	assert_true(
+		header.contains("turn"),
+		"(AV): %s's header must document the turn in the content_hash fold order" % GAME_STATE_PATH
+	)
+	assert_true(
+		header.contains("current_player_index"),
+		"(AV): %s's header must document the current player index in the fold order" % [
+			GAME_STATE_PATH
+		]
 	)
 
 

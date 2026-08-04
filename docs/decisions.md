@@ -2779,3 +2779,307 @@ new test files. **Keep it stable; M2-T2 continues at (AV).**
   NOT met. Acceptance criterion text unchanged**; none of *"Scripted 20-turn dig scenario matches
   expected stockpiles exactly"*, *"deficit-bleed test"* or *"zone assigns nearest idle worker"* is
   satisfied yet, and only the *stockpiles* half of one deliverable is built.
+
+## 2026-08-04 — M2-T2 — THE COMMAND SPINE: `Command` + `CommandError` + `EndTurnCommand` + the project's FIRST concrete `Event`, and §11.1's replay-hash proof; resolution (AV); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 26 / Tests 598 /
+Passing 598 / Failing 0 / Asserts 6435** (the M2-T1 baseline was 21 / 503 / 503 / 0 / 5646 — all
+four totals rose and **no previously-landed test regressed**); `bash tools/typecheck.sh` exits 0
+over **47** files (was 38); `bash tools/ci.sh` PASSes; `bash tools/verify_harness.sh` PASSes across
+all four phases (A green · B failing canary · C syntactic parse error · D statically-impossible
+construct) with the tree left clean. All ran headless through the `tools/` scripts on the
+repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3) and
+never through WSL bash ((AU) item 10). `sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5)
+were correctly **SKIPped, not failed**, per CLAUDE.md's applicability rule. `Scripts 26` equals the
+26 `test_*.gd` on disk, so the M0-T5 enumeration guard is satisfied and nothing was silently
+un-collected. **No golden was re-recorded and none was created** (`goldens_rerecorded: false`) —
+see item 7, which records that §13.2 tier 3's golden is **owed, not forgotten**;
+`tests/golden/mapgen_concentric_bowl_small_seed1337.json` (`content_hash 0xcad24923`) is
+**byte-untouched and still green**, as are `docs/GAME_DESIGN.md`, `data/`, `scenes/`,
+`project.godot`, `tools/` and `addons/` (an empty `git diff` over those paths, verified at Verify).
+
+**THIS TASK BUILDS §11.1's SPINE — the thing M2-T1 deliberately deferred.** M2-T1 landed the state
+container; this slice lands the four types that make *"every mutation of `GameState` goes through a
+Command"* and *"a match is fully described by `(seed, command_log)`"* real: `CommandError`, the
+`Command` base, `EndTurnCommand` (the first real Command) and `TurnEndedEvent` (the **first
+concrete `Event` subclass** the project has ever had — `EventBus` has existed since M0-T3 with
+nothing to carry). **M2 is still NOT done**: none of its three §14 acceptance criteria (*"Scripted
+20-turn dig scenario matches expected stockpiles exactly; deficit-bleed test; zone assigns nearest
+idle worker"*) is met, and of §14's M2 deliverable list only **stockpiles** (M2-T1) and now the
+**turn position + the command spine those deliverables will hang on** exist.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §11.1
+(line 705's fourteen printed command names and the `validate`/`apply` signatures, line 706's
+EventBus clause *"typed events emitted by apply() … Renderer/UI subscribe; the sim never calls
+them"*, line 707's *"`GameState.hash()` (FNV over canonical serialization)"*, line 708's
+*"replaying `(seed, command_log)` must reproduce the hash"*), §3.3 (line 137: *"Sequential player
+turns (IGOUGO, Civ-style), fixed order by player index, then a World phase"*), §3.4 (lines 141–165:
+the nine per-player steps and the three World-phase steps), §3.2 (line 133's *"If turn 200 is
+reached"*), §3.1 (line 118's *"2–4 players"*), §11.2, §11.3, §12.1, §13.2, §13.4, §13.6 and §14's
+M2 row. `docs/decisions.md` was re-scanned **end to end** at Tests and again at Verify: the **only**
+logged §12.1 override is **(AU)(i)** (`dig_yields.artificial_granite.stone = 2`), which touches
+nothing here, and **no logged override touches §3.1, §3.2, §3.3, §3.4, §11.1 or §13.2** — so the
+printed text governed unamended and **no constant needed correcting in either direction**. The
+binding prior resolutions are **(AU)** (the `GameState` fold order, the no-whitelist rule,
+totality), **(R)** (`Rng` is the single home of `RandomNumberGenerator`), **(T)/(AH)/(f)** (no
+vocabulary whitelist in engine code), **(B)/(L)/(AS)** (totality) and **(AT)/(f)** (§11.2's printed
+file list is illustrative). The lettering genuinely ended at **(AU)**, so this entry is **(AV)** —
+and **(AU) is NOT renumbered**: it is cross-referenced by `scripts/core/fnv.gd`,
+`scripts/sim/player_state.gd`, `scripts/sim/game_state.gd` and three test files. **M2-T3 continues
+at (AW).**
+
+- **What changed / was decided:**
+  1. **(AV)(i) — A NEW `CommandError`, DELIBERATELY NOT `RulesError`.** `docs/PROGRESS.md` asked
+     for a **logged reason** before forking a second error vocabulary; here it is. `RulesError`'s
+     fields are `line` (1-based over a **document**, with **0 RESERVED** exclusively for file-level
+     failures — M0-T2 item 2) and `path` (a **dotted JSON key path**). A command rejection has
+     **neither a document nor a line**, so reusing `RulesError` would either abuse the reserved 0
+     forever or carry a permanently dead field, and either choice would corrupt the meaning of a
+     type that four loaders already depend on. `CommandError` therefore keeps `RulesError`'s
+     **SHAPE** — a plain `RefCounted` of public data fields plus a `format_for(source: String) ->
+     String` renderer — with command-appropriate **contents**: `code: StringName` + `message:
+     String`, rendered as `"<source>: <code>: <message>"`. `source` is the caller's own label (a
+     command name, a test name), **never a file path**. A source scan asserts `RulesError` is
+     **ABSENT** from all four new files (the M1-T9 rule: where no loader lives, a second loader must
+     not be able to grow).
+  2. **(AV)(ii) — WHY `execute(state, bus)` EXISTS AT ALL, AND WHY IT IS THE ONE GATE.** §11.1
+     prints `validate(state) -> Error?` and `apply(state) -> Array[Event]` but **composes them
+     nowhere**. Two callers each writing their own composition is exactly how a mutation eventually
+     lands without validation, and §11.1's replay contract dies the moment one does. `Command`
+     therefore ships a fourth function, `execute(state, bus) -> CommandError`, and it is the **only
+     sanctioned entry point**: it calls `validate`; on a non-null return it returns that rejection
+     **immediately, having called `apply` zero times and emitted nothing**; otherwise it calls
+     `apply(state)` and routes the returned `Array[Event]` through `bus.emit_all(events)` **in array
+     order**. **`bus == null` is legal** (headless) and is a **silent drop, never a crash**.
+     **`execute` never hands the events back** — a caller who wants them subscribes to the bus,
+     because §11.1 is explicit that *the sim never calls* the renderer. The base `validate`
+     **REJECTS** (code `abstract_command`, authored at its own call site) so a subclass that forgets
+     to override `validate` **fails closed** rather than being silently applied. Probe P3
+     (`execute` applying before validating) reds **18 tests**; probe P4 (emitting on a rejected
+     command) reds too — the gate is load-bearing, not decorative.
+  3. **(AV)(iii) — TURN NUMBERING STARTS AT 1 (a §13.4 silence, resolved).** A fresh `GameState`
+     reads `turn() == 1` and `current_player_index() == 0`, at **every** roster size **including the
+     empty one** (and including a negative `p_player_count`, which clamps to the empty roster per
+     (AU)). §3.2 line 133 prints *"If turn 200 is reached"*, which counts **from 1**; §14 and §13.2
+     speak of *"after N turns"* and are **silent** on the origin. One-based is the simplest
+     interpretation consistent with the printed limit, so it is fixed here and pinned.
+     **§3.2/§12.1's `victory.turn_limit` 200 is M6 and is NOT implemented** — a comment-stripped
+     source scan **forbids the literal `200`** in all four new production files.
+  4. **(AV)(iv) — THE REJECTION VOCABULARY IS OPAQUE, AUTHORED AT ITS OWN CALL SITE.** This is the
+     (AU)(iv) / (T) / (AH) / M0-T3 (f) precedent applied to command rejections: there is **NO enum,
+     NO const list and NO whitelist** anywhere in engine code, and `command.gd` / `command_error.gd`
+     contain **zero** code-name literals (the single exception is `abstract_command`, authored by
+     the base's own `validate` — item 2). `EndTurnCommand` authors three codes at their own call
+     sites: **`null_state`** (a null `GameState`), **`no_players`** (an empty roster — there is no
+     current player to end a turn for, and `(current + 1) % 0` would divide by zero), and
+     **`not_current_player`** for any index other than the current one. **An out-of-range player
+     index rejects as `not_current_player` too**, deliberately and not as a fallthrough: the current
+     index is *always* in range, so an out-of-range index can never be the current one, and a fourth
+     code would be a distinction without a difference. `CommandError.message` is **non-empty for
+     every rejection**, pinned per code. `validate` is proven a **pure predicate** — calling it
+     leaves `content_hash()` byte-identical and emits nothing.
+  5. **(AV)(v) — `set_turn_position` IS TOTAL AND ATOMIC.** `GameState` gains **one** mutator,
+     documented as *"§11.1 — intended to be written only from a Command's `apply()`"* (GDScript has
+     no package-private; `HexMap.set_elevation` is the precedent). In the (B)/(L)/(AS) totality
+     spirit it is a **SILENT NO-OP** when `p_turn < 1` **or** `p_player_index` is outside
+     `0..player_count()-1` (which makes it a no-op on the empty roster by construction), and **both
+     counters are written together or neither is** — so a buggy caller can never park the state in
+     an unreachable position such as *turn 4, player 7 of 3*. Probe P6 (write one counter but not
+     the other) reds **15 tests**. **THE ROTATION ITSELF IS NOT IN `GameState`**: it is a §3.3
+     *rule* and lives in `EndTurnCommand.apply`; `GameState` only **stores** the position.
+  6. **(AV)(vi) — §3.3's ROTATION, AND THE AMENDED FOLD ORDER.** The rotation is
+     `next_index = (current + 1) % player_count`, with `turn += 1` **exactly when `next_index` wraps
+     to 0** — a full round of all players is **one turn**, which is what §3.2's *"If turn 200 is
+     reached"* and §12.1's `victory.turn_limit` count. Hand-computed and pinned **literally** at
+     n = 3 (k = 0…7 ⇒ (1,0) (1,1) (1,2) (2,0) (2,1) (2,2) (3,0) (3,1)), n = 2 (k = 0,1,2,3,40 ⇒
+     (1,0) (1,1) (2,0) (2,1) (21,0)) and n = 4 (k = 4 ⇒ (2,0), k = 20 ⇒ (6,0)), plus a general
+     `index = k % n` / `turn = 1 + k / n` sweep across §3.1's **2–4 player** range. Probe P5 (bump
+     the turn on **every** EndTurn rather than only on the wrap) reds 11 tests.
+     **THE `content_hash()` FOLD ORDER IS AMENDED — this supersedes (AU)(vi)'s printed order, and
+     `docs/PROGRESS.md`'s recorded copy is updated in this same commit.** New documented order:
+     **private seed → `rng.rolls_drawn()` → turn → current_player_index → map-presence flag (0/1) →
+     `map.content_hash()` when present → `player_count()` → per index ascending, the index then that
+     player's hash.** **No existing step was renamed or reordered**, the two new steps sit
+     immediately after `rng.rolls_drawn()` and **before** the map-presence flag, and
+     `game_state.gd`'s header doc block was updated **in the same edit** (a test scans that header
+     for the string `current_player_index`, and another scans the comment-stripped body of
+     `content_hash()` for the first-occurrence order `_seed_value` < `rolls_drawn` < `turn` <
+     `current_player_index` < `map`). All three (AU)(vi) pins still hold: the RNG stream position,
+     the **per-INDEX** player fold and the map-presence flag. Probes P1 and P2 (drop turn / drop
+     current_player_index from the fold) both red. **`scripts/sim/hex_map.gd` was NOT touched** —
+     the M1-T5 golden `0xcad24923` records its own 4-byte fold, and the (AU)(vii) duplication stays
+     as-is by design.
+  7. **(AV)(vii) — NO GOLDEN IS RECORDED THIS SLICE, AND THAT IS A DECISION: §13.2 tier 3's golden
+     is OWED, NOT FORGOTTEN.** §13.2's tier 3 is *"fixed seed + recorded command log ⇒ recorded
+     `GameState.hash()` after N turns"*, and this is the first task at which such an artefact is
+     even constructible. Recording it **now** would freeze `GameState`'s fold **before** units, dig
+     progress, income, upkeep and §3.1's starting kit exist — guaranteeing a re-record on **every
+     subsequent M2 slice**, and §13.6 permits a re-record only *with a logged reason*, so the log
+     would fill with reasons that all say *"the state grew, as planned"*. The replay contract
+     therefore lands as a **PROPERTY test** — `tests/sim/test_turn_replay.gd`, the project's first
+     `tests/sim/` file — which is strictly stronger for this purpose because it pins the property
+     §11.1 actually states rather than one recorded number: two fresh states on seed 1337 fed the
+     **same 8-command log** (mixing accepted and rejected `EndTurnCommand`s) agree on
+     `content_hash()` **at every step, not only at the end**; the log replays identically **3×** with
+     the command objects unchanged (they are immutable value objects — probe P7, mutating `self` in
+     `apply`, reds); the **event stream** is identical across replays; and a log containing a
+     **rejected** command produces the identical accepted-hash sequence and final state as the same
+     log with that command **removed**. **The next M2 slice that lands a real economy tick should
+     record the tier-3 golden**, and this item is the record that it is due.
+  8. **(AV)(viii) — `scripts/sim/events/` IS A NEW DIRECTORY NOT PRINTED IN §11.2.** §11.2's `sim/`
+     line prints *"GameState, TurnManager, commands/, systems/…"* — so `scripts/sim/commands/` **is**
+     printed and was created as printed (with `command_error.gd` sitting beside the commands exactly
+     as `rules_error.gd` sits beside `rules_loader.gd`), while `scripts/sim/events/` is not. It
+     rides the standing **M0-T3 (f) / M1-T9 (AT)** precedent that §11.2's printed file list is
+     **ILLUSTRATIVE**; the reasoning is that a **concrete event carries a SIM payload** and so
+     belongs in `sim/`, while `scripts/core/event.gd` and `scripts/core/event_bus.gd` stay **pure
+     infrastructure** and were **NOT edited** (verified untouched — a test scans both for the
+     absence of every event name). **No GDD cell is edited for this**; it is recorded here so the
+     next slice does not re-litigate where concrete Events live.
+  9. **§3.4 AND EVERYTHING ELSE IS PINNED *NEGATIVELY*, so a later slice cannot claim it was
+     forgotten (§13.4).** §3.4's **nine** per-player start-of-turn steps (income, upkeep,
+     construction/training ticks, dig ticks + Breach + Noise, healing, status/cooldown ticks,
+     structural stress, light/vision recompute, action phase) and its **three** World-phase steps
+     (creep AI, Wrath, victory checks) are **deliberately unimplemented**, and the suite asserts it:
+     after **any** number of EndTurns every player's `resource_ids()` is still **empty** and
+     `state.rng.rolls_drawn()` is still **0** (an EndTurn draws no roll), so every `content_hash()`
+     difference is attributable to the **turn position alone**. Also deliberately out of scope and
+     named in the file headers: every other §11.1 command (MoveUnit, AttackUnit, AttackHex, DigHex,
+     CancelDig, BuildStructure, TrainUnit, ResearchTech, UseAbility, ConvertDepletedVein, SetZone,
+     SetRally, GarrisonRuin); `Command.to_dict()`/serialization and a `CommandLog` class (§11.1
+     save/load is **M7**); §3.2/§12.1's `victory.turn_limit` and the victory checks (**M6**);
+     workers, dig progress, yields, vein nodes, Extractors, income, upkeep, housing, Mining Zones;
+     §3.4 step 2's 10 % max-HP deficit bleed (needs units); §3.1's starting kit (which still needs
+     its **own new §12.1 key and therefore its own §12.1 amendment**, exactly like (AU)(i)); and any
+     `EventBus` → `MapRenderer.mark_hex_dirty` wiring (that seam is M2's **dig** slice).
+  10. **TEN ADVERSARIAL MUTATION PROBES RUN LIVE AT VERIFY, ALL TEN RED** (the M1-T1 item 8 →
+     (AU) item 10 standard, **eleven iterations running**), md5 captured before and re-verified
+     **byte-identical** after every restore, driven through `C:/Program Files/Git/bin/bash.exe`
+     (never WSL — (AU) item 10's procedural warning): **P1** drop `turn` from the fold (2 hash tests
+     + the fold-order scan); **P2** drop `current_player_index` from the fold; **P3** `execute`
+     applies before validating (**18 tests**, measured with a probe command whose `apply` really
+     mutates, so the *order* is recorded live rather than inferred); **P4** `execute` emits on a
+     rejected command; **P5** the rotation bumps the turn on every EndTurn instead of only on the
+     wrap to index 0 (**11 tests**); **P6** `set_turn_position` writes one counter but not the other
+     (**15 tests**); **P7** a **mutable** `EndTurnCommand` (self mutated in `apply`, so a replay
+     diverges on pass 2); **P8** `validate` stops rejecting a non-current/out-of-range player;
+     **P9** `apply` emits no event (which is what makes §13.6's *events* clause genuinely
+     load-bearing here — see item 11); **P10** a fresh state starts at turn 0 (**16 tests**). **Zero
+     occurrences** of `Parse Error` / `SCRIPT ERROR` / `Ignoring script` / `Failed to load script`
+     in any probe run, so every RED was **behavioural**, not a collection failure. **No probe
+     survived green**, so — for the first time in four iterations — the battery found **no hole in
+     the tests** either.
+  11. **§13.6 DEFINITION OF DONE, clause by clause, stated rather than assumed.** *Tests green
+     headless*: yes — **598/598**, exit 0, `Scripts 26` == the 26 `test_*.gd` on disk. *Static
+     typing clean*: `bash tools/typecheck.sh` exit 0 over **47** files at the M0-T4 gate; every
+     declaration is `var x: T = …` (no `:=`, no bare `var x =`); no float literal and no `float`
+     token in any of the four new files; **no int/int division in engine code** (`%` on positive
+     ints needs no `@warning_ignore`, and the one `1 + k / n` lives in a **test** under its own
+     `@warning_ignore("integer_division")`). *Constants read from data, not code*: **VACUOUS here,
+     and that is the finding, not an omission** — this task reads **zero** §12.1 constants, because
+     §3.3's rotation is **structural, not tunable**; the one tunable in the neighbourhood
+     (`victory.turn_limit` 200) is **M6** and the literal `200` is forbidden by scan in all four new
+     files. *Events emitted for every state change*: **for the first time in this project NOT
+     vacuous** — the turn advance is the **only** state change in the slice and it emits **exactly
+     one** `TurnEndedEvent` per accepted EndTurn (`type == &"turn_ended"`, payload
+     `player_index` / `next_player_index` / `turn` = the turn number **after** the advance, and
+     `to_dict()` calls the base first so `"type"` stays the **first** key — the
+     `scripts/core/event.gd` line 23 contract). Probe P9 proves the clause is load-bearing.
+     *Goldens re-recorded only with a logged reason*: **NONE re-recorded, none created** — item 7.
+     *Relevant GDD table cell updated if numbers moved*: **NO CELL EDITED — no numeric value
+     moved.** `docs/GAME_DESIGN.md` is byte-untouched in this commit.
+  12. **IMPLEMENTER AND VERIFIER DEVIATIONS, REVIEWED AND ACCEPTED — no rule change follows from
+     any of them.** (a) `end_turn_command.gd`'s `apply` builds its return value as
+     `var out: Array[Event] = [TurnEndedEvent.new(...)]` **without** the spec's illustrative
+     `as Array[Event]` cast; the cast is redundant for a non-empty array literal of an `Event`
+     subclass assigned to a declared `Array[Event]`, the pattern is already green elsewhere in the
+     tree, and the typing gate passes. (b) `turn_ended_event.gd` uses the explicit
+     `super.to_dict()` rather than the bare `super()` shorthand — both are valid GDScript 4.x, both
+     have precedent in this tree, there is no behavioural difference, and the explicit form reads
+     better inside a same-named override. (c) `_turn` / `_current_player_index` are initialised **at
+     their declarations** (`var _turn: int = 1`) rather than restated in `_init` as the spec's prose
+     suggested; GDScript member initialisers run on **every** instantiation, so behaviour is
+     identical and it is pinned at roster sizes 0, −1, 2, 3 and 4. (d) The Implement stage edited
+     **no** test file — the `tests/unit/test_game_state.gd` diff was already present from the Tests
+     stage, confirmed by mtimes (every test file last written 23:08–23:20, every production edit
+     23:24–23:40) as well as by the implementer's own report. (e) Verify made **no** fix: nothing
+     survived the diff review, the GDD cross-check or the ten-probe battery, so `fixes_made` is
+     empty — the first iteration in the project's history where that is true.
+  13. **THE EXPECTED-PUBLIC-MEMBER LISTS GREW IN THE SAME COMMIT** (the standing PROGRESS rule).
+     `GameState` is now **EIGHT** members — `var map`, `var rng` + `player_count`, `player`,
+     `content_hash`, `turn`, `current_player_index`, `set_turn_position` — and
+     `tests/unit/test_game_state.gd`'s expected list was grown **5 → 8** here, not later. The new
+     surfaces are equally exact and equally scanned (a **missing OR extra** member fails):
+     `CommandError` = vars `code` + `message`, funcs `_init` + `format_for`, **zero public consts**;
+     `Command` = funcs `command_name`, `validate`, `apply`, `execute` and **zero public vars**;
+     `EndTurnCommand` = funcs `_init`, `player_index`, `command_name`, `validate`, `apply` and
+     **zero public vars**; `TurnEndedEvent` = const `TYPE_NAME` + vars `player_index`,
+     `next_player_index`, `turn` + funcs `_init`, `to_dict`. The fourteen §11.1 command names live
+     **in the test**, never in engine code ((AU)(iv)/(T)/(AH)); the test asserts `end_turn` is one
+     of them.
+  14. **THE TESTS-STAGE STUB CONVENTION WAS USED AGAIN AND WORKED — SIXTH CONSECUTIVE TIME**
+     (M1-T2 item 10 → (AU) item 15). All four new production files, plus `game_state.gd`'s new
+     accessors, were first written as deliberately-wrong stubs under explicit **DO-NOT-SHIP
+     banners** so the suite would **parse** — a call to a missing method is a GDScript parse error
+     that silently un-collects the whole file (M0-T5 item (a)'s false green). RED was measured at
+     **Scripts 26 / Tests 598 / Passing 561 / Failing 37**, with **zero** occurrences of `SCRIPT
+     ERROR` / `Parse Error` / `Ignoring script` / `Failed to load script` / `Invalid call` /
+     `Nonexistent`: the stubs were wrong in their **return values only**, which is why the
+     public-surface and doc-comment scans already passed and all 37 failures were behavioural.
+     **HARNESS TRAP RE-HONOURED**: no failure message contains any of `tools/run_tests.sh`'s five
+     refusal phrases. **TWO PARSE TRAPS WERE MEASURED LIVE and are worth keeping**: (a) **`log` is a
+     GDScript built-in**, so a variable *or parameter* named `log` trips
+     `shadowed_global_identifier` = level 2 = *"Parse Error … (Warning treated as error.)"* — the
+     replay test uses `command_log`; (b) a **literal percent sign inside a String** later used with
+     the format operator is *"Parse Error: unsupported format character in operator %"*. Both cost
+     a silently un-collected file before they were found.
+  15. **STAGE-BOUNDARY NOTE**, the same call M0-T5 item (i) → (AU) item 14 record:
+     `docs/PROGRESS.md` and `docs/decisions.md` are **Land**-stage artefacts and
+     `docs/GAME_DESIGN.md` is **read-only for Tests / Implement / Verify**. All three stages
+     correctly left them untouched; that is not a deviation. This iteration the GDD needed **no**
+     edit at all — no numeric value moved — so **Land's only doc changes are this entry and
+     `docs/PROGRESS.md`**.
+
+- **Why:** §11.1 is the architecture clause the whole project is built on, and until this commit it
+  was **aspirational**: `GameState` existed (M2-T1) but nothing constrained *how* it was mutated, so
+  every M2 system that follows — dig, income, upkeep, zones — would have had to invent its own
+  mutation path and its own error type. Landing the spine **before** the first gameplay system means
+  every later slice is a **subclass**, not a new pattern. `EndTurn` is the right first Command
+  because it is the **only** one of §11.1's fourteen printed names whose prerequisites exist today
+  (§3.3 needs nothing but a player roster, which M2-T1 built), and because it is what makes the
+  §11.1 replay clause *testable at all* — item 7's property test is the first time in the project
+  that *"a match is fully described by `(seed, command_log)`"* is a **measured** claim rather than a
+  design intention. Items 1, 2 and 5 are recorded at length because each closes a §13.4 **silence**
+  that a later slice would otherwise re-decide differently: §11.1 prints an error type it never
+  defines, composes `validate` and `apply` nowhere, and says nothing about who may write the turn
+  counters. Item 7 is the item to remember: the honest engineering answer to *"should we record the
+  tier-3 golden now?"* was **no**, and the discipline that matters is writing down **why**, and that
+  it is **due**, so the next slice inherits an obligation rather than a silence.
+
+- **GDD sections affected:** **NO CELL EDITED — `docs/GAME_DESIGN.md` is byte-untouched in this
+  commit** (no numeric value moved). **§11.1** (the spine **realised**: `validate`/`apply`
+  implemented as printed; the `Error?` return given a concrete type, `CommandError`, per item 1;
+  `execute` added as the single composed gate per item 2; the EventBus clause honoured —
+  `apply()`'s array is routed through `emit_all` in order and the sim never calls a renderer; the
+  replay clause **proven** by property test per item 7; `EndTurn` built, the other **thirteen**
+  printed commands deliberately **not**). **§3.3** (*"fixed order by player index"* realised as
+  `next = (current + 1) % player_count` with `turn += 1` on the wrap to 0; the rotation table pinned
+  literally at n = 2, 3, 4; the *"then a World phase"* half deliberately **not** built). **§3.4**
+  (all nine per-player steps and all three World-phase steps deliberately unimplemented and pinned
+  **negatively** per item 9). **§3.2** (its *"If turn 200 is reached"* is the **evidence** that turn
+  numbering is 1-based — item 3 — but the limit itself is **M6** and the literal is forbidden by
+  scan). **§3.1** (its *"2–4 players"* used as the rotation fixture range; its **starting kit still
+  deferred**, still needing its own §12.1 key and amendment). **§11.2** (`scripts/sim/commands/` is
+  **printed** and was created as printed; `scripts/sim/events/` is **new and not printed**, riding
+  the illustrative-list precedent — item 8; `scripts/core/event.gd` and `event_bus.gd` **not
+  edited**). **§11.3** (typing gate green over **47** files; every public function carries its
+  `## §` doc comment; public surfaces are **exact** per item 13). **§12.1** (**untouched** — zero
+  constants read; the §13.6 *constants-from-data* clause is **vacuous here**, item 11). **§13.2**
+  (four new **tier-1** unit suites — `CommandError`, `Command`, `EndTurnCommand`, `TurnEndedEvent` —
+  plus the project's first **tier-2** system suite `tests/sim/test_turn_replay.gd`; **tier 3's
+  golden is OWED**, item 7). **§13.4** (procedure exercised: five silences resolved under (AV),
+  nothing stalled, nothing invented ahead of its milestone). **§13.6** (definition of done **MET**,
+  every clause re-checked in item 11; the *events* clause **non-vacuous for the first time**; no
+  golden re-recorded). **§14 M2 row — the milestone is STILL OPEN, NOT met. Acceptance criterion
+  text unchanged**; none of *"Scripted 20-turn dig scenario matches expected stockpiles exactly"*,
+  *"deficit-bleed test"* or *"zone assigns nearest idle worker"* is satisfied yet.
