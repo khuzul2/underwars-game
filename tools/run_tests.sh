@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Underwars headless test runner — GDD §13.1 as amended (docs/decisions.md, 2026-08-04).
+# Underwars headless test runner — GDD §13.1 as amended (docs/decisions.md, 2026-08-04; hardened
+# further by M0-T5, 2026-08-04).
 #
 # Hardened against GUT 9.7.1 failure modes that all exit 0 (verified empirically):
 #   - missing .godot/ import cache: gut_cmdln quits 0 without running anything
 #   - -gdir does not recurse: tests/unit|sim|golden are ignored without -ginclude_subdirs
 #   - "Nothing was run" / nonexistent -gdir path: exit 0
+#   - a test_*.gd file that fails to PARSE is silently un-collected while every OTHER script still
+#     runs: GUT exits 0 and the Scripts/Tests/Asserts totals stay byte-identical to a healthy run
+#     (docs/decisions.md M0-T4 item (i), corrected by M0-T5). A magic-number count cannot catch
+#     that at all, and a diagnostic grep only catches it for as long as GUT chooses to log the
+#     file it failed to open; only "every test_*.gd on disk was actually collected" is evasion-
+#     proof, which is why the script-coverage guard below exists in addition to the grep.
 #
 # Exit codes: 0 = tests ran and passed · 1 = failures or no tests collected · 2 = harness unavailable
 #
@@ -36,9 +43,67 @@ OUT="$("$GODOT" --headless --path "$ROOT" -s addons/gut/gut_cmdln.gd -gdir=res:/
 CODE=$?
 printf '%s\n' "$OUT"
 
-# 3) Refuse GUT's silent-success states: exit 0 with zero tests executed.
-if printf '%s' "$OUT" | grep -qiE 'Nothing was run|does not exist|have not been imported'; then
-  echo "run_tests.sh: GUT collected/ran no tests — failing (a green suite must actually run tests)" >&2
+# 3) Refuse GUT's silent-success states: exit 0 with zero tests executed, OR exit 0 while a
+#    test_*.gd script failed to load/parse (M0-T5 — strengthening only; the three original
+#    alternatives from docs/decisions.md SETUP-2 item 2 stay in the list forever).
+if printf '%s' "$OUT" | grep -qiE 'Nothing was run|does not exist|have not been imported|Failed to load script|Ignoring script'; then
+  echo "run_tests.sh: GUT reported a diagnostic meaning a test script did not run as written — failing (a green suite must actually run every collected test)" >&2
+  exit 1
+fi
+
+# 4) Script-coverage guard (M0-T5) — the half that cannot be evaded. Both measured parse-error
+#    variants leave GUT's Scripts/Tests/Asserts totals byte-identical to a healthy run while the
+#    process exits 0. The refusal grep above happens to fire FIRST today (a test_-prefixed broken
+#    file does print both diagnostics — measured this iteration, correcting docs/decisions.md
+#    M0-T4 item (i)), but that depends on GUT choosing to log a file it never opened; this guard
+#    depends on nothing but the filesystem. Proven load-bearing by negative control at Verify:
+#    with the grep neutered, both variants still exit 1 HERE ("Scripts=7 but 8 on disk") and a
+#    healthy tree still exits 0. Enumerate every tests/**/test_*.gd on disk using EXACTLY GUT
+#    9.7.1's own prefix/suffix collection rule (test_*.gd, recursive — the reason
+#    -ginclude_subdirs exists) and require (a) every one of them named somewhere in GUT's output
+#    and (b) GUT's own "Scripts" total to equal that count.
+DISK_SCRIPTS=()
+while IFS= read -r -d '' f; do
+  DISK_SCRIPTS+=("$f")
+done < <(find "$ROOT/tests" -type f -name 'test_*.gd' -print0)
+
+if [ "${#DISK_SCRIPTS[@]}" -eq 0 ]; then
+  echo "run_tests.sh: found ZERO test_*.gd files under tests/ — enumeration is broken, refusing to call that a pass" >&2
+  exit 1
+fi
+
+MISSING=()
+for f in "${DISK_SCRIPTS[@]}"; do
+  REL="${f#"$ROOT"/}"
+  REL="${REL//\\//}"
+  RES_PATH="res://$REL"
+  if ! printf '%s' "$OUT" | grep -qF -- "$RES_PATH"; then
+    MISSING+=("$RES_PATH")
+  fi
+done
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  echo "run_tests.sh: the following test_*.gd files are on disk but GUT's output never mentions them — a parse error may have silently un-collected the whole file:" >&2
+  for m in "${MISSING[@]}"; do
+    echo "  $m" >&2
+  done
+  exit 1
+fi
+
+CLEAN_OUT="$(printf '%s\n' "$OUT" | sed 's/\x1b\[[0-9;]*m//g')"
+SCRIPTS_LINE="$(printf '%s\n' "$CLEAN_OUT" | grep -E '^Scripts[[:space:]]+[0-9]+' | head -n1)"
+SCRIPTS_COUNT=""
+if [ -n "$SCRIPTS_LINE" ]; then
+  SCRIPTS_COUNT="$(printf '%s' "$SCRIPTS_LINE" | grep -oE '[0-9]+' | head -n1)"
+fi
+
+if [ -z "$SCRIPTS_COUNT" ]; then
+  echo "run_tests.sh: could not find GUT's numeric 'Scripts' total in its output — an absent or non-numeric Totals block must never read as success" >&2
+  exit 1
+fi
+
+if [ "$SCRIPTS_COUNT" -ne "${#DISK_SCRIPTS[@]}" ]; then
+  echo "run_tests.sh: GUT reported Scripts=$SCRIPTS_COUNT but ${#DISK_SCRIPTS[@]} test_*.gd files exist on disk under tests/ — a script was silently skipped" >&2
   exit 1
 fi
 

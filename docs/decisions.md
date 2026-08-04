@@ -281,3 +281,109 @@ independently by Tests and again by Verify. The gate configuration is test-pinne
   deliverable is now built**, completing that row's deliverable list; both acceptance clauses were
   already MET and their printed text is unchanged. **No numeric table value moved, so NO
   `docs/GAME_DESIGN.md` cell was edited in this commit.**
+
+## 2026-08-04 — M0-T5 — Harness hardening: the silent-skip false green closed (and M0-T4 item (i) CORRECTED)
+
+`tools/run_tests.sh` is the harness **contract** (CLAUDE.md: "make it pass, never weaken it").
+M0-T5 is the sanctioned *strengthening* task: every pre-existing guard, exit code and refusal
+string is kept verbatim, only new checks are added. The whole task pins harness behaviour — **zero
+game rules, zero §12.1 constants read or written** — and is test-pinned in
+`tests/unit/test_run_tests_harness.gd` (5 tests, one of which is explicitly an *anti-weakening*
+test re-asserting all seven original guards), so the hardening cannot be silently undone.
+
+- **What changed / was decided:**
+  1. **(a) MEASURED CORRECTION — this supersedes M0-T4 item (i), whose measurement was
+     confounded.** M0-T4 recorded that a **syntactic** parse error in a test file prints *"no
+     diagnostic whatsoever"* and yields totals identical to a healthy tree. Measured again this
+     iteration, three times independently (Orient, Tests, Verify) on the pinned repo-local
+     `godot/Godot_v4.7-stable_win64_console.exe` (4.7.stable.official.5b4e0cb0f): **both**
+     parse-error variants DO print `ERROR: Failed to load script "res://tests/unit/<probe>.gd"
+     with error "Parse error".` **and** `[GUT WARNING]:  Ignoring script res://tests/unit/<probe>.gd
+     because it does not extend GutTest`. M0-T4's probe was named `_verify_parse_error.gd` — it
+     **lacked GUT's `test_` collection prefix** (`addons/gut/gut.gd:229` `_file_prefix = 'test_'`,
+     `:980` `begins_with(prefix) and ends_with(suffix)`), so GUT never *attempted* to load it. The
+     "no diagnostic / identical counts" claim was an artefact of that naming, **not** a property of
+     syntactic parse errors. What **is** confirmed for both variants: `run_tests.sh` exited **0**
+     (false green) with `Scripts 6 / Tests 57 / Passing 57` — byte-identical to healthy — while
+     **7** `test_*.gd` files sat on disk.
+  2. **(b) The load-bearing guard is the disk-vs-collected count, NOT the grep.** `run_tests.sh`
+     now enumerates every `tests/**/test_*.gd` on disk using **exactly** GUT 9.7.1's own
+     prefix/suffix/recursive rule, requires each enumerated `res://…` path to appear in GUT's
+     output (printing **every** missing path, never stopping at the first), and requires GUT's own
+     `Scripts` total (parsed after `sed 's/\x1b\[[0-9;]*m//g'` strips ANSI) to **equal** that
+     count. An absent or non-numeric Totals block is exit 1, and a zero-file enumeration is exit 1
+     (same zero-collected guard class as `typecheck.sh`). It is an **enumeration, never a magic
+     number** — a magic number cannot catch this failure at all (counts are unchanged), and a
+     diagnostic grep only catches it for as long as GUT chooses to log a file it failed to open.
+  3. **(c) The coverage guard is proven load-bearing BY NEGATIVE CONTROL** — the same standard of
+     proof as M0-T4 item (h), and necessary because in the live tree the refusal grep always fires
+     *first*, so the guard would otherwise ship unexercised. With the grep neutered in a
+     **scratchpad copy** (no repo file weakened), both parse-error variants still exit 1 via the
+     count check (`GUT reported Scripts=7 but 8 test_*.gd files exist on disk`) and a healthy tree
+     still exits 0.
+  4. **(d) The refusal grep is extended, never narrowed.** `Failed to load script|Ignoring script`
+     were **added** to the SETUP-2 item 2 alternation; `Nothing was run|does not exist|have not
+     been imported` all remain. Anti-weakening was verified two ways: `test_run_tests_harness.gd`
+     test 3 re-asserts `--import`, `-ginclude_subdirs`, `-gdir=res://tests`, `-gexit`, `exit 2`,
+     `-o pipefail` and the repo-local binary path (SETUP-3), and Verify diff-reviewed that no
+     guard, exit code or refusal alternative was removed.
+  5. **(e) `verify_harness.sh` gains Phase C (syntactic: `var x: int = (`) and Phase D
+     (statically-impossible: `r is Node` against a `RefCounted`)**, one per measured variant —
+     they fail in *different* engine phases, so proving one proves nothing about the other. Each
+     requires a **non-zero exit AND that the captured output names its probe file**, so the phase
+     proves the guard fired for the right reason. Probe filenames (not dictated by the spec) are
+     `tests/unit/test_harness_syntaxcanary.gd` and `tests/unit/test_harness_typecanary.gd`; Phase
+     B's `test_harness_redcanary.gd` is unchanged. **Both probes MUST carry GUT's `test_` prefix**
+     — a probe without it is invisible to GUT *and* to the disk enumeration, which is precisely the
+     mistake that confounded item (i). Both probes and their `.uid` sidecars are registered in the
+     existing `cleanup()` under `trap … EXIT`, so the tree self-cleans on failure or interruption.
+  6. **(f) Which mechanism protects which half, stated so no future stage assumes otherwise.**
+     Phases C/D do **not** by themselves protect the coverage guard, because the refusal grep
+     short-circuits before it. The guard's regression protection comes from the **source-scan
+     assertions** in `test_run_tests_harness.gd` test 1 (`test_*.gd`, `find`, `-name`, `Scripts`
+     must be present in the script). Both halves are pinned — by different mechanisms.
+  7. **(g) Known-weak assertion, recorded not fixed (test quality, not a rule).** Test 1's
+     positional check `runner.find("Scripts") < runner.rfind('exit "$CODE"')` is satisfied by the
+     word `Scripts` appearing in a header comment, so it does not by itself prove the guard
+     *executes* before the final exit. The behavioural proof (live Phases C/D + the negative
+     control) covers that property today. A future task may anchor it on the guard's own code
+     line; doing so now is scope creep.
+  8. **(h) Three inline comments corrected at Verify (comment-only, no logic change).** Both shell
+     scripts carried the superseded item (i) claim — "no diagnostic at all", "the refusal grep
+     above cannot see it", and Phase C's "this phase proves that guard, not the refusal grep" —
+     each contradicted by this iteration's own measurement and each capable of misleading a future
+     agent into deleting the wrong guard. All three now state the measured behaviour and cite the
+     negative control.
+  9. **(i) Boilerplate-vs-spec conflict, resolved in the spec's favour and recorded.** The
+     Implement stage's generic boilerplate said "do not modify `tools/run_tests.sh`" while the task
+     spec made it the primary subject. CLAUDE.md governs: `run_tests.sh` is the harness contract —
+     *make it pass, never weaken it* — so strengthening edits are permitted and weakening is not.
+     Every change in this diff is additive. The Implement stage also correctly deferred
+     `docs/decisions.md` and `docs/PROGRESS.md` to Land, and made **no** edit to
+     `tests/unit/test_run_tests_harness.gd` (the shell scripts were fixed to satisfy the tests, not
+     the reverse).
+  10. **(j) §13.6 clauses that are vacuous here, stated explicitly:** zero §12.1 constants are read
+     or written, so *"constants read from data, not code"* and *"events emitted for every state
+     change"* have no subject matter. **Goldens: none re-recorded — none exist yet** (the first
+     golden lands with M1's mapgen hash). Scope held: no `GameState`, no `Command`, no hex/map
+     code, no concrete `Event` subclass, no new keys in `data/ruleset.json`, no `addons/` change.
+  11. **(k) Environment note for a future CI change:** the coverage guard uses
+     `find … -print0` / `read -r -d ''` / a bash array under `set -u -o pipefail` (no `-e`), and
+     reads `$?` immediately into a named variable, never through a pipeline — the exact false-green
+     class M0-T4 item (h) documents. Correct on the pinned Git-Bash 5.3 used here; re-verify if the
+     loop ever changes shells.
+- **Why:** A false green is the single failure mode that can silently invalidate every later
+  milestone, and this one lived inside the signal every stage runs directly. Item (a) is recorded
+  loudly because a *wrong* measurement in the decisions log is worse than no measurement — it was
+  about to send M0-T5 down the wrong path (M0-T4 concluded the grep was useless and only a count
+  *floor* could work; the truth is the opposite in the short term and stronger in the long term:
+  the grep works today, but only the enumeration is evasion-proof). Items (c) and (f)–(g) exist so
+  the guard's proof and the exact shape of its regression protection are traceable rather than
+  assumed.
+- **GDD section affected:** §13.1 (the runner's contract is **strengthened**, not amended — the
+  printed command list is unchanged); §13.2 (`tests/**` layout and GUT's `test_` prefix rule are
+  now mechanically enforced, so a test file that does not follow them fails the run); §13.6
+  (definition of done exercised; two clauses vacuous, see item j); §14 M0 row — **all deliverables
+  built and BOTH acceptance clauses MET headless, now proven against the false-green mode that
+  reported clause (a). M0 is CLOSED by this commit.** Acceptance criterion text unchanged. **No
+  numeric table value moved, so NO `docs/GAME_DESIGN.md` cell was edited in this commit.**
