@@ -960,3 +960,243 @@ continues at (M)**.
   slices) and `Los` are complete; the concentric-bowl generator, chunked MultiMesh renderer, camera
   rig and hex picking are not.** Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit
   accompanies this entry, because no numeric table value changed.**
+
+## 2026-08-04 — M1-T4 — `HexMap` + the concentric-bowl band/elevation pass (generator slice 1); resolutions (M)–(Q); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 11 / Tests 183 /
+Passing 183 / Failing 0 / Asserts 1879** (the M1-T3 baseline was 9 / 129 / 129 / 0 / 1308);
+`bash tools/typecheck.sh` exits 0 over **19** files (was 15); `bash tools/ci.sh` and
+`bash tools/verify_harness.sh` both exit 0 with the tree left clean. All four ran headless through
+the `tools/` scripts on the repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the
+PATH shim (SETUP-3). `sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5) were correctly
+**SKIPped, not failed**, per CLAUDE.md's applicability rule. `Scripts 11` equals the number of
+`test_*.gd` on disk, so the M0-T5 enumeration guard is satisfied and nothing was silently
+un-collected.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §4.1
+lines 173–174 (*"Elevation: integer 0–3 per hex"*; *"Map sizes (hex radius): Small 24 (1,801 hexes),
+Medium 32 (3,169), Large 40 (4,921)"*), §4.4 lines 225–238 (*"Generated as a descending terraced
+bowl (elevation falls from Rim 2–3 to Core 0)"* plus the three-row band table **Safe Rim outer 30% /
+Mid-Mantle middle 40% / Deep Core inner 30%**), §12.6 line 980 (`"generator":
+"mapgen/concentric_bowl.json"`), §11.1–§11.3, §13.2, §13.6, §14 line 1097. `docs/decisions.md` was
+re-scanned end to end: **no logged override touches §4.1 or §4.4**, so the printed tables govern
+unamended and were transcribed **verbatim into data**, not into code. §4.4 prints shares of radius
+but legislates **no per-hex formula and no rounding convention**, so every boundary value is
+**derived**; Orient, Tests and Verify each re-derived all of them independently and agreed with
+**zero mismatches** (band spans 0–7/8–16/17–24, 0–9/10–22/23–32, 0–12/13–28/29–40; elevation spans
+0–7/8–16/17–20/21–24, 0–9/10–22/23–27/28–32, 0–12/13–28/29–34/35–40; band populations 169/648/984,
+271/1248/1650, 469/1968/2484; elevation populations 169/648/444/540, 271/1248/750/900,
+469/1968/1134/1350 — all summing to 1801/3169/4921 via `3r(r+1)+1` differences). The derivation is
+itself a test (`test_the_pinned_boundary_tables_are_re_derived_from_the_printed_section_4_4_shares`),
+so the pins cannot drift away from the printed shares silently.
+
+The resolutions below are §13.4 decisions closing §4.4's silences, **not** deviations from a printed
+value. Their lettering continues M1-T1's (A)/(B), M1-T2's (C)–(G) and M1-T3's (H)–(L) and is
+cross-referenced by the header doc blocks of `scripts/sim/hex_map.gd`,
+`scripts/sim/map_generator.gd`, `tests/unit/test_hex_map.gd` and `tests/unit/test_map_generator.gd`
+— **keep it stable; M1-T5 continues at (R)**.
+
+- **What changed / was decided:**
+  1. **(M) BAND RULE — how §4.4's "share of radius" becomes a per-hex band.** With
+     `d = HexMath.distance(Vector2i.ZERO, hex)` and `R` the map radius, let `outer_pct[k]` be the
+     cumulative share at band `k`'s **outer** edge, summed from the innermost band: `safe_rim 100`,
+     `mid_mantle 70`, `deep_core 30`. Then `band_index_at(d, R)` is the **last** (innermost) index
+     `k` with `d * 100 <= outer_pct[k] * R`, else `0` (`safe_rim`). Pure integer
+     **cross-multiplication** — no division, no rounding primitive, no float, hence **no**
+     `@warning_ignore("integer_division")` anywhere in either new file (a source scan forbids the
+     string outright). Max product is `100 * 40 = 4,000`, nowhere near overflow. Bands are listed
+     **outer to inner exactly as §4.4 prints them**, so `band_id(0..2)` is
+     `safe_rim`/`mid_mantle`/`deep_core`.
+  2. **(N) TERRACE / ELEVATION RULE, and the 85% mid-rim split.** The terrace table is
+     `{from_share_pct, elevation}` pairs listed outer to inner: `{85,3}, {70,2}, {30,1}, {0,0}`.
+     `elevation_at(d, R)` is the elevation of the **first** (outermost) row satisfying
+     `d * 100 > from_share_pct * R`; if no row matches (only `d == 0`), **the innermost row's
+     elevation, read from data**. **The comparison is a STRICT `>` while (M)'s is `<=`, and that
+     complementarity is load-bearing**: it is the only thing that makes terrace boundaries coincide
+     exactly with band boundaries where a percentage is shared (30 and 70 appear in both tables).
+     `>=` misaligns them at every exact-multiple radius — proven live at R=40 (`70*40 == 2800 ==
+     28*100`), where the probe below shows the failure is invisible to every hand-picked mid-band
+     case. **The value 85 is NOT a GDD number**: it is the midpoint of the Safe Rim band
+     (`70 + 30/2`), splitting the rim into two equal terraces so that §4.4's *"Rim 2–3"* is realised
+     as elevation 2 on the inner half and 3 on the outer half. It is **tunable CONTENT** in
+     `data/mapgen/concentric_bowl.json` (§4.4 line 238 puts ring shares in `data/mapgen/*.json`),
+     never a code literal. **Verify-stage fix folded into this resolution:** the terminal case
+     originally returned a hard-coded `0`, which contradicted both the doc comment and this
+     resolution's text and would have silently shadowed a retuned innermost terrace (a §13.6
+     *"constants read from data, not code"* violation); it now returns
+     `_terrace_elevation[_terrace_elevation.size() - 1]`, with the literal `0` surviving **only** as
+     the UNCONFIGURED sentinel where there is no row to read. Behaviour is byte-identical on the
+     shipped table (innermost row is elevation 0 = §4.4's *"Core 0"*), so no test moved and no golden
+     existed to re-record.
+  3. **(M)/(N) ALIGNMENT IS ASSERTED AS AN IDENTITY, not by inspection.** Over every hex of all three
+     radii: `deep_core ⇔ elevation 0`, `mid_mantle ⇔ elevation 1`, `safe_rim ⇔ elevation ∈ {2,3}`,
+     and the per-band populations equal the per-elevation populations
+     (`e0 == core`, `e1 == mantle`, `e2 + e3 == rim`). §4.1's *"integer 0–3"* is pinned with **both**
+     bounds attained on every map size.
+  4. **(O) `HexMap` STORAGE, CANONICAL ORDER AND TOTALITY** (`scripts/sim/hex_map.gd`) — the per-hex
+     container `Los` deliberately did **not** invent (M1-T3 resolution (H); `los.gd` is unchanged and
+     callers bind closures over `HexMap`). Storage is **one** `PackedInt32Array` over the axial
+     bounding square, index `(r + radius) * (2 * radius + 1) + (q + radius)` — **no `Dictionary`
+     anywhere**, so key order can never leak into behaviour (§11.1 *"iterate collections in stable ID
+     order"*). Membership is `HexMath.distance(Vector2i.ZERO, hex) <= radius`, never a second bounds
+     formula (a scan requires the literal `HexMath.distance(` in both new files). **Canonical
+     iteration order: `r` ascending `-R..+R`, and within each `r`, `q` ascending** — pinned now
+     because **the M1-T5 golden will hash it**; `index_of` is strictly increasing along that order,
+     which is what catches a q/r-swapped index. `hexes()` builds a **fresh** `Array[Vector2i]` every
+     call (M1-T2 trap 1, re-pinned in its third file). Every accessor is **total** (the spirit of
+     M1-T1 (B) and M1-T3 (L) — a bad argument must never tear down a headless run): off-disc
+     `get_elevation` returns the sentinel `-1`, `index_of` returns `-1`, `set_elevation` is a silent
+     no-op, `is_in_bounds` is false; a negative radius gives `hex_count() == 0` and an empty
+     `hexes()`. **Slice 1 stores ELEVATION ONLY** — no terrain-type, band or features array: band is
+     derivable from distance and is therefore not state, and terrain type is M1-T5. `HexMap` grows
+     field by field exactly as `GameState` will.
+  5. **(P) MAPGEN PARAMS LOAD CONTRACT.** `MapGenerator` reuses the **existing** `RulesError`
+     (`scripts/sim/rules_error.gd`); no second error type was invented and `RulesLoader`'s §12.1 spec
+     table was **not** extended (the mapgen file has a different schema). All errors are collected
+     with **1-based** lines, and on **any** error the generator is left **UNCONFIGURED** —
+     `radius_for_size` returns 0 and `generate` returns an empty map — including a failed load that
+     follows a successful one, mirroring `RulesLoader` emptying `rules`. A half-valid params set can
+     never be read. **Line 0 stays RESERVED for missing/unreadable files** (M0-T2 item 2) and is
+     never emitted for a schema error. Line attribution is deliberately simpler than
+     `RulesLoader._attribute_line`: the first line whose text carries the JSON key token of the
+     offending **top-level** key, falling back to line 1 — which is meaningful only because
+     `data/mapgen/concentric_bowl.json` follows `ruleset.json`'s **load-bearing** formatting
+     convention (M0-T2 item 7): line 1 is a lone `{` and each top-level group occupies exactly one
+     line. Validation rejects: bands not summing to 100; a band missing its id; a fractional
+     `share_pct`; an elevation outside 0–3; terraces not strictly decreasing in `from_share_pct`; a
+     map size with radius ≤ 0. Integral-vs-fractional checking lives in the private `_is_integral` /
+     `_as_int` helpers because **every JSON number arrives as `TYPE_FLOAT` in Godot 4.7**, even `1`
+     (M0-T2 item 8) — accept an integral float, **reject** a fractional one, never truncate.
+  6. **(Q) NO RNG AND NO GOLDEN IN THIS SLICE — both deferred to M1-T5.** This slice contains **zero**
+     randomness: the bowl is a pure function of `(d, R)` and the JSON params, so the determinism
+     property (two fresh `MapGenerator`s produce element-identical elevation arrays in canonical
+     order) holds trivially. The test exists anyway so that the M1-T5 composition pass **cannot
+     silently make it false**. Consequently the S2 engine-free scan carves **no** RNG exception
+     today; M1-T5 needs seeded rolls through `state.rng` and must **amend** that scan with a logged
+     reason, never delete it. **`tests/golden/` gains nothing here**: the project's first golden lands
+     with M1-T5, and §13.6's re-record-only-with-a-logged-reason rule starts applying **from that
+     moment, not before**.
+  7. **`R <= 0` NEEDS AN EXPLICIT EARLY RETURN in both rule functions** (return 0). Without it
+     `band_index_at(0, 0)` falls through to the innermost band (`0 <= 0` for every `k`) and returns 2.
+     Pinned by `test_rule_functions_are_total_on_a_degenerate_radius`.
+  8. **FOUR ADVERSARIAL MUTATION PROBES, run at Verify with the file md5 captured before each and
+     re-verified byte-identical after restoring** (the M1-T1 item 8 / M1-T2 item 5 / M1-T3 item 9
+     standard: a property test never observed failing is indistinguishable from one that cannot
+     fail). **P1** flip the terrace `>` to `>=` → RED in 4 tests, and the value failures land **only**
+     at the exact-multiple radius R=40 (d = 12, 28, 34); no hand-picked mid-band case sees it, which
+     is the whole justification for pinning resolution (N)'s strictness explicitly. **P2** make
+     `HexMap.hexes()` return a cached/shared array → RED in
+     `test_hexes_returns_a_fresh_array_every_call`, with both the cross-caller-corruption and
+     map-corruption asserts firing. **P3** (Verify's own, beyond the spec) swap `hexes()`' loop
+     nesting to q-outer/r-inner → RED in 3 tests including
+     `test_index_of_is_injective_and_increases_along_the_canonical_order`, proving the order the
+     M1-T5 golden will hash is genuinely pinned and a q/r-asymmetric index cannot slip through.
+     **P4** (Verify's own) perturb the **shipped** data file's shares to 30/41/29 (still summing to
+     100) → RED in 5 tests, proving the rule tests read the shipped **content** and not merely the
+     inline fixture. All four fail on demand; the tree was byte-identical to baseline before Verify's
+     one fix.
+  9. **DEVIATION — HARNESS EDIT OUTSIDE THE TASK SPEC, kept because it closes a live FALSE GREEN in
+     the M0 acceptance signal itself.** The task spec said *"no edit to `tools/run_tests.sh`"*; the
+     Tests stage edited it anyway, and Verify **re-measured the bug independently rather than
+     trusting the report**. Both of the runner's guards fed `grep -q` through a pipe
+     (`printf '%s' "$OUT" | grep -q …`). **`grep -q` exits the instant it matches**, the upstream
+     `printf` then dies of SIGPIPE, and `set -o pipefail` reports the **whole pipeline as 141 even
+     though the pattern DID match**. Below ~64 KB (one pipe buffer) the writer finishes first and the
+     bug is invisible; this task's output is **89 KB**, which crossed the threshold. Both guards
+     inverted: the coverage guard reported all 11 on-disk scripts as missing (a false red, observed
+     live) and — far worse — **the load/parse refusal grep stopped firing on `Failed to load
+     script`**, i.e. exactly the false-green mode M0-T5 exists to prevent. Verify reproduced it
+     synthetically (`printf | grep -qF <early-match>` → 141 on a 200 KB payload; `grep -qF <<< …` →
+     0). Fix: feed both greps from a **here-string**, which has no writer process to kill. The diff
+     is **strengthening-only** under SETUP-5 — every pinned guard string and every regex alternative
+     is byte-identical, the anti-weakening test is untouched, and the change to
+     `tests/unit/test_run_tests_harness.gd` is purely **additive** (one new regression test,
+     `test_runner_never_feeds_grep_q_through_a_pipe`, which pins the property by shape: no `grep -q`
+     in the runner may be fed by a pipe). `tools/verify_harness.sh` re-proves the refusal fires live
+     on this 89 KB run (Phases C and D both red). **Kept.**
+  10. **DEVIATION — THE IMPLEMENT STAGE EDITED A TESTS-STAGE FILE**, normally off-limits.
+     `tests/unit/test_map_generator.gd`, function
+     `test_the_shipped_params_file_layout_is_line_addressable`, changed
+     `line.contains('"%s"' % key)` to `line.strip_edges().begins_with('"%s":' % key)`. Verify checked
+     the claim mechanically instead of accepting it: on the shipped JSON the unanchored predicate
+     yields **3** hits for the top-level key `"id"` (lines 2, 3 and 4 — every `map_sizes` and `bands`
+     entry carries a **nested** `"id"`) against an asserted 1, so the original assertion was
+     **structurally unsatisfiable** by any data file honouring the mandated one-line-per-top-level-
+     group layout (M0-T2 item 7) that the test's own `PARAMS_LINES` fixture embodies. The anchored
+     form is **not weaker**: a top-level key that is absent, duplicated, or not at line start still
+     fails. **Accepted.**
+  11. **§13.6 CLAUSES RE-CHECKED RATHER THAN ASSUMED.** *Constants read from data, not code*: **MET
+     and mechanically enforced** — neither `.gd` file contains `24|32|40|1801|3169|4921` (regex-
+     scanned on comment-stripped source), the §4.1 radii and the §4.4 30/40/30 shares and the 85
+     mid-rim split all live in `data/mapgen/concentric_bowl.json`, and property P10 mutates the params
+     **in text** and asserts the generator's output changes accordingly, so a shadowing code literal
+     would be caught rather than merely forbidden. This task reads **zero** §12.1 constants and
+     `data/ruleset.json` gained **no** key — the mapgen file is a different schema with its own
+     loader. *Events emitted for every state change*: **VACUOUS, and stated explicitly in both file
+     headers rather than left unaddressed** — this slice mutates no `GameState` and touches no
+     `EventBus`, so there is no state change to emit an event for (no `Command`/`validate`/`apply`
+     surface exists yet to violate). **Goldens: NONE re-recorded — none exist yet**, and per
+     resolution (Q) none is created here.
+  12. **SCOPE HELD (§13.4).** Deliberately **not** written: terrain **type** assignment or the §4.2
+     palette (70% Soft Dirt / 20% Hard Rock, 55% Hard Rock / 15% Granite, granite-dominant Core) —
+     that is M1-T5; veins, Fungal Groves, chasms, rivers, Ruins, lairs, the Ancient Throne, player
+     spawns; **any RNG**; `GameState.hash()`, FNV or any golden file; the renderer, camera rig or hex
+     picking; `GameState`, any `Command`, any concrete `Event` subclass; any new key in
+     `data/ruleset.json`; any edit to `scripts/core/los.gd` or `scripts/core/hex_math.gd` (M1-T3
+     resolution (H) means the generator **binds closures** over `HexMap` when a caller needs LOS —
+     `los.gd` never changes); any `addons/` change; any edit to `docs/GAME_DESIGN.md`.
+  13. **NON-BLOCKING OBSERVATIONS RECORDED FOR M1-T5** (no action taken, no test affected).
+     (a) In `_validate_map_sizes`/`_validate_bands`, an entry with a bad id but a valid radius/share
+     appends to one parallel array and not the other; this is unobservable today because every such
+     path also records a `RulesError` and any error discards the whole params set (resolution (P)),
+     but it is a latent trap if the composition slice ever reads the arrays **before** checking
+     `errors`. (b) `_validate_terraces` accepts an empty `terraces` array and a table whose innermost
+     `from_share_pct` is not 0; neither is reachable from the shipped data or any P9 fixture, and
+     neither is required by the spec.
+  14. **STAGE-BOUNDARY NOTE**, the same call M0-T5 item (i) / M1-T2 item 9 / M1-T3 item 17 record:
+     the task spec's `files_expected` listed `docs/PROGRESS.md` and `docs/decisions.md` alongside the
+     code, and Implement correctly did **not** touch either — both are **Land**-stage artefacts (this
+     entry and the tracker update).
+- **Why:** §4.4 gives shares of a radius and one prose sentence about a descending bowl; it gives no
+  rounding convention, no per-hex formula and no rim split, so the generator could not be written at
+  all without closing those silences — and closing them in **integer cross-multiplication** rather
+  than percentage division is what keeps §11.1's byte-identical headless determinism true and keeps
+  `integer_division` out of the file entirely. (N)'s strict `>` against (M)'s `<=` is recorded at
+  length because it is a one-token slip that is **invisible everywhere except at exact-multiple
+  radii**, and probe P1 measured exactly that. (O) is recorded because the canonical order it fixes
+  is what the project's **first golden** will hash next task: getting it wrong later is a golden
+  re-record, which §13.6 makes a logged event forever. Item 9 is recorded at length because a
+  harness bug that inverts the load/parse refusal is strictly worse than any game bug this loop can
+  produce — it is the mechanism by which a red tree reports green — and it was found only because the
+  suite finally grew past one pipe buffer.
+- **GDD section affected:** §4.1 (its map-size and elevation tables **transcribed verbatim into
+  data**, not code — **no numeric table value moved, no cell edited**; the radii are cross-checked
+  against `HexMath.hex_count_for_radius(r) == 3r(r+1)+1` → 1,801 / 3,169 / 4,921, and the six
+  literals are mechanically confirmed **absent** from both new `.gd` files); §4.4 (the band table and
+  the descending-terraced-bowl sentence **implemented**; its silences resolved under §13.4 as (M),
+  (N) and the 85% mid-rim split — the printed 30/40/30 shares are unchanged and now live in
+  `data/mapgen/concentric_bowl.json`, which §4.4 line 238 is the mandate for); §11.1 (engine-free
+  determinism re-scanned: pure `RefCounted`, no `Node`/`SceneTree`/singleton/`get_tree`/`Engine.`/
+  `Time.`/`OS.`, **no `randi()`/`randf()` at all**, no wall-clock, no float in the rules, no
+  `Dictionary` in `HexMap` and none iterated in `MapGenerator` — parallel typed arrays only);
+  §11.2 (`scripts/sim/hex_map.gd` and `scripts/sim/map_generator.gd`, flat alongside
+  `rules_loader.gd`; new `data/mapgen/` directory created as §4.4 mandates); §11.3 (typing gate green
+  over **19** files; every public function carries its `## §4.1`/`## §4.4` doc comment; the public
+  surfaces are **exactly** the six + `radius` and eight + `errors` members the scans enumerate, so a
+  missing **or extra** member fails; the `float` token appears only inside the private
+  `_is_integral`/`_as_int` JSON-decode helpers, the narrowed S1 exception this task sanctions and the
+  scan enforces by tracking the enclosing function name); §12.6 (its
+  `"generator": "mapgen/concentric_bowl.json"` reference honoured — one data-driven generator class,
+  the bowl variant as a data file); §13.2 (tier-1 property sweeps: range, monotonicity, radial
+  symmetry, endpoints, partition, determinism, canonical order, totality, load contract, data-driven
+  proof); §13.4 (procedure exercised: five silences resolved (M)–(Q), nothing stalled); §13.6
+  (definition of done **MET** — tests green headless, typing gate clean, constants read from data and
+  proven so by mutation, no events to emit, no golden to re-record); **§14 M1 row — STILL OPEN and
+  NOT met. Exactly ONE of its three acceptance criteria passes: *"LOS property tests"* (M1-T3).
+  *"Golden mapgen test (seed ⇒ terrain hash)"* remains unmet — the bowl's band/elevation skeleton now
+  exists but there is no terrain **type** assignment, no seeded composition and no golden file;
+  *"60 fps on Medium map greybox"* remains unmet — no renderer, camera rig or greybox scene exists.
+  Of the five M1 deliverables, `HexMath` (both slices) and `Los` are complete and the concentric-bowl
+  generator is **partial** (slice 1 of 2); the chunked MultiMesh renderer, camera rig and hex picking
+  are not started.** Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit accompanies
+  this entry, because no numeric table value changed.**

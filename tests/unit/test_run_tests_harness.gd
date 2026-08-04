@@ -181,6 +181,47 @@ func test_runner_refuses_load_and_parse_diagnostics() -> void:
 		)
 
 
+## §13.1/§14 M0 clause (a) — THE SIGPIPE REGRESSION GUARD, added at M1-T4 after the bug fired live.
+##
+## `grep -q` exits the instant it matches. When its input arrives through a pipe from `printf`,
+## that write end dies of SIGPIPE, and `set -o pipefail` then reports the WHOLE pipeline as 141 —
+## even though the pattern DID match. Below roughly 64 KB of output (one pipe buffer) the writer
+## finishes before grep exits and the bug is invisible; above it, both guards in the runner
+## inverted: the refusal grep STOPPED FIRING on `Failed to load script` (a FALSE GREEN, the exact
+## failure mode M0-T5 exists to prevent) and the coverage guard reported every file on disk as
+## missing (a false red). Measured live at M1-T4 on an 89 KB run, and reproduced synthetically:
+## `printf '%s' "$BIG" | grep -qF <early-match>` returns 141 while a here-string returns 0.
+##
+## The fix is to feed both greps from a here-string, which has no writer process to kill. This
+## test pins it by shape rather than by wording: no `grep -q` in the runner may be fed by a pipe.
+func test_runner_never_feeds_grep_q_through_a_pipe() -> void:
+	var runner: String = _read_tool(RUN_TESTS_PATH)
+	var offenders: Array[String] = []
+	for raw_line: String in runner.split("\n"):
+		var line: String = raw_line.strip_edges()
+		if line.begins_with("#"):
+			continue
+		var grep_at: int = line.find("grep -q")
+		if grep_at == -1:
+			continue
+		# Only a `|` BEFORE the grep is a shell pipe; a `|` after it is alternation inside the
+		# pattern, which is exactly what the runner's refusal set is built from.
+		if line.substr(0, grep_at).contains("|"):
+			offenders.append(line.substr(0, grep_at) + "grep -q...")
+	assert_eq(
+		offenders.size(),
+		0,
+		"§13.1/§14 M0: `grep -q` must never read from a pipe in run_tests.sh — SIGPIPE plus "
+		+ "`-o pipefail` turns a MATCH into pipeline status 141, which silently disables the "
+		+ "load/parse refusal guard on any run larger than one pipe buffer. Use a here-string. "
+		+ "Offenders: %s" % [str(offenders)]
+	)
+	assert_true(
+		runner.contains("<<<"),
+		"§13.1/§14 M0: the runner's greps must read from a here-string (`<<<`), the SIGPIPE-free form"
+	)
+
+
 ## CLAUDE.md ("this script is the harness contract — make it pass, do not weaken it") — the
 ## anti-weakening test. Every guard the runner already carried is re-asserted, so M0-T5's edit
 ## cannot silently trade an old guard for a new one. Each entry is documented at its constant.

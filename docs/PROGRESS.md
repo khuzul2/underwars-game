@@ -15,34 +15,33 @@ not-yet-committed.
   RulesLoader + `ruleset.json`, CI script, `decisions.md`), **both** §14 acceptance clauses pass
   headless, and the signal that reports clause (a) is itself proven against the false-green mode
   M0-T4 measured. **M1 is NOT done:** its §14 row lists five deliverables (HexMath, concentric-bowl
-  generator, chunked MultiMesh renderer, camera rig, hex picking) and M1-T1/M1-T2/M1-T3 delivered
-  **HexMath (both slices) and `Los`** — the generator, renderer, camera rig and hex picking are all
-  still missing. **Exactly ONE of the three §14 M1 acceptance criteria now passes** — *"LOS property
-  tests"* (M1-T3, green headless). *"Golden mapgen test (seed ⇒ terrain hash)"* and *"60 fps on
-  Medium map greybox"* remain unmet: no generator, no golden file, no renderer/camera/greybox exists.
-- **Next task:** **M1-T4 — the concentric-bowl map generator (§4.4)** in `scripts/sim/` (or
-  `scripts/core/`, decide at Orient against §11.2), the first system that owns *terrain*: hex types
-  (§4.2), elevation 0–3 (§4.1) and the Rim/Mid/Deep banding. It is the task that must (a) introduce
-  the map/terrain representation `Los` deliberately did **not** invent (resolution (H) — `Los` takes
-  two `Callable`s, so the generator is free to pick any shape and bind closures over it), (b) put the
-  §4.1 map radii (Small 24 / Medium 32 / Large 40) into `data/mapgen/*.json` as **content, not code**
-  (M1-T1 item 4 drew that line and the source scans enforce it), and (c) record the **project's first
-  golden** (seed ⇒ terrain hash), after which §13.6's re-record-only-with-a-logged-reason rule is
-  live forever. **It is almost certainly larger than the ≤ ~300 LOC house rule allows — split it at
-  Orient** (a natural first slice: the seeded band/elevation assignment over a radius, with the
-  golden deferred to the slice that finishes terrain). Continue the decisions.md lettering at **(M)**
-  — M1-T3 ended at (L).
-- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 9 / Tests 129 /
-  **Passing 129** / Failing 0 / Asserts 1308; `bash tools/typecheck.sh` exits 0 over 15 files;
+  generator, chunked MultiMesh renderer, camera rig, hex picking); M1-T1/M1-T2/M1-T3 delivered
+  **HexMath (both slices) and `Los`**, and M1-T4 delivered **slice 1 of the generator** (`HexMap` +
+  the §4.4 band/elevation bowl) — terrain **types**, the seeded composition, the renderer, camera rig
+  and hex picking are all still missing. **Exactly ONE of the three §14 M1 acceptance criteria passes
+  — re-checked against the §14 row (line 1097) this iteration** — *"LOS property tests"* (M1-T3,
+  green headless). *"Golden mapgen test (seed ⇒ terrain hash)"* and *"60 fps on Medium map greybox"*
+  remain unmet: no terrain-type assignment, no seeded composition, **no golden file exists at all**,
+  and no renderer/camera/greybox exists.
+- **Next task:** **M1-T5 — generator slice 2: terrain-type composition by seeded RNG + the PROJECT'S
+  FIRST GOLDEN** (§4.2 palette over §4.4's bands, hashed as *seed ⇒ terrain hash*). Slice 1 landed
+  the container and the deterministic bowl; slice 2 adds the §4.2 hex-type palette per band (70% Soft
+  Dirt / 20% Hard Rock in the Rim, 55% Hard Rock / 15% Granite in the Mantle, granite-dominant Core —
+  read §4.2 for the authoritative rows), the **first RNG in the sim** (seeded, through `state.rng`,
+  never `randi()`), and `tests/golden/`'s first file. From the moment that golden lands, §13.6's
+  re-record-only-with-a-logged-reason-in-the-same-commit rule is live **forever**. Continue the
+  decisions.md lettering at **(R)** — M1-T4 ended at (Q).
+- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 11 / Tests 183 /
+  **Passing 183** / Failing 0 / Asserts 1879; `bash tools/typecheck.sh` exits 0 over 19 files;
   `bash tools/ci.sh` exits 0; `bash tools/verify_harness.sh` exits 0 across all four phases with the
-  tree left clean (all re-measured at Land, 2026-08-04, M1-T3).
+  tree left clean (all re-measured at Land, 2026-08-04, M1-T4).
 
 ## Milestone tracker
 
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
-| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 and M1-T3 landed 2026-08-04) | **1 of 3 §14 M1 criteria met, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **NOT met**, no generator and no golden file exist (the project's first golden); (b) *60 fps on Medium map greybox*: **NOT met**, no renderer, camera rig or greybox scene exists; (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is therefore NOT marked done.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`) **and `Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)). Still to build: concentric-bowl generator (§4.4) + its golden, chunked MultiMesh renderer, camera rig, hex picking. |
+| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2, M1-T3 and M1-T4 landed 2026-08-04) | **1 of 3 §14 M1 criteria met, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **NOT met**, the §4.4 band/elevation bowl now exists (M1-T4) but there is no terrain-**type** assignment, no seeded composition and **no golden file at all**; (b) *60 fps on Medium map greybox*: **NOT met**, no renderer, camera rig or greybox scene exists; (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is therefore NOT marked done.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator PARTIAL — slice 1 of 2** (M1-T4, `scripts/sim/hex_map.gd` + `scripts/sim/map_generator.gd` + `data/mapgen/concentric_bowl.json` — the elevation-only hex container with its pinned canonical order, and the §4.4 band/terrace rules as pure integer cross-multiplication, resolutions (M)–(Q); **no RNG, no terrain type, no golden — all deferred to M1-T5**). Still to build: generator slice 2 (§4.2 palette + seeded composition) **and the project's first golden**, chunked MultiMesh renderer, camera rig, hex picking. |
 | M2 Dig & Economy | not started | — |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
@@ -71,48 +70,97 @@ not-yet-committed.
 | 2026-08-04 | M1-T2 | HexMath slice 2: exact-integer hex lines, rings and ranges (tests stage; landed RED) | superseded → landed | WIP(blocked) M1-T2: HexMath slice 2: exact-integer hex lines, rings and ranges |
 | 2026-08-04 | M1-T2 | HexMath slice 2: exact-integer hex lines, rings and ranges (**resumed at Implement; blocker cleared**) | landed | M1-T2: HexMath slice 2: exact-integer hex lines, rings and ranges |
 | 2026-08-04 | M1-T3 | Los: hex line-of-sight blocking predicate over injected terrain (**meets the §14 M1 "LOS property tests" criterion**) | landed | M1-T3: Los: hex line-of-sight blocking predicate over injected terrain |
+| 2026-08-04 | M1-T4 | HexMap plus the concentric-bowl band and elevation pass (generator slice 1) | landed | M1-T4: HexMap plus the concentric-bowl band and elevation pass (generator slice 1) |
 
 ## Notes for the next iteration
 
-- **Pick up: M1-T4 = the concentric-bowl map generator (§4.4) — the first system that owns
-  *terrain*.** M1-T3 is finished and the tree is green; nothing is carried over. Read §4.4 (bowl
-  bands), §4.2 (hex types + dig table) and §4.1 (elevation 0–3, map radii) before speccing, and read
-  decisions.md M1-T1 (A)/(B), M1-T2 (C)–(G) and M1-T3 (H)–(L) — the generator is the first caller of
-  all three layers.
-  - **SPLIT IT AT ORIENT.** This deliverable is far larger than the ≤ ~300 LOC house rule allows
-    (terrain representation + seeded banding + elevation + resource/vein placement + the golden). A
-    natural first slice: the terrain representation plus the seeded band/elevation assignment over a
-    radius, with the golden deferred to the slice that finishes terrain. Do only the first slice.
-  - **It must introduce the map/terrain representation `Los` deliberately did NOT invent.**
-    Resolution (H) means `Los` consumes two `Callable`s, so the generator is free to choose any
-    shape (a typed `Map`/`Terrain` object, parallel `PackedInt32Array`s keyed by a stable hex index,
-    …) and bind closures over it — `los.gd` never changes. Pick the simplest thing that is
-    deterministic and hashable, because the **golden hashes it**.
-  - **The §4.1 map radii are CONTENT, not code:** Small 24 (1,801 hexes), Medium 32 (3,169), Large 40
-    (4,921) belong in `data/mapgen/*.json` (§13.6 + M1-T1 item 4). Source scans in
-    `test_hex_math.gd` and `test_los.gd` already forbid the literals `24|32|40|1801|3169|4921` in
-    those two files; the generator must read them, never re-type them. `hex_count_for_radius(r) ==
-    3r(r+1)+1` cross-checks the parenthesised counts.
+- **Pick up: M1-T5 = generator slice 2 — §4.2 terrain-type composition by seeded RNG, plus the
+  PROJECT'S FIRST GOLDEN.** M1-T4 is finished and the tree is green; nothing is carried over. Read
+  §4.2 (the hex-type table and its per-band percentages), §4.4 (the bowl's bands, now implemented),
+  §11.1 (`state.rng`, stable-ID iteration order) and §13.6 (golden discipline) before speccing, and
+  read decisions.md M1-T4 **(M)–(Q)** — slice 2 extends exactly those.
+  - **This slice introduces the FIRST RNG IN THE SIM.** It must be seeded and reached through
+    `state.rng` — **never** `randi()`/`randf()`, never wall-clock, never `Dictionary.keys()` order.
+    Resolution (Q) deliberately carved **no** RNG exception into `map_generator.gd`'s S2 engine-free
+    source scan, so slice 2 must **amend that scan with a logged reason** (permitting the seeded call
+    shape only), never delete it. Draw rolls in the pinned canonical order (`r` ascending, then `q`)
+    so the sequence is reproducible.
   - **This is the PROJECT'S FIRST GOLDEN** (§14 M1 criterion (a), *seed ⇒ terrain hash*). Get the
-    seeded generation deterministic **first** — `state.rng` only, never `randi()`, stable-ID
-    iteration order, integer math, no `Dictionary.keys()` ordering dependence — because a golden
-    recorded over a nondeterministic generator is worse than none. From the moment it lands, §13.6's
-    "re-record only with a logged reason in the same commit" applies forever.
-  - **Write the five source scans for every new file.** They are per-file and inherit nothing:
-    `test_hex_math.gd` covers `hex_math.gd` only, `test_los.gd` covers `los.gd` only. Copy the shape
-    (read raw source, strip comment lines, then scan): no float literal (regex `\.[0-9]`) and no
-    `float` token; no `randi(` / `randf(` / `extends Node` / `SceneTree` / `get_tree` / `Engine.` /
-    `Time.` / `OS.`; no map-size literal; a `## §<section>` doc comment on every public function plus
-    an explicit list of the expected public members (so a missing one fails rather than passing
-    vacuously); purity via `get_class()`, **never** `is Node` (statically impossible — parse-errors;
-    decisions.md M0-T2 item 11 / M0-T5 item (a)). The generator will legitimately need `randf`-free
-    seeded RNG through `state.rng`, so state the scan's exception explicitly rather than dropping it.
-  - Continue the decisions.md lettering at **(M)** — M1-T3 ended at (L).
-  `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd`, `core/event.gd` +
-  `core/event_bus.gd`, `core/hex_math.gd` and `core/los.gd`, and nothing else, deliberately (§13.4:
-  invent nothing ahead of its milestone). No GameState, Command, generator, renderer or map code
-  exists yet, and **no concrete `Event` subclass exists** — those belong to the milestones that emit
-  them. M1 is the first milestone allowed to add hex/map code and the first to record a **golden**.
+    seeded composition deterministic **first**, then record. `tests/golden/` is currently empty by
+    design; from the moment the first file lands, §13.6's *"re-record only with a logged reason in
+    the same commit"* applies **forever**. The thing it hashes is `HexMap` in its canonical order —
+    already pinned by test at M1-T4 precisely so the golden cannot be built on a drifting order.
+  - **The §4.2 percentages are CONTENT.** They belong in `data/mapgen/concentric_bowl.json` (a new
+    top-level key, keeping the one-line-per-top-level-group layout that makes error lines meaningful)
+    or a sibling under `data/mapgen/`, **never** as `.gd` literals — and prove it the way M1-T4 did,
+    with a mutate-the-params-in-text test (property P10), not merely with a forbidding regex.
+  - **`HexMap` gains its terrain-type field here** (see its contract note below): slice 1 stores
+    elevation only, on purpose. Add the type array the same way — one `PackedInt32Array`, no
+    `Dictionary`, no band array (band stays derivable from distance and is therefore not state).
+  - **Write the five source scans fresh for any new file.** They are per-file and inherit nothing
+    (`test_hex_map.gd` covers `hex_map.gd` only, and so on). Copy the shape from
+    `tests/unit/test_map_generator.gd`: read raw source, **strip comment lines first** (load-bearing
+    — doc blocks contain `§4.1`, which the no-float regex would otherwise hit), then scan for: no
+    float literal; no `randi(`/`randf(`/`extends Node`/`SceneTree`/`get_tree`/`Engine.`/`Time.`/`OS.`;
+    no map-size literal `24|32|40|1801|3169|4921`; a `## §<section>` doc comment on every public
+    function **plus an explicit expected public-member list** (so a missing **or extra** member fails
+    rather than passing vacuously); purity via `get_class()`, **never** `is Node` (statically
+    impossible — parse-errors and silently un-collects the whole file; decisions.md M0-T2 item 11 /
+    M0-T5 item (a)).
+  - Continue the decisions.md lettering at **(R)** — M1-T4 ended at (Q).
+  `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd` + `sim/hex_map.gd` +
+  `sim/map_generator.gd`, `core/event.gd` + `core/event_bus.gd`, `core/hex_math.gd` and
+  `core/los.gd`, and nothing else, deliberately (§13.4: invent nothing ahead of its milestone). No
+  GameState, Command, renderer, terrain-type palette, vein, feature or spawn code exists yet, and
+  **no concrete `Event` subclass exists** — those belong to the milestones that emit them.
+- **`HexMap` + `MapGenerator` contract (`scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`,
+  `data/mapgen/concentric_bowl.json` — slice 1 COMPLETE as of M1-T4; read decisions.md M1-T4 (M)–(Q)
+  before extending them).** Both are `class_name … extends RefCounted`, **instantiable** (unlike
+  `HexMath`/`Los`, which are all-static). Public surfaces are **exact and mechanically scanned** — a
+  missing *or extra* member fails: `HexMap` = `radius` + `hex_count`, `is_in_bounds`, `index_of`,
+  `hexes`, `get_elevation`, `set_elevation`; `MapGenerator` = `errors` + `load_params_text`,
+  `load_params_file`, `radius_for_size`, `band_count`, `band_id`, `band_index_at`, `elevation_at`,
+  `generate`.
+  - **(O) `HexMap` storage and CANONICAL ORDER — the golden hashes this, so do not touch it
+    casually.** One `PackedInt32Array` over the axial bounding square, index
+    `(r + radius) * (2 * radius + 1) + (q + radius)`; **no `Dictionary` anywhere**. Membership is
+    `HexMath.distance(Vector2i.ZERO, hex) <= radius`, never a second bounds formula. Canonical order
+    is **`r` ascending `-R..+R`, then `q` ascending within each `r`**, and `index_of` is strictly
+    increasing along it (that assertion is what catches a q/r-swapped index — proven live by probe).
+    `hexes()` returns a **fresh** `Array[Vector2i]` every call (M1-T2 trap 1, now re-pinned in its
+    third file). Every accessor is **total**: off-disc `get_elevation` → `-1`, `index_of` → `-1`,
+    `set_elevation` → silent no-op, `is_in_bounds` → false; negative radius → `hex_count() == 0` and
+    empty `hexes()`. **Slice 1 stores ELEVATION ONLY**, deliberately.
+  - **(M) band rule / (N) terrace rule — both pure integer CROSS-MULTIPLICATION, no division, so
+    neither file carries `@warning_ignore("integer_division")` (a scan forbids the string).**
+    `band_index_at(d,R)` = last (innermost) `k` with `d*100 <= outer_pct[k]*R`, else 0, where
+    `outer_pct = [100, 70, 30]` summed from the innermost band. `elevation_at(d,R)` = elevation of
+    the **first** row with `d*100 > from_pct*R` (**STRICT `>`**), else the innermost row's elevation
+    **read from data**. **The strict `>` against the band rule's `<=` is the whole ballgame** — it is
+    what makes terrace and band boundaries coincide where a percentage is shared (30 and 70 appear in
+    both tables). `>=` misaligns them **only at exact-multiple radii** (R=40, d=12/28/34), which no
+    hand-picked mid-band case detects; probe P1 measured exactly that. Both functions **early-return
+    0 for `R <= 0`** — without it `band_index_at(0,0)` returns 2.
+  - **The `85` in the terrace table is NOT a GDD number** — it is the midpoint of the Safe Rim band
+    (`70 + 30/2`), realising §4.4's *"Rim 2–3"* as elevation 2 on the inner half and 3 on the outer.
+    It is **tunable content** in the JSON. Likewise the §4.1 radii 24/32/40: neither `.gd` file
+    contains `24|32|40|1801|3169|4921`, and a mutate-the-params-in-text test proves the numbers are
+    genuinely read from data rather than shadowed by a code literal.
+  - **(P) load contract.** Reuses the existing `RulesError`; **line 0 stays reserved for
+    missing/unreadable files** and is never emitted for a schema error; schema errors attribute to
+    the first line carrying the offending **top-level** key's JSON token, falling back to 1 — which
+    only works because `data/mapgen/concentric_bowl.json` follows `ruleset.json`'s **load-bearing**
+    layout (line 1 is a lone `{`; each top-level group on exactly one line). **Any error leaves the
+    generator UNCONFIGURED** — `radius_for_size` → 0, `generate` → empty map — including a failed load
+    after a successful one. Integral-vs-fractional checks live in the private `_is_integral`/`_as_int`
+    helpers because Godot 4.7 parses **every** JSON number as `TYPE_FLOAT` (M0-T2 item 8); that is
+    also the **narrowed** S1 float-scan exception (the `float` token is permitted only inside private
+    decode helpers, tracked by enclosing function name).
+  - **Two non-blocking traps recorded for slice 2** (decisions.md M1-T4 item 13): (a) in
+    `_validate_map_sizes`/`_validate_bands` a bad-id entry can append to one parallel array and not
+    the other — harmless today because any error discards the whole params set, but a real trap if
+    slice 2 ever reads the arrays **before** checking `errors`; (b) `_validate_terraces` accepts an
+    empty table and one whose innermost `from_share_pct` is not 0.
 - **`Los` contract (`scripts/core/los.gd`, COMPLETE as of M1-T3) — the §4.1 blocking predicate that
   fog of war (§4.3), AI targeting (§10), ranged combat/cover (§7) and the light rules (§4.7) will all
   key off; read decisions.md M1-T3 (H)–(L) before extending it.** `class_name Los extends
@@ -242,16 +290,16 @@ not-yet-committed.
   Errors surface as `RulesError` (`line` 1-based, `path` dotted, `message`,
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
-- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 9 /
-  Tests 129 / Passing 129 / Failing 0 / Asserts 1308** (re-measured at Land, 2026-08-04, M1-T3).
-  `Scripts 9` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
-  `bash tools/typecheck.sh` exits **0** over 15 files; `bash tools/ci.sh` and
-  `bash tools/verify_harness.sh` both exit 0. Prior green baselines, for reference: M1-T2's
-  8 / 106 / 106 / 1023, M1-T1's 8 / 86 / 86 / 835, and 7 / 62 / 62 / 473 at the close of M0 (the M0
-  tracker row above deliberately keeps that historical figure). **Expect these totals to RISE as you
-  add tests — they are enumerated, not hard-coded.**
+- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 11 /
+  Tests 183 / Passing 183 / Failing 0 / Asserts 1879** (re-measured at Land, 2026-08-04, M1-T4).
+  `Scripts 11` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
+  `bash tools/typecheck.sh` exits **0** over 19 files; `bash tools/ci.sh` and
+  `bash tools/verify_harness.sh` both exit 0. Prior green baselines, for reference: M1-T3's
+  9 / 129 / 129 / 1308, M1-T2's 8 / 106 / 106 / 1023, M1-T1's 8 / 86 / 86 / 835, and
+  7 / 62 / 62 / 473 at the close of M0 (the M0 tracker row above deliberately keeps that historical
+  figure). **Expect these totals to RISE as you add tests — they are enumerated, not hard-coded.**
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 on a healthy tree, and
-  `bash tools/typecheck.sh` → exit 0 over **15** project `.gd` files, and
+  `bash tools/typecheck.sh` → exit 0 over **19** project `.gd` files, and
   `bash tools/verify_harness.sh` → exit 0
   with **four** phases (A green · B failing canary · C syntactic parse error · D
   statically-impossible construct), each red phase non-zero *and naming its probe*, self-cleaning
@@ -269,6 +317,17 @@ not-yet-committed.
   in GUT's output AND GUT's own `Scripts` total to equal that count** (M0-T5). The
   `-ginclude_subdirs` flag stays load-bearing: dropping it collects **zero** scripts because no
   test sits directly in `res://tests` — verified by probe.
+  - **NEVER pipe `"$OUT"` into `grep -q` in this script (M1-T4, a live FALSE GREEN, now fixed and
+    pinned).** `grep -q` exits the instant it matches, the upstream `printf` dies of SIGPIPE, and
+    `set -o pipefail` then reports the **whole pipeline as 141 even though the pattern MATCHED**.
+    Below ~64 KB of output (one pipe buffer) the writer finishes first and the bug is invisible;
+    M1-T4's run was **89 KB** and crossed the threshold, which inverted **both** guards: the coverage
+    guard reported every on-disk script as missing (false red) and the load/parse refusal **stopped
+    firing on `Failed to load script`** — exactly the false-green mode M0-T5 exists to prevent. Both
+    greps now read from a **here-string** (`<<< "$OUT"`), which has no writer to kill; every guard
+    string and regex alternative is byte-identical, so the fix is strengthening-only under SETUP-5.
+    `tests/unit/test_run_tests_harness.gd::test_runner_never_feeds_grep_q_through_a_pipe` pins the
+    property by shape. **Any future guard you add must use a here-string too.**
 - **Naming rule your test files must obey, now mechanically enforced (§13.2):** GUT 9.7.1 only
   collects files named `test_*.gd` (`addons/gut/gut.gd:229`), recursively under `res://tests`. The
   M0-T5 disk enumeration uses that exact rule, so a `.gd` file under `tests/` **without** the
@@ -340,8 +399,18 @@ not-yet-committed.
   sweeps, not examples. When a §14 acceptance criterion names property tests, size the **production
   slice** to ≤ ~300 LOC and let the test file be as large as the criterion requires — do **not**
   ration assertions to hit a line count, and do not split a task merely because its suite is long.
-- **Golden discipline, first exercised in M1:** no golden file exists yet. When M1 records the
-  mapgen hash, §13.6 applies from that moment — a golden may be re-recorded **only** with a logged
-  reason in `decisions.md` in the *same commit*. Get the seeded generation deterministic first
-  (`state.rng` only, no `randi()`, stable iteration order, integer math), because a golden recorded
-  over a nondeterministic generator is worse than none.
+- **Golden discipline, due NEXT TASK:** `tests/golden/` is still empty — M1-T4 deliberately created
+  no golden (resolution (Q)), because a golden over a half-built generator would have to be
+  re-recorded the moment terrain types land, and every re-record is a logged event forever. **M1-T5
+  records the first one.** From that moment §13.6 applies: a golden may be re-recorded **only** with
+  a logged reason in `decisions.md` in the *same commit*. Get the seeded composition deterministic
+  first (`state.rng` only, no `randi()`, integer math), and hash `HexMap` in the **canonical order
+  M1-T4 already pinned** (`r` ascending, then `q`) — a golden recorded over a drifting order or a
+  nondeterministic generator is worse than none.
+- **Adversarial mutation probes are now standing practice at Verify** (M1-T1 item 8 → M1-T4 item 8,
+  four iterations running). Before declaring green, break the implementation on purpose — capture the
+  file md5, mutate, run, restore, re-verify byte-identical — and **record what went red**. A property
+  test that has never been observed failing is indistinguishable from one that cannot fail. M1-T4's
+  yield: the terrace `>` vs `>=` slip is invisible except at exact-multiple radii, and a q/r-swapped
+  canonical order is caught only by the `index_of`-monotonicity assertion — neither would have been
+  trusted on inspection alone.

@@ -46,7 +46,14 @@ printf '%s\n' "$OUT"
 # 3) Refuse GUT's silent-success states: exit 0 with zero tests executed, OR exit 0 while a
 #    test_*.gd script failed to load/parse (M0-T5 — strengthening only; the three original
 #    alternatives from docs/decisions.md SETUP-2 item 2 stay in the list forever).
-if printf '%s' "$OUT" | grep -qiE 'Nothing was run|does not exist|have not been imported|Failed to load script|Ignoring script'; then
+# NEVER pipe "$OUT" into `grep -q` (M1-T4, measured live): `grep -q` exits the instant it
+# matches, the upstream writer dies of SIGPIPE, and `-o pipefail` then makes the WHOLE pipeline
+# report 141 even though the pattern DID match. Below ~64 KB of output the writer finishes first
+# and the bug is invisible; above it the refusal here silently stops firing (a FALSE GREEN) and
+# the coverage guard below reports every file as missing (a false red). Both greps therefore read
+# from a here-string, which has no writer process to kill. Reproduced and re-verified at M1-T4
+# with an 89 KB run.
+if grep -qiE 'Nothing was run|does not exist|have not been imported|Failed to load script|Ignoring script' <<< "$OUT"; then
   echo "run_tests.sh: GUT reported a diagnostic meaning a test script did not run as written — failing (a green suite must actually run every collected test)" >&2
   exit 1
 fi
@@ -77,7 +84,8 @@ for f in "${DISK_SCRIPTS[@]}"; do
   REL="${f#"$ROOT"/}"
   REL="${REL//\\//}"
   RES_PATH="res://$REL"
-  if ! printf '%s' "$OUT" | grep -qF -- "$RES_PATH"; then
+  # Here-string, not `printf | grep -q` — see the SIGPIPE/pipefail note above.
+  if ! grep -qF -- "$RES_PATH" <<< "$OUT"; then
     MISSING+=("$RES_PATH")
   fi
 done
