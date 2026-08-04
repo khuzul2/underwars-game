@@ -2247,3 +2247,240 @@ continues at (AQ)**.
   four §9.1 limits were transcribed **verbatim** into content with nothing rounded or reinterpreted,
   and the three speeds, the edge margin, the light angle/energy and the frame budgets have **no
   printed GDD counterpart at all**.
+
+## 2026-08-04 — M1-T9 — `HexPicker`: ray-to-hex picking over elevation planes; resolutions (AQ)–(AT); landed GREEN; **CLOSES M1**
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 18 / Tests 425 /
+Passing 425 / Failing 0 / Asserts 5144** (the M1-T8 baseline was 17 / 388 / 388 / 0 / 4959 — all four
+totals rose, and no previously-landed test regressed); `bash tools/typecheck.sh` exits 0 over **32**
+files (was 30); `bash tools/ci.sh` exits 0 (PASS); `bash tools/verify_harness.sh` exits 0 across all
+four phases (A green · B failing canary · C syntactic parse error · D statically-impossible
+construct) with the tree left clean. All ran headless through the `tools/` scripts on the repo-local
+pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3). `sim_smoke` (M7),
+`content_cli` (E4) and `balance_lab` (E5) were correctly **SKIPped, not failed**, per CLAUDE.md's
+applicability rule. `Scripts 18` equals the number of `test_*.gd` on disk, so the M0-T5 enumeration
+guard is satisfied and nothing was silently un-collected. **No golden was re-recorded**
+(`goldens_rerecorded: false`); `tests/golden/mapgen_concentric_bowl_small_seed1337.json`
+(`content_hash 0xcad24923`), `data/render/greybox.json`, `data/render/camera.json`,
+`data/render/terrain_palette.json`, `project.godot`, `scenes/Main.tscn` and every file under
+`scripts/core/`, `scripts/sim/` and the rest of `scripts/render/` are **byte-untouched**: `git diff
+--stat HEAD` was **empty** at Verify and the only paths in the commit are the four new ones
+(`scripts/render/hex_picker.gd` + `.uid`, `tests/unit/test_hex_picker.gd` + `.uid`) plus these two
+docs. No existing test file was edited by the Implement stage.
+
+**THIS TASK CLOSES M1.** All **five** §14 M1 deliverables are now built — HexMath (M1-T1/M1-T2),
+the concentric-bowl generator (M1-T4/M1-T5), the chunked MultiMesh renderer (M1-T6/M1-T7), the
+camera rig (M1-T8) and **hex picking (this task)** — and all **three** §14 M1 acceptance criteria
+were already MET (golden mapgen hash, M1-T5; 60 fps on Medium greybox, M1-T8, measured windowed;
+LOS property tests, M1-T3). A milestone closes only when its deliverable list **and** its acceptance
+criteria are both satisfied; as of this commit both are.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §4.1
+line 171 (*"Flat-top hexes, axial coordinates (q, r); cube coordinates for algorithms"*), line 173
+(*"Elevation: integer 0–3 per hex"*), line 174 (Small 24 / 1,801 · Medium 32 / 3,169 · Large 40 /
+4,921), §1.2 line 41 (*"Hex scale ≈ 15–20 m (cosmetic only)"*), §9.1 line 666 (*"tap-select,
+drag-box multi-select (mobile-friendly hit targets)"*), §10 line 680, §11.1–§11.3, §13.2, §13.4,
+§13.6 and §14 line 1097 (the M1 row, whose deliverable list **ends in *"hex picking"***).
+`docs/decisions.md` was re-scanned end to end: **no logged override touches §4.1, §9.1, §1.2 or
+§10**, so the printed text governs unamended; the binding prior resolutions are (C)/(C2) (M1-T2,
+rounding), (H)/(L) (M1-T3, injected Callables), (V)–(Z) (M1-T6), (AA)–(AH) (M1-T7) and (AI)–(AP)
+(M1-T8), and the lettering genuinely ended at **(AP)**, so this entry continues at **(AQ)**.
+
+The resolutions below are §13.4 decisions closing §9.1's silence about picking *geometry*, **not**
+deviations from a printed value. Their lettering is cross-referenced by the header doc block of
+`scripts/render/hex_picker.gd` and by `tests/unit/test_hex_picker.gd` — **keep it stable; M2
+continues at (AU)**.
+
+- **What changed / was decided:**
+  1. **(AQ) THE PICK RULE.** §9.1 names *tap-select* but legislates **no picking geometry**, and
+     elevation (§4.1 line 173: integer 0–3 per hex) makes the naive *"project the ray onto y = 0"*
+     answer **wrong** on a bowl whose hexes sit at four different heights. **Resolution: pick against
+     the FLAT TOP PLANE OF EACH ELEVATION LEVEL, scanned from `top_elevation` DOWN to 0.** At each
+     level the ray is intersected with the horizontal plane `y = level * elevation_step_m`, the hex
+     under that intersection is computed with `world_to_hex`, and the level is **accepted iff that
+     hex's own elevation equals the level**. **First acceptance wins**; no acceptance is an explicit
+     **"no hex"** (an empty Array). This is **exact** for the greybox's flat prism tops and is the
+     simplest interpretation consistent with §1.1. **Honest caveat recorded with the rule:** it is a
+     **top-face test, not a full ray/prism intersection**, so a ray grazing a tall column's **side**
+     can resolve to the hex behind it. Acceptable at greybox fidelity; revisitable when M4's
+     selection needs more. **Top-first is load-bearing, not cosmetic** — the suite's
+     hand-computed discriminator (one ray, two maps, two different correct answers) fails a
+     bottom-first scan, and Verify's probe P1 confirmed it red on demand.
+  2. **(AR) THE INVERSE FORMULA AND THE ROUNDING.** `world_to_hex` is the **exact algebraic
+     inverse** of (W)'s placement: `q_frac = world.x / (1.5 * R)`,
+     `r_frac = world.z / (SQRT_3 * R) - 0.5 * q_frac`, with `R = hex_width_m() / 2.0` and
+     **`world.y` IGNORED** (proven by the 868-case round-trip sweep over the radius-8 disc × the four
+     elevations). The fractional cube is scaled to integers by a named const
+     **`PICK_SCALE: int = 1000000`** and handed to **`HexMath.cube_round_scaled`**, **REUSING**
+     (C)/(C2)'s round-half-up + largest-diff cascade + repair-`z` tie-break rather than inventing a
+     second rounding — the *"never re-implement the line walk"* precedent from `Los`; a source scan
+     requires the literal `HexMath.cube_round_scaled(` and permits the string `cube_round` **nowhere
+     else**. Cube packing is HexMath's `Vector3i(nq, -(nq + nr), nr)`. `PICK_SCALE` and the file's
+     `SQRT_3` are **algorithmic/mathematical** constants on the SQRT_3 / RADIAL_SEGMENTS /
+     DEGREES_PER_TURN / FNV precedent (M1-T5 item 7), **not** §13.6 content. **§4.1's 0–3 elevation
+     range stays a CALLER parameter (`top_elevation`) and a TEST fixture** — deliberately not a
+     literal in `hex_picker.gd` and not a new data file (the M1-T1 item 4 precedent for the map
+     radii); the first production caller (M4/M8 selection) supplies it from data it already owns.
+     `hex_width_m` and `elevation_step_m` are read **through `HexLayout`**, never re-derived, and
+     that is proven **by mutation of the params TEXT** (width 18 → 36 moves the inverse; step 3 → 5
+     moves the accepted plane from y = 6 to y = 10 and the answer with it), not by a token scan —
+     `data/render/greybox.json` stays byte-untouched because `test_hex_layout.gd` asserts it
+     byte-for-byte.
+  3. **(AS) TOTALITY (the (B)/(L)/(AB) spirit — no crash, no engine error, no assert abort
+     headless).** Unconfigured means **null layout OR a layout whose load failed**, detected via
+     `_layout.hex_width_m() <= 0.0`; then `pick` is **EMPTY** and `world_to_hex` is
+     **`Vector2i.ZERO`**, including after `set_layout(null)` following a good layout.
+     **`ray_plane_point` is pure geometry and stays LAYOUT-INDEPENDENT** — it is the one member that
+     still answers on a never-configured picker (the choice the task spec preferred; the
+     implementation took it). A ray with `direction.y == 0.0`, with `t < 0` (pointing away) or of
+     zero length is **no hit**; **`t == 0.0` IS a hit**; the direction **need not be normalised**.
+     An **INVALID `elevation_at` Callable** falls back to a **FLAT pick at y = 0** — the M1-T3 **(L)**
+     spirit: *the picker compares, it does not police the map* — and that fallback is checked
+     **after** the unconfigured guard, so an unconfigured picker never flat-picks.
+     **`top_elevation < 0` clamps to 0** (only the ground plane is scanned, still gated by the
+     elevation match); a `top_elevation` larger than any real elevation is harmless (the extra planes
+     simply never match). Off-map is expressed by the caller's own sentinel: with
+     `HexMap.get_elevation`'s (O) off-disc `-1`, no level ever matches and the pick is an explicit
+     "no hex".
+  4. **(AT) WHERE PICKING LIVES — a NEW pure `RefCounted`, `scripts/render/hex_picker.gd`
+     (`class_name HexPicker extends RefCounted`), NOT a method on `CameraRig`.** Three reasons, in
+     order of weight: a method needing a live `Camera3D` is **not sweepable headless**, and M1-T6
+     **(Z)** means an untestable pick is an **unpinnable** pick; `CameraRig`'s public surface is
+     **exactly** `errors` + 19 functions and its scan fails on an **extra** member, so picking there
+     would force a same-commit edit of `tests/unit/test_camera_rig.gd`; and §11.2's render list
+     (*MapRenderer, UnitView, LightOverlay, CameraRig*) is **illustrative**, like §11.1's event list
+     (M0-T3 (f)) — a screen→world helper is a renderer/UI concern and belongs there. Public surface
+     is **EXACTLY five functions and ZERO public vars** — `set_layout`, `world_to_hex`,
+     `ray_plane_point`, `pick`, `pick_from_screen` — and a scan fails on a **missing OR extra**
+     member; there is deliberately **no `errors` var and no second loader** (this file loads no
+     document, and `RulesError` is asserted **absent**). "Maybe" is an **Array of 0 or 1 elements**
+     (the `Los.blocking_hexes` precedent) — no magic `Vector2i` sentinel — and every returned Array
+     is **FRESH per call** (M1-T2 trap 1, now re-pinned in its fifth file). Privates: `_layout`,
+     `_is_configured`.
+  5. **THE OPTIONAL §G BEHAVIOURAL SMOKE TEST OF `pick_from_screen` WAS DROPPED, and why.**
+     Measured at the Tests stage on the pinned repo-local binary: a `Camera3D` added under the
+     headless root reports **`get_viewport() == null`**, so `project_ray_origin` /
+     `project_ray_normal` **cannot be exercised headless at all** (the M1-T6 **(Z)** family).
+     `pick_from_screen` is therefore pinned by its **null-camera guard** (an explicit "no hex", never
+     a crash) plus a **required-token scan** for `project_ray_origin(` / `project_ray_normal(`, in
+     the same shape as M1-T8 item 8's `"Basis(Vector3.UP"` guard. It is thin and delegating by
+     construction — it computes nothing itself. Recorded per the task spec's instruction to state
+     which was done; §13.4 says never stall on it.
+  6. **DEVIATION (test strength, not rules) — TWO PROPERTIES THE SUITE CLAIMED TO PIN WERE NOT
+     LOAD-BEARING AS AUTHORED, AND WERE STRENGTHENED AT VERIFY. The tests were fixed, never the
+     code: the shipped implementation was correct in both cases.** (a) The **fresh-Array-per-call**
+     contract for `ray_plane_point` was checked only by *pollution does not survive*, which
+     Verify's probe **P11** proved a **self-clearing member cache** passes — every caller receiving
+     the **same aliased Array** while the suite stayed 37/37 green. Fixed by adding the
+     **`is_same(first, twin)` identity assertion** the repo's own precedent already uses
+     (`test_hex_math.gd::_assert_fresh_pair`, `test_los.gd` P7), plus a surviving-twin check; the
+     same identity assertion was added on the `pick` side for symmetry (its alias was caught only
+     *incidentally*, by the scan-order discriminator happening to hold two results at once — probe
+     P12). (b) **(AR)'s claim of an *exact* algebraic inverse** was not pinned against the file's
+     **private copy of `SQRT_3`**: probes **P13/P14** drifted it by 1 % (and by 0.1 %) and **moved no
+     hex** inside the entire radius-8 × 4-elevation round-trip sweep, staying green. Fixed by
+     asserting **`HexPicker.SQRT_3 == HexLayout.SQRT_3 ==` the suite's independently transcribed
+     value**. Both mutants re-probe **RED** after the fix. Asserts rose 5139 → 5144; the control run
+     stayed 37/37. **This is a test-strength note only — no rule value moved and no GDD cell moved.**
+  7. **THIRTEEN ADVERSARIAL MUTATION PROBES RUN LIVE AT VERIFY** (the M1-T1 item 8 → M1-T8 item 15
+     standard, nine iterations running), with the file md5 captured before and re-verified
+     **byte-identical** after every restore (final md5 `bc0486acee122635d906c1dfdedaa1ed`). **Eleven
+     went red on demand:** (P1) bottom-first scan order; (P2) dropping the `- 0.5 * q_frac` term;
+     (P4) treating `t == 0.0` as a miss; (P5) hard-coding `3.0` for the elevation step; (P6)
+     refusing instead of flat-picking on an invalid Callable; (P7b) letting `world.y` leak into
+     `world_to_hex` at full weight; (P8) removing the negative-`top_elevation` clamp; (P9) removing
+     the unconfigured guard in `pick`; (P10) dropping the elevation-match gate; (P12) a shared array
+     cache in `pick`; plus (P3) substituting `roundi` for the cube repair. **Two survived** — P11
+     and P13/P14 — and are item 6 above.
+  8. **THE TESTS-STAGE STUB CONVENTION WAS USED AGAIN AND WORKED** (the M1-T2 item 10 / M1-T3
+     precedent). `hex_picker.gd` was first written as a deliberately-wrong stub under an explicit
+     banner so the suite would **parse** — a call to a missing method is a GDScript parse error that
+     silently un-collects the whole file (M0-T5 item (a)'s false green). RED was measured at
+     **Scripts 18 / Tests 425 / Passing 403 / Failing 22**, every failure a value/behaviour mismatch
+     or a *"is MISSING the required token"* scan failure inside `test_hex_picker.gd` alone; the
+     Tests stage additionally swapped in a reference implementation to prove **425/425 achievable**,
+     then restored the stub **byte-identically** (md5 `98f0a16849132b758f7d0b1eebd899dd` before and
+     after), so no unreachable pin was handed downstream. The Implement stage replaced the five
+     bodies and deleted the banner; nothing else.
+  9. **HARNESS TRAP RE-HONOURED** (the standing rule from the golden entry): no failure message in
+     the new suite contains `Nothing was run` / `does not exist` / `have not been imported` /
+     `Failed to load script` / `Ignoring script` — `tools/run_tests.sh` greps the **whole run
+     output** for those five phrases. The suite says **"is MISSING"**. The harness was **not**
+     weakened.
+  10. **FLOAT TOLERANCE — Vector3 components are 32-bit** (re-measured this iteration: ~6.4e-7 of
+     error at magnitude 62), so every world-space comparison in the suite uses **1e-4** (the (AI)
+     precedent), not the 1e-6 the task plan suggested. **Hex identity comparisons are exact
+     `Vector2i` equality** — the nearest rounding boundary is half a hex (~4.5 m) away, so no
+     tolerance is needed or wanted there. The **no-float** source scan is deliberately **NOT**
+     applied to this file: geometry is not a §11.1 rule surface (M1-T6 **(Y)**), and picking mutates
+     no `GameState`.
+  11. **§13.6 DEFINITION OF DONE, clause by clause.** *Tests green headless*: yes, 425/425, exit 0.
+     *Static typing clean*: `bash tools/typecheck.sh` exit 0 over **32** files at the M0-T4 gate's
+     46 warnings-as-errors, including the typed loop var `for level: int in range(top, -1, -1)`.
+     *Constants read from data, not code*: `hex_width_m` / `elevation_step_m` come **through
+     `HexLayout`** and are proven data-driven **by mutation**; the only consts in the file are the
+     mathematical `SQRT_3` and the algorithmic `PICK_SCALE`. *Events emitted for every state change*:
+     **VACUOUS and stated rather than assumed** — this task mutates **no** `GameState`, constructs
+     **no** `Command` and subscribes to **no** `EventBus`; §11.1's boundary is held from the
+     renderer side, and terrain reaches the picker **only** through the injected `elevation_at`
+     Callable (the M1-T3 **(H)** precedent), so `HexMap`/`MapGenerator`/`Rng` are **forbidden
+     tokens** here and binding a closure over a real map at M4 needs **zero** change to this file.
+     *Goldens re-recorded only with a logged reason*: **NONE re-recorded**. *Relevant GDD table cell
+     updated if numbers moved*: **no number moved** — see the GDD-sections line below.
+  12. **STAGE-BOUNDARY NOTE**, the same call M0-T5 item (i) → M1-T6 item 11 → M1-T8 item 16 record:
+     `docs/PROGRESS.md` and `docs/decisions.md` are **Land**-stage artefacts, and the Tests,
+     Implement and Verify stages correctly left both untouched — the implementer's report flags this
+     explicitly, and it is not a deviation from anything. Verify's only fixes were the three
+     test-strength additions in item 6; **the implementation was not touched to reach green**, and
+     no source scan in `scripts/core/` or `scripts/sim/` was weakened.
+
+- **Why:** §14 M1's deliverable list ends in *"hex picking"* and §9.1 is the only prose that mentions
+  selection at all — but it prints **limits and interactions, never geometry**, so a picker could not
+  be written without closing that silence. Elevation is what makes the silence load-bearing: on a
+  four-terrace bowl the naive ground-plane projection is not merely imprecise, it is **wrong**, and
+  (AQ) is recorded at length because *scan order* — not the intersection maths — is the part that
+  decides the answer, and it is invisible to every test except a deliberately constructed
+  two-fixture discriminator. (AR) is recorded because the temptation to write a second rounding
+  helper next to `HexMath.cube_round_scaled` is exactly how (C)/(C2)'s round-half-up contract would
+  quietly fork; reuse is enforced by a scan, not by good intentions. (AS) is recorded because
+  totality has now been decided independently five times in this project ((B), (L), (Y), (AB),
+  (AS)) and the shapes must not drift. (AT) is recorded because *where a helper lives* had a real
+  testability consequence here, not merely a stylistic one. Item 6 is recorded because it is the
+  ninth consecutive iteration in which adversarial probing found something inspection did not — and
+  this time what it found was in the **tests**, which is the more uncomfortable and more valuable
+  half of the practice: **a property test that has never been observed failing is
+  indistinguishable from one that cannot fail.**
+
+- **GDD sections affected:** §4.1 (its *"Flat-top hexes, axial coordinates (q, r); cube coordinates
+  for algorithms"* now inverted as well as forward-mapped — (W) ⇄ (AR) — with the flat-top
+  orientation and the fixed neighbour order re-confirmed **unchanged**; its *"Elevation: integer 0–3
+  per hex"* used as the **scan range**, supplied by the caller as `top_elevation` and never
+  hard-coded; **no cell edited**). §9.1 (its *"tap-select, drag-box multi-select (mobile-friendly hit
+  targets)"* — the **picking half implemented**; **selection state, tap-select semantics, drag-box
+  multi-select, overlays, the north compass and the minimap deliberately NOT built** — M4/M8, §13.4;
+  **no cell edited**). §1.2 (its *"Hex scale ≈ 15–20 m"* still realised as the already-landed
+  `hex_width_m` 18, unmoved and re-read through data). §10 (the greybox's flat prism tops are what
+  make (AQ)'s top-face test **exact**; no shader, no renderer change, `MapRenderer` byte-untouched;
+  **no cell edited**). §11.1 (the layered boundary held: no `GameState`, no `Command`, no `EventBus`,
+  no sim class named, terrain injected as a `Callable`; `scripts/core/` and `scripts/sim/`
+  byte-untouched). §11.2 (`scripts/render/hex_picker.gd` created in the render tree, whose printed
+  file list is **illustrative** — the M0-T3 (f) precedent). §11.3 (typing gate green over **32**
+  files; every public function carries its `## §` doc comment; the public surface is **exactly** five
+  functions and **zero** public vars — a missing *or extra* member fails). §13.2 (one new tier-1 unit
+  suite: 37 tests / 1,260 lines, sections A–G — an 868-case round-trip sweep, a 366-pair
+  nearest-centre sweep, the hand-computed two-fixture scan-order discriminator, seven ray/plane
+  cases, six totality probes, two data-drivenness-by-mutation probes and eight freshly-written
+  comment-stripped source scans). §13.4 (procedure exercised: four silences resolved (AQ)–(AT),
+  nothing stalled, nothing invented ahead of its milestone). §13.6 (definition of done **MET**, every
+  clause re-checked in item 11; **no golden re-recorded**). **§14 M1 row — the milestone is now
+  DONE. All FIVE deliverables are built (HexMath, concentric-bowl generator, chunked MultiMesh
+  renderer, camera rig, hex picking) and ALL THREE acceptance criteria pass (*"Golden mapgen test
+  (seed ⇒ terrain hash)"* — M1-T5, green headless; *"60 fps on Medium map greybox"* — M1-T8,
+  measured windowed at 144/144/144 vsync-capped and ≥ 236 fps uncapped on 3,169 hexes / 65 chunks
+  with SDFGI off, per (Z) not headless-measurable; *"LOS property tests"* — M1-T3, green headless).**
+  Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit accompanies this entry,
+  because no numeric table value changed:** every value the suite pins is either transcribed
+  verbatim from a printed table (§4.1's elevation range and map sizes, used only as test fixtures and
+  forbidden tokens), already-landed content (`hex_width_m` 18, `elevation_step_m` 3) or **derived**
+  from them (R = 9.0, column pitch 13.5, row pitch 15.588457268119896), and §9.1 prints **no picking
+  geometry at all**.

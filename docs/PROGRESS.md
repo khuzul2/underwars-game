@@ -10,25 +10,27 @@ not-yet-committed.
 ## Current position
 
 - **Phase:** 1 (MVP, GDD §14)
-- **Milestone:** **M1 — World: IN PROGRESS** (opened by M1-T1). M0 — Bootstrap is **DONE** (closed
-  by M0-T5): every §14 M0 deliverable is built (Godot project, GUT wired, `run_tests.sh`, EventBus,
-  RulesLoader + `ruleset.json`, CI script, `decisions.md`), **both** §14 acceptance clauses pass
-  headless, and the signal that reports clause (a) is itself proven against the false-green mode
-  M0-T4 measured. **M1 is NOT done — but for the first time the reason is the DELIVERABLE list, not
-  the acceptance criteria.** Its §14 row (line 1097) lists five deliverables (HexMath, concentric-bowl
-  generator, chunked MultiMesh renderer, camera rig, hex picking); M1-T1/M1-T2/M1-T3 delivered
-  **HexMath (both slices) and `Los`**, M1-T4 + M1-T5 delivered the **concentric-bowl generator
-  COMPLETE** (`HexMap` + the §4.4 band/elevation bowl, then the seeded `Rng`, the §4.4 terrain-type
-  composition, `content_hash` and the first golden), M1-T6 + M1-T7 delivered the **chunked
-  MultiMesh renderer COMPLETE** (`HexLayout` — flat-top hex→world placement + the deterministic chunk
-  partition; then `MapRenderer` — the project's **first `Node`**: one `MultiMeshInstance3D` per chunk,
-  shared prism mesh + material, per-instance type/tint custom data and the dirty-chunk rebuild seam,
-  plus `data/render/terrain_palette.json`), and **M1-T8 delivered the camera rig COMPLETE** together
-  with the project's **first scene** (`scenes/Main.tscn`), `GreyboxBoot`, `data/render/camera.json`
-  and **THE MEASUREMENT**. Still missing: **hex picking (M1-T9) — the last M1 deliverable**.
-  **ALL THREE §14 M1 acceptance criteria now PASS — re-checked against the §14 row (line 1097) this
-  iteration** — *"Golden mapgen test (seed ⇒ terrain hash)"* (M1-T5, green headless), *"LOS property
-  tests"* (M1-T3, green headless) and, **as of M1-T8, *"60 fps on Medium map greybox"*: MET.**
+- **Milestone:** **M1 — World is DONE (closed 2026-08-04 by M1-T9).** M0 — Bootstrap is **DONE**
+  (closed by M0-T5): every §14 M0 deliverable is built (Godot project, GUT wired, `run_tests.sh`,
+  EventBus, RulesLoader + `ruleset.json`, CI script, `decisions.md`), **both** §14 acceptance clauses
+  pass headless, and the signal that reports clause (a) is itself proven against the false-green mode
+  M0-T4 measured. **M1 closes because BOTH halves are now satisfied — the deliverable list AND the
+  acceptance criteria** (a milestone closes only when both do). Its §14 row (line 1097) lists five
+  deliverables and **all five are built**: **HexMath** (M1-T1/M1-T2, both slices, plus `Los`), the
+  **concentric-bowl generator** (M1-T4 + M1-T5 — `HexMap` + the §4.4 band/elevation bowl, then the
+  seeded `Rng`, the §4.4 terrain-type composition, `content_hash` and the first golden), the
+  **chunked MultiMesh renderer** (M1-T6 + M1-T7 — `HexLayout`'s flat-top hex→world placement + the
+  deterministic chunk partition; then `MapRenderer`, the project's **first `Node`**: one
+  `MultiMeshInstance3D` per chunk, shared prism mesh + material, per-instance type/tint custom data
+  and the dirty-chunk rebuild seam, plus `data/render/terrain_palette.json`), the **camera rig**
+  (M1-T8, together with the project's **first scene** `scenes/Main.tscn`, `GreyboxBoot`,
+  `data/render/camera.json` and **THE MEASUREMENT**), and — **as of M1-T9 — hex picking**
+  (`scripts/render/hex_picker.gd`: the inverse of (W), a ray/plane intersector, the
+  elevation-layered top-down pick and one thin `Camera3D` adapter). **ALL THREE §14 M1 acceptance
+  criteria PASS — re-checked against the §14 row (line 1097) this iteration** — *"Golden mapgen test
+  (seed ⇒ terrain hash)"* (M1-T5, green headless), *"LOS property tests"* (M1-T3, green headless)
+  and *"60 fps on Medium map greybox"* (M1-T8, measured windowed — per (Z) it is not
+  headless-measurable at all).
 - **THE MEASUREMENT (M1-T8, decisions.md M1-T8 items in the header + (AO)) — logged, MET, and not
   re-openable by a later "optimisation" without a fresh number.** Windowed (per M1-T6 **(Z)** it is
   **not headless-measurable at all**), unattended, run twice on the repo-local pinned binary:
@@ -42,31 +44,32 @@ not-yet-committed.
   frustum, and with `hex_width_m` 18 the Medium map is ≈1150 m across, so the **whole** map cannot be
   framed inside §9.1's 60 m ceiling — the figure is honest for the view §9.1 permits, not for all 65
   chunks at once. The ceiling was **not** widened; the criterion was **not** reinterpreted.
-- **Next task:** **M1-T9 — hex picking (screen ray → hex), the LAST M1 deliverable; it CLOSES M1.**
-  §14 M1's deliverable list ends with *"hex picking"* and §9.1 names *"tap-select, drag-box
-  multi-select (mobile-friendly hit targets)"* — build **only the picking half** (screen point →
-  `Vector2i` hex, or "no hex"); **selection state, tap-select semantics and drag-box are M4/M8**
-  (§13.4). Read decisions.md **M1-T6 (V)–(Z)**, **M1-T7 (AA)–(AH)** and **M1-T8 (AI)–(AP)** first —
-  the inverse of **(W)**'s `hex_to_world` is the whole job, and **(AI)**'s camera frame (+Y up, ground
-  XZ, `looking_at`) is what a ray is cast in. Decide up front whether picking lives on `CameraRig`
-  (its public surface is **exactly** `errors` + 19 functions and a scan fails on an **extra** member,
-  so adding one means updating `tests/unit/test_camera_rig.gd`'s expected list **in the same commit**)
-  or in a new file — a new pure-`RefCounted` helper in `scripts/render/` is testable headless, which a
-  method needing a live `Camera3D` is **not**. Size it ≤ ~300 LOC. Continue the decisions.md lettering
-  at **(AQ)** — M1-T8 ended at (AP).
-- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 17 / Tests 388 /
-  **Passing 388** / Failing 0 / Asserts 4959; `bash tools/typecheck.sh` exits 0 over 30 files;
-  `bash tools/ci.sh` exits 0 (all three re-measured at Land, 2026-08-04, M1-T8); `bash
-  tools/verify_harness.sh` exits 0 across all four phases with the tree left clean (last re-run at
-  M1-T7 Verify).
+- **Next task:** **M2 — Dig & Economy, first slice (§14 + §5).** M1 is closed; work strictly in
+  milestone order. §14's M2 row lists *"Workers, Dig/Cancel commands, yields, vein nodes +
+  Extractors, stockpiles/income/upkeep, housing, Mining Zones v0"* against the acceptance criteria
+  *"Scripted 20-turn dig scenario matches expected stockpiles exactly; deficit-bleed test; zone
+  assigns nearest idle worker"* — far more than ≤ ~300 LOC, so **Orient must slice it**. M2 is where
+  `GameState` and the first `Command` are born (§11.1: every mutation flows through a Command with
+  `validate` / `apply`, and every state change emits an Event on the `EventBus`), so the first slice
+  should establish that spine rather than a feature. **M2's first task must ALSO add the missing
+  `dig_yields.artificial_granite` key** flagged in decisions.md M0-T2 item 10: §4.2's terrain table
+  gives Artificial Granite a dig yield of **+2 Stone** but the §12.1 excerpt's `dig_yields` object
+  omits the key, so `data/ruleset.json` mirrors the omission faithfully — adding it needs its own
+  dated decisions.md entry at that time. Continue the decisions.md lettering at **(AU)** — M1-T9
+  ended at (AT).
+- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 18 / Tests 425 /
+  **Passing 425** / Failing 0 / Asserts 5144; `bash tools/typecheck.sh` exits 0 over 32 files;
+  `bash tools/ci.sh` exits 0 (PASS); `bash tools/verify_harness.sh` exits 0 across all four phases
+  with the tree left clean (all four re-measured at Verify and re-confirmed at Land, 2026-08-04,
+  M1-T9).
 
 ## Milestone tracker
 
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
-| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 … M1-T8 landed 2026-08-04) | **ALL 3 of 3 §14 M1 acceptance criteria MET, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand; **untouched and still green after M1-T8**, which hashes nothing and moves neither `HexMap` storage nor the canonical order); (b) *60 fps on Medium map greybox*: **MET as of M1-T8** — measured **windowed** (per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all**: the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), unattended, **twice**, on `scenes/Main.tscn` at boot defaults — **hexes=3169** (Medium, radius 32) / **chunks=65** / **SDFGI off** / 1600×900 / auto-orbiting: **`fps_min=144.00 fps_avg=144.00 fps_max=144.00` in both vsync-capped runs (144 Hz panel), and 236 / 357 / 395 / 608 fps uncapped** on an i7-14700HX + RTX 4070 Laptop. Logged in full at decisions.md M1-T8 **with its caveat** (at §9.1's widest legal framing only 8–9 of the 65 chunks are in frustum; the whole ≈1150 m map cannot be framed inside §9.1's 60 m zoom ceiling, which was **not** widened); (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is STILL NOT marked done, and the reason is now the DELIVERABLE list, not the criteria: §14 M1 names five deliverables and *hex picking* (M1-T9) is not started.** A milestone closes only when its deliverables **and** its acceptance criteria are both satisfied. **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer COMPLETE, both slices** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests. M1-T7 slice 2 — `scripts/render/map_renderer.gd` + `data/render/terrain_palette.json`: the project's **first `Node`** (`class_name MapRenderer extends Node3D`), one `MultiMeshInstance3D` per chunk in canonical order, ONE shared hexagonal `CylinderMesh` + ONE shared `StandardMaterial3D` for the whole renderer, per-instance transforms and type/tint custom data written from `HexLayout`/`HexMap`, the in-place dirty-chunk rebuild seam M2's dig will call, and the (AF) palette load contract reusing `RulesError`; resolutions (AA)–(AH), 43 tests, six adversarial probes). **camera rig COMPLETE, plus the project's first scene** (M1-T8 — `scripts/render/camera_rig.gd` + `data/render/camera.json`: the §9.1 orbiting rig with yaw **wrapping** into [0,360), pitch/zoom **clamping inclusively** to the printed 15–80° / 8–60 m bands read from data, the derived `looking_at` transform, camera-relative ground pan, the (AL) `RulesError` load contract and a thin WASD/Q-E/R-F/wheel/edge-pan input layer; `scripts/render/greybox_boot.gd` + `scenes/Main.tscn` — the project's **FIRST scene**, `run/main_scene` now set, `WorldEnvironment` with **SDFGI explicitly off**, a lit `DirectionalLight3D`; and the **flat-top correction yaw** in `MapRenderer` that M1-T7 item 16 owed; resolutions (AI)–(AP), 67 tests, seven adversarial probes). Still to build: **hex picking (M1-T9)** — the last §14 M1 deliverable. |
-| M2 Dig & Economy | not started | — |
+| M1 World | **DONE** (opened 2026-08-04 by M1-T1; **closed 2026-08-04 by M1-T9**) | **ALL 3 of 3 §14 M1 acceptance criteria MET *and* ALL 5 of 5 §14 M1 deliverables BUILT — both re-checked against the §14 row (line 1097) at Land this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand; **untouched and still green after M1-T8**, which hashes nothing and moves neither `HexMap` storage nor the canonical order); (b) *60 fps on Medium map greybox*: **MET as of M1-T8** — measured **windowed** (per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all**: the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), unattended, **twice**, on `scenes/Main.tscn` at boot defaults — **hexes=3169** (Medium, radius 32) / **chunks=65** / **SDFGI off** / 1600×900 / auto-orbiting: **`fps_min=144.00 fps_avg=144.00 fps_max=144.00` in both vsync-capped runs (144 Hz panel), and 236 / 357 / 395 / 608 fps uncapped** on an i7-14700HX + RTX 4070 Laptop. Logged in full at decisions.md M1-T8 **with its caveat** (at §9.1's widest legal framing only 8–9 of the 65 chunks are in frustum; the whole ≈1150 m map cannot be framed inside §9.1's 60 m zoom ceiling, which was **not** widened); (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is MARKED DONE as of M1-T9: §14 M1's five deliverables are all built and its three acceptance criteria all pass headless** (criterion (b) measured windowed, because per **(Z)** it is not headless-measurable at all). A milestone closes only when its deliverables **and** its acceptance criteria are both satisfied — as of this commit both are. **Deliverables built: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer COMPLETE, both slices** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests. M1-T7 slice 2 — `scripts/render/map_renderer.gd` + `data/render/terrain_palette.json`: the project's **first `Node`** (`class_name MapRenderer extends Node3D`), one `MultiMeshInstance3D` per chunk in canonical order, ONE shared hexagonal `CylinderMesh` + ONE shared `StandardMaterial3D` for the whole renderer, per-instance transforms and type/tint custom data written from `HexLayout`/`HexMap`, the in-place dirty-chunk rebuild seam M2's dig will call, and the (AF) palette load contract reusing `RulesError`; resolutions (AA)–(AH), 43 tests, six adversarial probes). **camera rig COMPLETE, plus the project's first scene** (M1-T8 — `scripts/render/camera_rig.gd` + `data/render/camera.json`: the §9.1 orbiting rig with yaw **wrapping** into [0,360), pitch/zoom **clamping inclusively** to the printed 15–80° / 8–60 m bands read from data, the derived `looking_at` transform, camera-relative ground pan, the (AL) `RulesError` load contract and a thin WASD/Q-E/R-F/wheel/edge-pan input layer; `scripts/render/greybox_boot.gd` + `scenes/Main.tscn` — the project's **FIRST scene**, `run/main_scene` now set, `WorldEnvironment` with **SDFGI explicitly off**, a lit `DirectionalLight3D`; and the **flat-top correction yaw** in `MapRenderer` that M1-T7 item 16 owed; resolutions (AI)–(AP), 67 tests, seven adversarial probes). **hex picking COMPLETE — the last deliverable, and the one that CLOSES M1** (M1-T9 — `scripts/render/hex_picker.gd`, a pure `RefCounted` with **exactly five public functions and zero public vars**: the (AR) algebraic inverse of (W) reusing `HexMath.cube_round_scaled` for the cube repair, the (AS) ray/plane intersector, the (AQ) elevation-layered pick scanned **top-down** with an explicit empty-Array "no hex", and the thin `pick_from_screen` `Camera3D` adapter; resolutions (AQ)–(AT), 37 tests, thirteen adversarial probes of which **two found weak TESTS rather than weak code** and were fixed at Verify). |
+| M2 Dig & Economy | **next** | — (§14 row: *"Scripted 20-turn dig scenario matches expected stockpiles exactly; deficit-bleed test; zone assigns nearest idle worker"*) |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
 | M5 Living World | not started | — |
@@ -99,32 +102,36 @@ not-yet-committed.
 | 2026-08-04 | M1-T6 | HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) (**opens `scripts/render/`; half of the chunked-MultiMesh-renderer deliverable**) | landed | M1-T6: HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) |
 | 2026-08-04 | M1-T7 | MapRenderer: chunked MultiMesh nodes, type/tint custom data and dirty-chunk rebuilds (renderer slice 2) (**the project's first `Node`; completes the chunked-MultiMesh-renderer deliverable; re-slices the scene/camera/60-fps measurement to M1-T8 and picking to M1-T9**) | landed | M1-T7: MapRenderer: chunked MultiMesh nodes, type/tint custom data and dirty-chunk rebuilds (renderer slice 2) |
 | 2026-08-04 | M1-T8 | Greybox Main scene, CameraRig and the Medium-map 60 fps measurement (**the project's first `.tscn`; completes the camera-rig deliverable; MEETS the last §14 M1 acceptance criterion — 144/144/144 vsync-capped, ≥236 fps uncapped on 3,169 hexes / 65 chunks with SDFGI off; also resolves M1-T7's open flat-top `CylinderMesh` yaw**) | landed | M1-T8: Greybox Main scene, CameraRig and the Medium-map 60 fps measurement |
+| 2026-08-04 | M1-T9 | HexPicker: ray-to-hex picking over elevation planes (**completes the LAST §14 M1 deliverable and CLOSES M1 — all five deliverables built, all three acceptance criteria met**) | landed | M1-T9: HexPicker: ray-to-hex picking over elevation planes (closes M1) |
 
 ## Notes for the next iteration
 
-- **Pick up: M1-T9 = HEX PICKING — the LAST §14 M1 deliverable, and the task that CLOSES M1.** M1-T8
-  is finished, the tree is green, and **nothing is carried over**: the three M1-T7 carry-overs are all
-  discharged (the `.tscn` gives `MapRenderer` **zero** children and a test pins it; `set_layout()` is
-  called **exactly once** and a test pins that too; and the open `CylinderMesh` orientation item is
-  **resolved by measurement** — see the flat-top bullet below). **All three §14 M1 acceptance criteria
-  now pass**, so M1-T9 is the only thing standing between the project and a closed milestone.
-  - **What M1-T9 is:** the inverse of **(W)** — screen point → ray → ground/prism intersection →
-    `Vector2i` hex, or an explicit "no hex". §14 M1's deliverable list ends with *"hex picking"*;
-    §9.1 adds *"tap-select, drag-box multi-select (mobile-friendly hit targets)"* — build **only the
-    picking half**. **Selection state, tap-select semantics, drag-box, overlays, the compass and the
-    minimap are M4/M8** (§13.4: invent nothing ahead of its milestone). Elevation makes the naive
-    "project onto y=0" answer wrong on a bowl whose hexes sit at four different heights — decide and
-    **log** how that is resolved (the simplest interpretation consistent with §1.1 wins; never stall).
-  - **Where it lives is a real design choice, decide it at Orient.** `CameraRig`'s public surface is
-    **exactly** `errors` + 19 functions and its scan fails on an **extra** member, so putting picking
-    there means updating `tests/unit/test_camera_rig.gd`'s expected list **in the same commit**. A new
-    pure-`RefCounted` helper in `scripts/render/` (the `HexLayout` shape) is **fully testable
-    headless**; a method that needs a live `Camera3D` and a viewport is **not** — and (Z) means an
-    untestable pick is an unpinnable pick. Prefer the shape that can be swept.
-  - **Read first:** decisions.md **M1-T6 (V)–(Z)**, **M1-T7 (AA)–(AH)** and **M1-T8 (AI)–(AP)** in
-    full, plus §11.1's renderer/UI boundary and §11.2's directory layout. **(AI)** fixes the frame a
-    ray is cast in (+Y up, ground XZ, north −Z, `looking_at`, yaw about +Y); **(W)** fixes
-    `hex_to_world`; **(AP)** fixes the prism's yaw.
+- **Pick up: M2 — DIG & ECONOMY. M1 IS CLOSED** (M1-T9 landed the last deliverable; all five §14 M1
+  deliverables are built and all three acceptance criteria pass). The tree is green and **nothing is
+  carried over from M1**: every M1-T7 and M1-T8 carry-over is discharged, and M1-T9 left no open item.
+  - **§14's M2 row is far bigger than one task — Orient MUST slice it.** Deliverables: *"Workers,
+    Dig/Cancel commands, yields, vein nodes + Extractors, stockpiles/income/upkeep, housing, Mining
+    Zones v0"*; acceptance: *"Scripted 20-turn dig scenario matches expected stockpiles exactly;
+    deficit-bleed test; zone assigns nearest idle worker"*. Read **§5** (economy) and **§4.2** (the
+    terrain/dig-yield table) alongside §14 before spec'ing the first slice.
+  - **M2 is where the §11.1 SPINE is born, and that is the right first slice.** There is still **no
+    `GameState`, no `Command`, no concrete `Event` subclass** — deliberately (§13.4). §11.1 is
+    binding: *every* `GameState` mutation flows through a Command with `validate(state) -> Error?`
+    and `apply(state) -> Array[Event]`, a match is fully described by `(seed, command_log)`, and the
+    single seeded RNG is **`state.rng`** — an `Rng` (M1-T5), never a second generator and never one
+    constructed inside a rule. Build the spine first; hang the first dig on it second.
+  - **M2's first task MUST also add the missing `dig_yields.artificial_granite` key** (decisions.md
+    M0-T2 item 10, and the "Forward gap" bullet below): §4.2 gives Artificial Granite **+2 Stone**
+    but the §12.1 excerpt's `dig_yields` object omits the key, so `data/ruleset.json` mirrors the
+    omission faithfully and the schema does not require it. Adding it needs its **own dated
+    decisions.md entry** — and if the fix moves a printed §12.1 cell, Land edits that cell in the
+    same commit.
+  - **Read first:** decisions.md **M1-T2 (C)/(C2)** (the rounding contract every later rule inherits),
+    **M1-T3 (H)–(L)** (injected `Callable`s — the pattern that binds a real map to a rule without
+    changing the rule), **M1-T4/M1-T5 (M)–(U)** (the map, its canonical order, the golden and the
+    single `Rng`), and the **GOLDEN contract** bullet below, because M2's *"scripted 20-turn dig
+    scenario"* is the project's second golden-shaped artefact.
+  - **Continue the decisions.md lettering at (AU)** — M1-T9 ended at (AT).
   - **(Z) STILL GOVERNS EVERY RENDERER ASSERTION.** Under `--headless` the dummy renderer **does not
     store MultiMesh instance data** — `set_instance_transform` → `get_instance_transform` returns the
     **identity**, `set_instance_custom_data` reads back `(0,0,0,1)`, and `MultiMesh.buffer` is **size
@@ -136,7 +143,8 @@ not-yet-committed.
     it through a MultiMesh. **M1-T8 added the corollary: a `.tscn` may be `load()`ed and
     `instantiate()`d in a unit test but must NEVER be added to the tree** — `_ready()` would generate
     a 3,169-hex map inside the suite. Wrap the instance in `autofree`.
-  - **Size it: ≤ ~300 LOC.** Picking is one task and it closes M1.
+  - **Size it: ≤ ~300 LOC of PRODUCTION change** (the M1-T3 precedent below; let the suite be as large
+    as the acceptance criterion requires — M1-T9's was 1,260 lines against 153 lines of picker).
   - **Write the source scans fresh for any new file.** They are per-file and inherit nothing. For a
     **sim/core** file copy `tests/unit/test_rng.gd`/`test_map_generator.gd`; for a **renderer** file
     the examples are `tests/unit/test_hex_layout.gd` (a pure `RefCounted` renderer helper),
@@ -152,16 +160,68 @@ not-yet-committed.
     public-member list** so a missing **or extra** member fails; and class-kind via `get_class()`,
     **never** `is Node` (a statically-decidable construct parse-errors and silently un-collects the
     whole file; decisions.md M0-T2 item 11 / M0-T5 item (a)) — for a Node file `get_class()` **names**
-    the expected class instead of forbidding Node-ness.
-  - Continue the decisions.md lettering at **(AQ)** — M1-T8 ended at (AP).
+    the expected class instead of forbidding Node-ness. `tests/unit/test_hex_picker.gd` (M1-T9) is the
+    newest worked example of the pure-`RefCounted` renderer shape, and adds one rule of its own: where
+    a file has **no loader**, assert `RulesError` **ABSENT** so a second loader cannot grow there.
   `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd` + `sim/hex_map.gd` +
   `sim/map_generator.gd`, `core/event.gd` + `core/event_bus.gd`, `core/hex_math.gd`, `core/los.gd`,
-  `core/rng.gd`, `render/hex_layout.gd`, `render/map_renderer.gd`, `render/camera_rig.gd` and
-  `render/greybox_boot.gd`, and nothing else, deliberately (§13.4: invent nothing ahead of its
-  milestone). `scenes/` holds exactly one file, `Main.tscn`. **There is still no shader** (§10 line
-  679's Lit/Dark tint is M3), **no picking**, **no `GameState`, `Command`, vein node, cave feature,
-  river, lair or spawn code**, and no concrete `Event` subclass. Those belong to the milestones that
-  emit them.
+  `core/rng.gd`, `render/hex_layout.gd`, `render/map_renderer.gd`, `render/camera_rig.gd`,
+  `render/greybox_boot.gd` and `render/hex_picker.gd`, and nothing else, deliberately (§13.4: invent
+  nothing ahead of its milestone). `scenes/` holds exactly one file, `Main.tscn`. **There is still no
+  shader** (§10 line 679's Lit/Dark tint is M3), **no selection state** (picking exists as of M1-T9,
+  but tap-select/drag-box are M4/M8), **no `GameState`, `Command`, vein node, cave feature, river,
+  lair or spawn code**, and no concrete `Event` subclass. Those belong to the milestones that emit
+  them — **M2 is where `GameState`, the first `Command` and the first real `Event` arrive.**
+- **`HexPicker` contract (`scripts/render/hex_picker.gd`, NEW at M1-T9 — read decisions.md M1-T9
+  (AQ)–(AT) before touching it; it is the LAST M1 deliverable and it loads NO data).** `class_name
+  HexPicker extends RefCounted` — a pure `RefCounted` like `HexLayout`: it holds no Node, subscribes
+  to no `EventBus`, mutates no state and names **no** sim class (`HexMap`/`MapGenerator`/`Rng` are
+  forbidden tokens in its scan). **Terrain reaches it ONLY through the injected `elevation_at`
+  `Callable`** (the M1-T3 **(H)** precedent), so binding a closure over a real `HexMap` at M4 needs
+  **zero change to this file**.
+  - Public surface is **EXACTLY five functions and ZERO public vars** — `set_layout`, `world_to_hex`,
+    `ray_plane_point`, `pick`, `pick_from_screen` — and the scan fails on a **missing OR extra**
+    member. **There is deliberately no `errors` var**: this file loads no document, and the scan
+    asserts `RulesError` is **ABSENT** so a second loader cannot grow here. Privates: `_layout`,
+    `_is_configured`.
+  - **(AQ) THE PICK RULE — scan elevation planes TOP-DOWN, and the order is load-bearing.**
+    `pick(origin, direction, elevation_at, top_elevation)` intersects the ray with the flat top plane
+    `y = level * elevation_step_m` for `level` from `maxi(top_elevation, 0)` **down to 0**, and
+    accepts a level **iff the hex under that intersection actually has that elevation**; first
+    acceptance wins; **an empty Array is an explicit "no hex"** (the `Los.blocking_hexes` precedent —
+    no magic `Vector2i` sentinel). **A bottom-first scan passes almost everything** — only the
+    hand-computed two-fixture discriminator (one ray, two maps, two different correct answers) catches
+    it. **Honest caveat that travels with the rule:** it is a **top-face test, not a full ray/prism
+    intersection**, so a ray grazing a tall column's **side** can resolve to the hex behind it.
+    Acceptable at greybox fidelity; revisit when M4's selection needs more.
+  - **(AR) `world_to_hex` is the exact algebraic INVERSE of (W)** — `q_frac = world.x / (1.5*R)`,
+    `r_frac = world.z / (SQRT_3*R) - 0.5*q_frac`, **`world.y` IGNORED** — and it **REUSES
+    `HexMath.cube_round_scaled`** (via the named `PICK_SCALE = 1000000`) for the cube repair. **Never
+    re-implement the rounding**: the scan permits the string `cube_round` **only** inside
+    `HexMath.cube_round_scaled(`, exactly as `Los` guards `HexMath.line(`. `SQRT_3` and `PICK_SCALE`
+    are mathematical/algorithmic consts (the M1-T5 item 7 precedent), **not** §13.6 violations —
+    but a test now pins `HexPicker.SQRT_3 == HexLayout.SQRT_3`, because a 1 % drift in the private
+    copy moved **no hex** in the entire 868-case round-trip sweep.
+  - **§4.1's 0–3 elevation range is a CALLER PARAMETER (`top_elevation`), not a literal and not a new
+    data file** (the M1-T1 item 4 precedent for the map radii). `hex_width_m`/`elevation_step_m` are
+    read **through `HexLayout`** and proven data-driven **by mutation of the params TEXT** —
+    `data/render/greybox.json` stays byte-untouched because `test_hex_layout.gd` asserts it
+    byte-for-byte.
+  - **(AS) totality:** unconfigured (null layout **or** one whose load failed, i.e.
+    `hex_width_m() <= 0.0`) ⇒ `pick` empty and `world_to_hex` `Vector2i.ZERO`; **`ray_plane_point` is
+    layout-INDEPENDENT pure geometry and still answers**; `direction.y == 0`, `t < 0` or a zero-length
+    ray ⇒ no hit; **`t == 0.0` IS a hit**; the direction need not be normalised; an **invalid
+    `elevation_at` ⇒ a FLAT pick at y = 0** (the (L) spirit — the picker compares, it does not police
+    the map), checked **after** the unconfigured guard; `top_elevation < 0` clamps to 0.
+  - **`pick_from_screen` is the ONLY engine-coupled member and is UNTESTABLE HEADLESS** — a `Camera3D`
+    added under the headless root reports **`get_viewport() == null`** (the (Z) family), so it is
+    pinned by its **null-camera guard** plus a **required-token scan** for `project_ray_origin(` /
+    `project_ray_normal(`, the same shape as M1-T8's `"Basis(Vector3.UP"` guard. **Never drop those
+    tokens.** Whether it *feels* right is unassessed, like the rig's input layer.
+  - **Every returned Array is FRESH per call**, pinned with `is_same()` **identity** assertions —
+    M1-T9's Verify measured that a *pollution-only* freshness check is passed by a **self-clearing
+    member cache**. Use the `test_hex_math.gd::_assert_fresh_pair` / `test_los.gd` P7 shape in every
+    future freshness test; the weaker form is not load-bearing.
 - **`CameraRig` + the greybox scene contract (`scripts/render/camera_rig.gd`,
   `scripts/render/greybox_boot.gd`, `data/render/camera.json`, `scenes/Main.tscn`, NEW at M1-T8 — read
   decisions.md M1-T8 (AI)–(AP) before touching any of them).**
@@ -594,18 +654,19 @@ not-yet-committed.
   Errors surface as `RulesError` (`line` 1-based, `path` dotted, `message`,
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
-- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 17 /
-  Tests 388 / Passing 388 / Failing 0 / Asserts 4959** (re-measured at Land, 2026-08-04, M1-T8).
-  `Scripts 17` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
-  `bash tools/typecheck.sh` exits **0** over 30 files; `bash tools/ci.sh` exits 0 (PASS with the
+- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 18 /
+  Tests 425 / Passing 425 / Failing 0 / Asserts 5144** (re-measured at Land, 2026-08-04, M1-T9).
+  `Scripts 18` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
+  `bash tools/typecheck.sh` exits **0** over 32 files; `bash tools/ci.sh` exits 0 (PASS with the
   three documented M7/E4/E5 skips) and `bash tools/verify_harness.sh` exits 0. Prior green baselines,
-  for reference: M1-T7's 15 / 321 / 321 / 3380, M1-T6's 14 / 278 / 278 / 2760, M1-T5's
+  for reference: M1-T8's 17 / 388 / 388 / 4959, M1-T7's 15 / 321 / 321 / 3380, M1-T6's
+  14 / 278 / 278 / 2760, M1-T5's
   13 / 234 / 234 / 2268, M1-T4's 11 / 183 / 183 / 1879, M1-T3's
   9 / 129 / 129 / 1308, M1-T2's 8 / 106 / 106 / 1023, M1-T1's 8 / 86 / 86 / 835, and
   7 / 62 / 62 / 473 at the close of M0 (the M0 tracker row above deliberately keeps that historical
   figure). **Expect these totals to RISE as you add tests — they are enumerated, not hard-coded.**
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 on a healthy tree, and
-  `bash tools/typecheck.sh` → exit 0 over **30** project `.gd` files, and
+  `bash tools/typecheck.sh` → exit 0 over **32** project `.gd` files, and
   `bash tools/verify_harness.sh` → exit 0
   with **four** phases (A green · B failing canary · C syntactic parse error · D
   statically-impossible construct), each red phase non-zero *and naming its probe*, self-cleaning
@@ -754,3 +815,14 @@ not-yet-committed.
   measurement printed a bogus `fps_min=1.00` — an **instrument** artefact, not a performance dip.
   **When a milestone criterion is only measurable outside the suite, budget time to LOOK at the
   output, and probe the instrument before trusting its number.**
+  **M1-T9's yield (thirteen probes; eleven red on demand, and — for the first time — TWO SURVIVORS
+  that were defects in the TESTS, not the code):** (i) a **self-clearing member cache** passes a
+  fresh-Array test that only checks *"pollution does not survive"* — every caller gets the **same
+  aliased Array** and the suite stays green; only an **`is_same()` identity** assertion catches it, so
+  use the `test_hex_math.gd::_assert_fresh_pair` / `test_los.gd` P7 shape and never the weaker one;
+  (ii) **a 1 % drift in a file's private copy of `SQRT_3` moved no hex** across an 868-case round-trip
+  sweep over the radius-8 disc × four elevations — a "round-trip proves the inverse is exact" claim is
+  **false** unless the constant itself is pinned (`HexPicker.SQRT_3 == HexLayout.SQRT_3`). Both were
+  fixed by **strengthening the tests, never the code** — the implementation was correct in both cases
+  — and both mutants re-probe red. The standing lesson sharpens: **probe the SUITE, not only the
+  implementation; a green mutant is a hole in the test, and Verify is where it must be found.**
