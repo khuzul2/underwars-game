@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "dig_turns": {"soft": 1, "hard": 2, "granite": 4, "artificial_granite": 3, "artificial_granite_owner": 1, "rubble": 1, "vein": 2, "mithril": 4},
+  "dig_yields": {"soft": {"food": 1}, "hard": {"stone": 2}, "granite": {"stone": 4}, "rubble": {"stone": 1}},
+  "vein_nodes": {"gold": {"lump": 25, "stock": 250, "rate": 10}, "iron": {"lump": 10, "stock": 120, "rate": 6}, "magestone": {"lump": 15, "stock": 150, "rate": 6}, "mithril": {"lump": 10, "stock": 60, "rate": 3}},
+  "combat": {"armor_factor": 10, "effective_armor_clamp": [0, 200], "counter_ratio": 0.75, "min_damage": 1},
+  "modifiers": {"elevation_per_level": 0.15, "elevation_max": 0.30, "dark_penalty": 0.30, "cover_arm": 2, "trench_arm": 2},
+  "light": {"brazier_radius": 2, "hq_radius": 3, "torch_radius": 1},
+  "structure": {"support_radius": 2, "stress_collapse_threshold": 3, "collapse_chance": 0.25, "collapse_damage": 120},
+  "noise": {"dig": 8, "blast": 16, "cave_cost": 1, "solid_cost": 2},
+  "wrath": {"mithril_per_turn": 1, "blast": 5, "wonder_start": 15, "wonder_done": 25, "throne_per_turn": 2, "decay": 1, "thresholds": [30, 60, 90], "reset": 25},
+  "upkeep_deficit_hp_pct": 0.10,
+  "housing": {"hq": 6},
+  "train_turns_by_tier": [1, 2, 3, 4],
+  "tech_cost_by_tier": [30, 60, 120, 240],
+  "victory": {"throne_hold_turns": 10, "wonder_survive_turns": 8, "turn_limit": 200}
+}
