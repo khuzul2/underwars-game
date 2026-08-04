@@ -387,3 +387,97 @@ test re-asserting all seven original guards), so the hardening cannot be silentl
   built and BOTH acceptance clauses MET headless, now proven against the false-green mode that
   reported clause (a). M0 is CLOSED by this commit.** Acceptance criterion text unchanged. **No
   numeric table value moved, so NO `docs/GAME_DESIGN.md` cell was edited in this commit.**
+
+## 2026-08-04 — M1-T1 — HexMath slice 1: two §13.4 resolutions + an arithmetic correction to the task spec
+
+First task of **M1 — World**, and the first task in the project that writes actual §4.1 *game
+geometry*. Everything §4.1 legislates was transcribed verbatim and pinned by test
+(`tests/unit/test_hex_math.gd`, 24 tests); the two resolutions below cover the only points §4.1
+leaves open. Their **lettering (A)/(B) is referenced by the header comments of both
+`scripts/core/hex_math.gd` and `tests/unit/test_hex_math.gd` — keep it stable.** No numeric GDD
+table value moved, so **no `docs/GAME_DESIGN.md` cell was edited in this commit**.
+
+- **What changed / was decided:**
+  1. **(A) FLAT-TOP vs. THE DIRECTION NAMES — §13.4 ambiguity resolution.** §4.1 says both
+     *"Flat-top hexes"* and *"Neighbor order (fixed, index 0–5): E, NE, NW, W, SW, SE"*. Those six
+     labels are the **pointy-top** naming of the six standard axial deltas; a strictly flat-top
+     screen layout would name them N/NE/SE/S/SW/NW. **Resolution: the sim stores the deltas in the
+     GDD's stated index order and uses the GDD's stated names verbatim as index labels** —
+     `0 E (+1,0)`, `1 NE (+1,-1)`, `2 NW (0,-1)`, `3 W (-1,0)`, `4 SW (-1,+1)`, `5 SE (0,+1)` —
+     and hex-to-screen orientation is a **renderer** concern, owned by the later M1 renderer/camera
+     task, which changes no sim value. Verified self-consistent: this assignment makes
+     `opposite(i) == (i+3)%6` a true geometric property
+     (`DIRECTIONS[i] + DIRECTIONS[opposite(i)] == Vector2i.ZERO` for all six), which is test-pinned.
+     The index order is load-bearing for every later system that keys off it (rings, pathfinding,
+     mapgen goldens) — **do not reorder or rename it to "fix" orientation.**
+  2. **(B) AN OUT-OF-RANGE DIRECTION INDEX IS THE IDENTITY — §13.4 ambiguity resolution.** §4.1
+     legislates no behaviour for an index outside 0–5. **Resolution: `neighbor(h, dir)` returns `h`
+     unchanged and `opposite(dir)` returns `dir` unchanged** — no crash, no engine error, no assert
+     abort headless (§11.1: a bad index must never tear down a 60-turn headless run). A hex grid has
+     no seventh neighbour, so the identity is the simplest total function. Six probes pinned
+     (`-1`, `6`, `99` on each).
+  3. **ARITHMETIC CORRECTION TO THE M1-T1 TASK SPEC — not a rule change, recorded so no later stage
+     re-derives the wrong number.** The Orient spec's hand-computed case
+     `distance((1,-3),(4,2)) == 5` is a **miscalculation**. With §4.1's mapping (x = q, z = r,
+     y = -q - r): cube `a = (1, 2, -3)`, cube `b = (4, -6, 2)`, delta `(-3, 8, -5)` ⇒ max form
+     **8**, and the half-sum form `(3+8+5)/2` = **8** agrees. Re-derived independently three times
+     (Tests, Implement, Verify). §4.1 states only *"Distance = cube distance"* — a **formula**, not
+     a table row for this pair — so the formula governs, the test pins **8**, and **no GDD value
+     moved**. All eight other hand-computed cases and all three map-size counts were re-derived
+     independently and are correct.
+  4. **No map-size constant in engine code (§13.6, deliberate).** §4.1's radii (Small 24 / Medium 32
+     / Large 40 ⇒ 1,801 / 3,169 / 4,921 hexes) appear **only as literals inside the test file**,
+     pinning the §4.1 table; `hex_math.gd` exposes only the formula `3*r*(r+1)+1`, and a source-scan
+     test mechanically forbids those six numbers from appearing in it. Rationale: the radii are
+     **tunable generator parameters** and belong to `data/mapgen/*.json` (§4.4) at the generator
+     task, whereas the six direction deltas and the cube-distance formula are geometry/algorithm,
+     not tunable content. **`data/ruleset.json` gained no keys** and has no hex-geometry section —
+     this task reads **zero** §12.1 constants, so §13.6's "constants read from data, not code" is
+     satisfied by having no constants to read, not by an omission.
+  5. **§13.6 clauses vacuous here, stated explicitly:** HexMath mutates no `GameState` and
+     references no `EventBus`, so *"events emitted for every state change"* has no subject matter.
+     **Goldens: none re-recorded — none exist yet** (the project's first golden lands with the M1
+     mapgen terrain hash; get seeded generation deterministic before recording it).
+  6. **Scope held (§13.4: invent nothing ahead of its milestone).** Exactly the 11 spec'd members
+     and nothing else. **Not** written: LOS, hex lines, rings or ranges (M1-T2 — PROGRESS splits the
+     slice that way); elevation/movement-cost/cliff rules (§4.1 prose, but §14 assigns
+     "Movement/pathfinding/ZOC/elevation costs" to **M4**); the concentric-bowl generator (§4.4);
+     renderer, camera rig, hex picking; `GameState`; any `Command`; any concrete `Event` subclass.
+  7. **Determinism (§11.1) is mechanically scanned, not merely asserted.** `hex_math.gd` is pure
+     `RefCounted`, all-static, and its comment-stripped source is scanned for `randi(`, `randf(`,
+     `extends Node`, `SceneTree`, `get_tree`, `Engine.`, `Time.`, `OS.` — plus **no float literal**
+     (regex `\.[0-9]`) and no `float` token, so the file is integer-only and carries no
+     platform-rounding exposure ahead of M1's first golden. `Vector2i`/`Vector3i` are integer
+     Variant built-ins (not Nodes/singletons), so §11.1 purity holds while a 4,921-hex Large map
+     allocates no per-hex objects. Non-Node-ness is asserted via `get_class()`, never `is Node` —
+     the latter is the statically-impossible construct that parse-errors (decisions.md M0-T2 item 11
+     / M0-T5 item (a)). `distance` uses `maxi`/`absi` with **no division**, so no
+     `@warning_ignore("integer_division")` was needed (M0-T4 item d).
+  8. **`neighbors()` returns a FRESH `Array[Vector2i]` per call.** A `const Array[Vector2i]` is not
+     deeply immutable in GDScript, so a cached/shared return value would let one caller's mutation
+     corrupt every later caller. Pinned by test — and **proven live**: Verify mutated the shipped
+     file to return a shared static cache and the suite went red on exactly that assertion, then
+     swapped `DIRECTIONS[1]`/`[2]` and it went red again, restoring the file byte-identically after
+     each probe (md5 re-verified). The two subtlest pins in this task are live, not vacuous.
+  9. **No test was weakened or edited by the Implement stage** — `tests/unit/test_hex_math.gd` was
+     consumed verbatim and made to pass legitimately. The Tests stage's deliberately-wrong
+     placeholder `hex_math.gd` (which existed only so the test file would *load* — a parse error
+     would have silently un-collected it, M0-T5 item (a)) was replaced wholesale by the
+     implementation. Verify made zero code and zero test edits.
+- **Why:** §4.1 fixes the neighbour **order** and the distance **metric** but is internally in
+  tension about the *names* (item 1) and silent about a bad index (item 2); both are observable and
+  would otherwise be settled accidentally by whichever later system first indexes the table. Pinning
+  them now makes the direction order a property of the sim rather than of its first caller. Item 3
+  is recorded loudly for the same reason M0-T5 item (a) was: a wrong number that survives into the
+  log is worse than no number, because a later stage will "fix" the code to match it. Item 4 draws
+  the data-vs-code line for §4.1 explicitly, so the generator task inherits the radii as content
+  instead of finding them already hard-coded in core.
+- **GDD section affected:** §4.1 (values transcribed verbatim — **no table value moved, no cell
+  edited**; two silences resolved under §13.4); §11.1 (determinism/purity followed and scanned);
+  §11.2 (`scripts/core/hex_math.gd` — §11.2's first named `core/` entry); §11.3 (conventions
+  followed; every public rule function carries a `## §4.1` doc comment, mechanically pinned);
+  §13.2 (tier 1 "every core/ function"); §13.6 (definition of done exercised; two clauses vacuous,
+  see item 5); **§14 M1 row — the row is now OPEN but NOT met: `HexMath` is partially delivered
+  (slice 1 of 2) and NONE of the three M1 acceptance criteria pass yet** (no golden mapgen test, no
+  greybox to measure 60 fps on, no LOS to property-test). Acceptance criterion text unchanged.
+  **No numeric table value moved, so NO `docs/GAME_DESIGN.md` cell was edited in this commit.**

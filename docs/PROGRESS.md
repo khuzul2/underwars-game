@@ -10,19 +10,28 @@ not-yet-committed.
 ## Current position
 
 - **Phase:** 1 (MVP, GDD §14)
-- **Milestone:** **M0 — Bootstrap: DONE** (closed by M0-T5). Every §14 M0 deliverable is built
-  (Godot project, GUT wired, `run_tests.sh`, EventBus, RulesLoader + `ruleset.json`, CI script,
-  `decisions.md`) and **both** §14 acceptance clauses pass headless — *and* the signal that reports
-  clause (a) is now itself proven against the false-green mode M0-T4 measured. Next milestone:
-  **M1 — World**.
-- **Next task:** M1-T1 — **HexMath first slice: axial/cube coordinates + conversions + neighbours
-  + distance, then lines/rings/LOS** (§4.1 hex grid, §4.3 line-of-sight, §11.2 `scripts/core/`
-  placement, §11.1 determinism: integer math, no floats accumulating in rules). Split if the slice
-  approaches ~300 LOC — **coordinates/neighbours/distance first, LOS and rings second**. The §14 M1
-  row's full deliverable list (concentric-bowl generator, chunked MultiMesh renderer, camera rig,
-  hex picking) and its acceptance criteria (golden mapgen test seed ⇒ terrain hash; 60 fps Medium
-  greybox; LOS property tests) span several tasks — the **first golden in the project** lands with
-  the mapgen hash, so re-read §13.2/§13.6 on golden discipline before recording it.
+- **Milestone:** **M1 — World: IN PROGRESS** (opened by M1-T1). M0 — Bootstrap is **DONE** (closed
+  by M0-T5): every §14 M0 deliverable is built (Godot project, GUT wired, `run_tests.sh`, EventBus,
+  RulesLoader + `ruleset.json`, CI script, `decisions.md`), **both** §14 acceptance clauses pass
+  headless, and the signal that reports clause (a) is itself proven against the false-green mode
+  M0-T4 measured. **M1 is NOT done:** its §14 row lists five deliverables (HexMath, concentric-bowl
+  generator, chunked MultiMesh renderer, camera rig, hex picking) and M1-T1 delivered the **first
+  slice of the first one**; **none of the three §14 M1 acceptance criteria pass yet** (no golden
+  mapgen test exists, no greybox/renderer exists to measure 60 fps on, no LOS code exists to
+  property-test).
+- **Next task:** M1-T2 — **HexMath slice 2: hex lines, rings/ranges, and LOS** (§4.1 "Line of sight
+  uses standard hex line-drawing (lerp in cube space, round); a line is blocked by any Solid hex, or
+  by any hex whose elevation exceeds **both** endpoints' elevation", §4.3, §11.2 `scripts/core/`
+  — §11.2 names `Los` as a peer of `HexMath`, so LOS may warrant its own file). Slice 1's API is
+  landed and stable (see the HexMath contract note below) — build on it, do not re-derive it.
+  §11.1 determinism is the sharp edge here: cube-lerp rounding is the project's first place where
+  a naive implementation reaches for floats. Prefer an integer formulation, or confine any rounding
+  to a single final step (§11.1 round-half-up at the final step only) — `test_hex_math.gd`'s
+  no-float source scan applies to `hex_math.gd` only, so a new file is not automatically covered:
+  write the equivalent scan for it. Split if it approaches ~300 LOC (lines+rings first, LOS second).
+  The remaining M1 deliverables (concentric-bowl generator §4.4, chunked MultiMesh renderer, camera
+  rig, hex picking) follow; the **first golden in the project** lands with the mapgen terrain hash,
+  so re-read §13.2/§13.6 on golden discipline before recording it.
 - **Blockers:** none
 
 ## Milestone tracker
@@ -30,7 +39,7 @@ not-yet-committed.
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
-| M1 World | **next** | — |
+| M1 World | **in progress** (opened 2026-08-04, M1-T1) | **NONE of the three §14 M1 criteria met yet, checked against the §14 row this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: no generator and no golden file exist (the project's first golden); (b) *60 fps on Medium map greybox*: no renderer, camera rig or greybox scene exists; (c) *LOS property tests*: no LOS code exists — M1-T2. **Deliverables built so far: HexMath slice 1 only** (`scripts/core/hex_math.gd` — axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; 24 tests, all §4.1 values pinned). Still to build: HexMath LOS/lines/rings (M1-T2), concentric-bowl generator (§4.4), chunked MultiMesh renderer, camera rig, hex picking. |
 | M2 Dig & Economy | not started | — |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
@@ -54,18 +63,53 @@ not-yet-committed.
 | 2026-08-04 | M0-T3 | EventBus and typed Event base with deterministic delivery order | landed | M0-T3: EventBus and typed Event base with deterministic delivery order |
 | 2026-08-04 | M0-T4 | CI script and the static-typing warnings-as-errors gate | landed | M0-T4: CI script and the static-typing warnings-as-errors gate |
 | 2026-08-04 | M0-T5 | Harden run_tests.sh against silently skipped test scripts (**closes M0**) | landed | M0-T5: Harden run_tests.sh against silently skipped test scripts |
+| 2026-08-04 | SETUP-5 | Workflow boilerplate: run_tests.sh is strengthening-only, not frozen | landed | SETUP-5: workflow boilerplate — run_tests.sh strengthening-only, not frozen |
+| 2026-08-04 | M1-T1 | HexMath slice 1: axial/cube conversions, fixed neighbour order, cube distance (**opens M1**) | landed | M1-T1: HexMath slice 1: axial/cube conversions, fixed neighbour order, cube distance |
 
 ## Notes for the next iteration
 
-- **Pick up:** **M1-T1 — HexMath first slice** (§4.1, §4.3, §11.1, §11.2). M0 is closed; the
-  harness, the typing gate and the data pipeline are all live and proven, so M1 is the first
-  milestone that writes actual *game rules*. Read §4.1/§4.3 before coding and take the coordinate
-  layer alone if LOS pushes the slice past ~300 LOC.
-  `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd` and `core/event.gd` +
-  `core/event_bus.gd`, and nothing else, deliberately (§13.4: invent nothing ahead of its
-  milestone). No GameState, Command, hex or map code exists yet, and **no concrete `Event`
-  subclass exists** — those belong to the milestones that emit them. M1 changes that: it is the
-  first milestone allowed to add hex/map code, and the first to record a **golden**.
+- **Pick up:** **M1-T2 — HexMath slice 2: hex lines, rings/ranges, LOS** (§4.1 line-drawing +
+  blocking prose, §4.3, §11.1, §11.2). Read §4.1/§4.3 before coding. §11.2 lists `Los` as a
+  separate `scripts/core/` file next to `HexMath`, so LOS probably belongs in `scripts/core/los.gd`
+  rather than growing `hex_math.gd`; lines and rings are pure geometry and fit either place — pick
+  one and say why. Split if it approaches ~300 LOC.
+  `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd`, `core/event.gd` +
+  `core/event_bus.gd` and `core/hex_math.gd`, and nothing else, deliberately (§13.4: invent nothing
+  ahead of its milestone). No GameState, Command, generator, renderer or map code exists yet, and
+  **no concrete `Event` subclass exists** — those belong to the milestones that emit them. M1 is
+  the first milestone allowed to add hex/map code and the first to record a **golden**.
+- **HexMath contract (`scripts/core/hex_math.gd`, landed M1-T1) — the coordinate layer every later
+  system indexes; read decisions.md M1-T1 (A)/(B) before extending it.** `class_name HexMath extends
+  RefCounted`, **all-static, never instantiated**. Axial is a plain `Vector2i` (q, r), cube a plain
+  `Vector3i` (x, y, z) — integer Variant built-ins, not Nodes, so §11.1 purity holds and a
+  4,921-hex Large map allocates no per-hex objects. Full API (11 members, do not grow it casually):
+  `DIRECTIONS` (`Array[Vector2i]`), `DIRECTION_NAMES` (`PackedStringArray`), `axial_to_cube`,
+  `cube_to_axial`, `is_valid_cube`, `neighbor`, `neighbors`, `opposite`, `distance`,
+  `is_within_radius`, `hex_count_for_radius`.
+  - **Direction indices are FIXED and load-bearing** (§4.1): `0 E (+1,0)`, `1 NE (+1,-1)`,
+    `2 NW (0,-1)`, `3 W (-1,0)`, `4 SW (-1,+1)`, `5 SE (0,+1)`; `opposite(i) == (i+3)%6`, which is a
+    true geometric property here (`DIRECTIONS[i] + DIRECTIONS[opposite(i)] == ZERO` for all six).
+    Rings, pathfinding and mapgen will all key off this order — **never reorder or rename it**.
+    The "Flat-top hexes" phrase in §4.1 does **not** license renaming: hex-to-screen orientation is
+    a renderer concern (decisions.md M1-T1 resolution **(A)**; keep that lettering — both
+    `hex_math.gd` and `test_hex_math.gd` reference it).
+  - `neighbors()` returns a **fresh** `Array[Vector2i]` per call — a `const Array` is not deeply
+    immutable in GDScript, so a cached/shared return value is a cross-caller corruption hazard.
+    Pinned by test (verified live by an adversarial mutation probe at Verify).
+  - An **out-of-range direction index is the identity**: `neighbor(h, dir) == h` and
+    `opposite(dir) == dir` for `dir` outside 0..5 — no crash, no assert abort headless
+    (resolution **(B)**; keep the lettering).
+  - **No map-size constant lives in the file** and a source-scan test mechanically forbids one
+    (regex over `24|32|40|1801|3169|4921`). The §4.1 radii are tunable generator parameters and
+    belong to `data/mapgen/*.json` (§4.4) at the generator task. `hex_count_for_radius` exposes only
+    the formula `3*r*(r+1)+1`.
+  - **Integer math only**, mechanically scanned: no float literal and no `float` token anywhere in
+    the file; `distance` is `maxi(absi(dx), maxi(absi(dy), absi(dz)))` on cube coords, so it needs no
+    division and carries no `@warning_ignore("integer_division")`.
+  - **Arithmetic warning for anyone re-deriving distances by hand:** the M1-T1 task spec listed
+    `distance((1,-3),(4,2)) == 5`; that was a **miscalculation**. With §4.1's mapping the cubes are
+    `(1,2,-3)` and `(4,-6,2)`, delta `(-3,8,-5)`, so the answer is **8** (both closed forms agree).
+    Re-derived independently three times. The test pins 8. Do not "fix" it back to 5.
 - **The §11.3 static-typing gate is LIVE from M0-T4 — every `.gd` you write must pass it.** Read
   decisions.md M0-T4 for the full contract; the operational facts:
   - Run it with `bash tools/typecheck.sh` (all project `.gd` outside `addons/`), or just
@@ -106,7 +150,10 @@ not-yet-committed.
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 with
-  **Scripts 7 / Tests 62 / Passing 62 / Asserts 473**, and `bash tools/verify_harness.sh` → exit 0
+  **Scripts 8 / Tests 86 / Passing 86 / Asserts 835** (M1-T1 baseline; it was 7 / 62 / 62 / 473 at
+  the close of M0 — the M0 tracker row above deliberately keeps that historical figure), and
+  `bash tools/typecheck.sh` → exit 0 over **13** project `.gd` files, and
+  `bash tools/verify_harness.sh` → exit 0
   with **four** phases (A green · B failing canary · C syntactic parse error · D
   statically-impossible construct), each red phase non-zero *and naming its probe*, self-cleaning
   via `trap`. Run both — plus `bash tools/typecheck.sh` and `bash tools/ci.sh` from M0-T4 onward.
