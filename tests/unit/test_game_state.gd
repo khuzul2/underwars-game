@@ -60,10 +60,52 @@
 ##         re-record every subsequent slice; the golden is owed, not forgotten, and the replay
 ##         contract lands as a property test in `tests/sim/test_turn_replay.gd`).
 ##
+## EXTENDED BY M2-T4, resolution **(AX)** ((AU)/(AV)/(AW) are cross-referenced by four, five and
+## several files respectively — do NOT renumber any of them). §11.1 line 704 lists **units** as a
+## TOP-LEVEL GameState collection ("map ..., players (stockpiles, techs, meters), **units**,
+## buildings, nodes, turn counters ..."), NOT as a PlayerState field, so the roster lands here and
+## a unit carries its owner as an integer player index. `tests/unit/test_player_state.gd` is
+## therefore UNTOUCHED and still green — PlayerState's public surface does not move:
+##   (AX) THE UNIT ROSTER (a pure CONTAINER — no Command, no Event, no data key, no rule).
+##       - Private `_units` (keyed by int id, touched only by lookup/assign/erase) and
+##         `_next_unit_id`; six public functions `spawn_unit`, `unit`, `unit_ids`, `units_of`,
+##         `units_at`, `remove_unit`.
+##       - IDS START AT 1 AND ARE NEVER REUSED. **0 means "no unit"** — an algorithmic constant
+##         (the (AJ) precedent), not a §12.1 key. A reused id would silently rebind dangling
+##         references and break §11.1's replay contract.
+##       - Every list accessor sorts a FRESH copy of the keys and returns a FRESH Array each call
+##         (§11.1 line 707 "iterate collections in stable ID order"), pinned with `is_same()`
+##         IDENTITY assertions as well as a pollution check — the M1-T9 lesson: a self-clearing
+##         member cache passes a pollution-only check.
+##       - `spawn_unit` is TOTAL and every refusal is ATOMIC: an owner outside
+##         `0..player_count()-1`, an EMPTY `type_id` or a non-positive `max_hp` answers null,
+##         leaves `content_hash()` byte-identical AND BURNS NO ID.
+##       - PLACEMENT IS NOT VALIDATED HERE: `spawn_unit` accepts ANY `Vector2i` and never
+##         consults `map`. Legality (cave hex, in bounds, §5.2 housing free) is a Command rule for
+##         a later slice, and §6.4's stacking legality is M4 — the container stacks freely.
+##       - NEUTRAL OWNERSHIP IS DELIBERATELY NOT MODELLED (§8.1 creeps, §3.2's "their units become
+##         neutral hostiles"): every owner index outside the roster is refused, and M5 must add an
+##         explicit sentinel rather than silently inventing -1.
+##       - THE FOLD IS EXTENDED BY APPENDING ONLY — no existing step is renamed or reordered
+##         ((AV)(vi) is the precedent for how to amend it): ... `player_count()` -> per player
+##         index ascending -> **`_next_unit_id`** -> **the unit count** -> **per unit id
+##         ascending: the id, then that unit's `content_hash()`**. `_next_unit_id` folds FIRST of
+##         the three because it is what makes "spawned 3 then removed all 3" differ from "never
+##         spawned", which §11.1's replay contract requires. The unit-count step is knowingly an
+##         EQUIVALENT MUTANT given the per-id fold — it is kept for symmetry with the player fold,
+##         exactly as (AU) item 11 recorded for `player_count()`; Verify must not chase it.
+##       - MUTATORS ARE COMMAND-ONLY BY DOCUMENTATION (`GameState.set_turn_position` and
+##         `HexMap.set_elevation` are the precedents; GDScript has no package-private), and
+##         because NO rule runs in this slice §13.6's "events emitted for every state change"
+##         clause is VACUOUS here — the (AW) item 8 precedent, which must be SAID in
+##         `docs/decisions.md`, not assumed.
+##
 ## STILL DELIBERATELY NOT BUILT (§13.4 — invent nothing ahead of its milestone): §3.4's nine
 ## per-player start-of-turn steps and three World-phase steps, §3.2/§12.1's victory turn limit
-## and victory checks (M6), workers, dig progress, yields, vein nodes, Extractors, income/upkeep,
-## housing, Mining Zones and §3.1's starting kit (which needs its own §12.1 key and amendment).
+## and victory checks (M6), §12.7's trait set (worker-ness is a TRAIT, i.e. DATA — §12.7 line
+## 1015), dig progress, yields, vein nodes, Extractors, income/upkeep, §5.2's housing cap
+## (`housing.hq` is already shipped in `data/ruleset.json` and stays UNUSED), Mining Zones and
+## §3.1's starting kit (which needs its own §12.1 key and amendment).
 ##
 ## TRAP (M0-T2 item 11 / M0-T5 item (a)): `x is Node` against a RefCounted-typed variable is a
 ## statically impossible cast rejected at PARSE time, which silently un-collects the whole file.
@@ -125,13 +167,43 @@ const RESOURCE_IDS: Array[String] = [
 	"scrap",
 ]
 
+## §12.7 line 1015 ("worker | dig\_mult | Can Dig/Build; dig-speed multiplier") and §5.2 line 293
+## ("**Housing** is the unit cap: HQ +6, each housing building +4"). FORBIDDEN tokens in
+## game_state.gd: worker-ness is a TRAIT (data), not a class, and the housing cap is a LATER
+## slice — `housing.hq` is already shipped in `data/ruleset.json` and must stay UNUSED.
+const TRAIT_AND_CAP_TOKENS: Array[String] = ["worker", "dig_mult", "housing"]
+
 ## §4.1's radii and hex counts are tunable content in data/mapgen/*.json — never in sim code.
 const MAP_SIZE_TOKENS: Array[String] = ["24", "32", "40", "1801", "3169", "4921"]
 
-## The COMPLETE public surface of GameState at M2-T2 scope: two fields and SIX functions (EIGHT
-## members — grown from five by (AV), in the same commit that adds the turn position, per the
-## standing PROGRESS rule). `units`, `buildings`, `nodes`, `serialize` and friends all belong to
-## later slices and would be invented API here (§13.4).
+## §12.2's printed example definition id (`{"id": "dwarf_crossbow", ... "hp": 70, ...}`) and
+## §12.3's printed sibling `dwarf_shield_bearer`, so this suite invents no content. Both are
+## OPAQUE strings to `GameState` — `data/units/*.json` is an M6 deliverable ((AX)).
+const UNIT_TYPE_ID: String = "dwarf_crossbow"
+const OTHER_UNIT_TYPE_ID: String = "dwarf_shield_bearer"
+
+## §12.2's printed `"hp": 70`, supplied by the CALLER at this slice: there is no unit stat table
+## in engine code until M6.
+const UNIT_MAX_HP: int = 70
+
+## (AX) — ids are minted from 1 upward; 0 means "no unit".
+const NO_UNIT_ID: int = 0
+const FIRST_UNIT_ID: int = 1
+
+## §4.1 "axial coordinates (q, r)" — the positions this suite spawns onto.
+const HEX_A: Vector2i = Vector2i(0, 0)
+const HEX_B: Vector2i = Vector2i(1, -1)
+const HEX_C: Vector2i = Vector2i(-2, 3)
+
+## Far outside TEST_MAP_RADIUS: (AX) — `spawn_unit` never consults `map`, because placement
+## legality is a Command rule for a later slice.
+const HEX_OFF_MAP: Vector2i = Vector2i(999, -999)
+
+## The COMPLETE public surface of GameState at M2-T4 scope: two fields and TWELVE functions
+## (FOURTEEN members — grown from five by (AV) to eight, and from eight by (AX) to fourteen in
+## the same commit that adds the unit roster, per the standing PROGRESS rule). `buildings`,
+## `nodes`, `serialize` and friends all belong to later slices and would be invented API here
+## (§13.4).
 const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"player_count",
 	"player",
@@ -139,19 +211,39 @@ const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"current_player_index",
 	"set_turn_position",
 	"content_hash",
+	"spawn_unit",
+	"unit",
+	"unit_ids",
+	"units_of",
+	"units_at",
+	"remove_unit",
 ]
 const REQUIRED_PUBLIC_VARS: Array[String] = ["map", "rng"]
 
-## §11.1 line 707 (AU)(vi) as amended by (AV) — the DOCUMENTED fold order, as substrings that
-## must appear in `content_hash()`'s body in exactly this sequence. A future golden will record
-## this order; until then this scan is what stops it drifting silently.
+## §11.1 line 707 (AU)(vi) as amended by (AV) and EXTENDED BY APPENDING by (AX) — the DOCUMENTED
+## fold order, as substrings that must appear in `content_hash()`'s body in exactly this
+## sequence. A future golden will record this order; until then this scan is what stops it
+## drifting silently. NOTE the amendment shape: the roster tokens are APPENDED and NO existing
+## token moved, which is the only sanctioned way to grow the fold ((AV)(vi)).
 const FOLD_ORDER_TOKENS: Array[String] = [
 	"_seed_value",
 	"rolls_drawn",
 	"turn",
 	"current_player_index",
 	"map",
+	"_next_unit_id",
+	"unit_ids",
 ]
+
+## (AX)/G1 NEGATIVE PIN — the `.gd` files `scripts/sim/commands/` and `scripts/sim/events/` hold
+## after this slice. M2-T4 adds NO Command and NO Event: the first unit-side consumer of the (AV)
+## spine is a LATER slice's dig Command.
+const COMMAND_FILES: Array[String] = [
+	"command.gd",
+	"command_error.gd",
+	"end_turn_command.gd",
+]
+const EVENT_FILES: Array[String] = ["turn_ended_event.gd"]
 
 ## Doc-comment sections accepted by the S6 scan for this file (§11.3).
 const DOC_SECTIONS: Array[String] = ["§11.1", "§3.3"]
@@ -554,6 +646,477 @@ func test_the_turn_position_and_the_players_are_folded_independently() -> void:
 
 
 # =============================================================================================
+# C3. THE UNIT ROSTER — STABLE ASCENDING IDS ((AX); §11.1 line 704 "units", line 707 "iterate
+#     collections in stable ID order")
+# =============================================================================================
+
+## §11.1 line 707 — the FIRST spawned unit is id 1 and ids ascend strictly in spawn order. The
+## roster is a top-level GameState collection (§11.1 line 704), not a PlayerState field.
+func test_the_first_spawned_unit_is_id_one_and_ids_ascend() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(state.unit_ids(), [] as Array[int], "(AX): a fresh state holds no unit")
+	for expected: int in [1, 2, 3]:
+		var spawned: UnitState = state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP)
+		assert_not_null(spawned, "(AX): a legal spawn is accepted")
+		if spawned == null:
+			return
+		assert_eq(spawned.unit_id(), expected, "§11.1: ids ascend from 1 in spawn order")
+		assert_eq(spawned.owner_index(), 0, "§11.1 line 704: the unit carries its owner index")
+		assert_eq(spawned.type_id(), UNIT_TYPE_ID, "§12.2: the definition id is stored verbatim")
+		assert_eq(spawned.hex(), HEX_A, "§4.1: the unit is placed where it was asked for")
+		assert_eq(spawned.hp(), UNIT_MAX_HP, "§12.2: a spawned unit starts at full health")
+	assert_eq(state.unit_ids(), [1, 2, 3] as Array[int], "§11.1: stable ID order, ascending")
+
+
+## (AX) — 0 means "NO UNIT", so `unit(0)` is null even on a populated roster; so are a negative id
+## and any id above the highest minted one. Totality in the (B)/(L)/(AS)/(AU) spirit.
+func test_id_zero_and_out_of_range_ids_are_no_unit() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_gt(_spawn(state, 0, HEX_A), 0, "sanity: the first spawn is accepted")
+	assert_gt(_spawn(state, 1, HEX_B), 0, "sanity: the second spawn is accepted")
+	assert_null(state.unit(NO_UNIT_ID), "(AX): 0 means \"no unit\", never the first unit")
+	assert_null(state.unit(-1), "(AX): a negative id is null, not a crash")
+	assert_null(state.unit(3), "(AX): an unminted id is null, not a crash")
+	assert_null(state.unit(9999), "(AX): a far id is null, not a crash")
+
+
+## (AX)/§11.1 — IDS ARE NEVER REUSED. Re-minting a removed id would silently rebind every
+## dangling reference to it and break the replay contract, so the counter only ever moves forward.
+func test_unit_ids_are_never_reused_after_a_removal() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	for i: int in range(3):
+		assert_gt(_spawn(state, 0, HEX_A), 0, "sanity: spawn %d is accepted" % i)
+	assert_true(state.remove_unit(2), "sanity: unit 2 is removed")
+	var fourth: UnitState = state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP)
+	assert_not_null(fourth, "(AX): spawning after a removal is accepted")
+	if fourth == null:
+		return
+	assert_eq(fourth.unit_id(), 4, "(AX): the freed id 2 is NEVER reused — the next id is 4")
+	assert_eq(state.unit_ids(), [1, 3, 4] as Array[int], "§11.1: stable ID order, ascending")
+
+
+## (AX) — `unit(id)` returns the SAME object every call (the (AU) `player(i)` precedent), so a
+## mutation through it persists. An implementation handing back a throwaway copy fails here.
+func test_unit_returns_the_same_object_every_call() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var spawned: UnitState = state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP)
+	assert_not_null(spawned, "sanity: the spawn is accepted")
+	if spawned == null:
+		return
+	var found: UnitState = state.unit(spawned.unit_id())
+	assert_true(is_same(spawned, found), "(AX): spawn_unit returns the ROSTER's object")
+	assert_true(
+		is_same(state.unit(FIRST_UNIT_ID), state.unit(FIRST_UNIT_ID)),
+		"(AX): unit(id) must return the SAME UnitState each call, not a throwaway copy"
+	)
+	found.set_hp(1)
+	assert_eq(
+		state.unit(FIRST_UNIT_ID).hp(), 1, "(AX): a mutation through unit(id) must be visible"
+	)
+
+
+## (AX) totality — `remove_unit` answers true EXACTLY ONCE for an id, false on the second call and
+## false for an id that never existed; afterwards the unit is gone from every roster view.
+func test_remove_unit_is_total_and_answers_true_exactly_once() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(_spawn(state, 0, HEX_A), FIRST_UNIT_ID, "sanity: the spawn is accepted")
+	assert_true(state.remove_unit(FIRST_UNIT_ID), "(AX): the first removal succeeds")
+	assert_false(state.remove_unit(FIRST_UNIT_ID), "(AX): the second removal is refused")
+	for unknown: int in [NO_UNIT_ID, -1, 2, 9999]:
+		assert_false(state.remove_unit(unknown), "(AX): removing id %d is refused" % unknown)
+	assert_null(state.unit(FIRST_UNIT_ID), "(AX): a removed unit is gone")
+	assert_eq(state.unit_ids(), [] as Array[int], "(AX): gone from unit_ids()")
+	assert_eq(state.units_of(0), [] as Array[int], "(AX): gone from units_of()")
+	assert_eq(state.units_at(HEX_A), [] as Array[int], "(AX): gone from units_at()")
+
+
+# =============================================================================================
+# C4. CANONICAL ORDER, TOTALITY AND FRESHNESS OF THE ROSTER VIEWS (§11.1 line 707)
+# =============================================================================================
+
+## §11.1 line 707 "iterate collections in stable ID order" — `unit_ids()`, `units_of()` and
+## `units_at()` are ALL ascending by unit id, even when the units were spawned in a scrambled
+## owner/hex order. An implementation that returns `Dictionary.keys()` (insertion order) or that
+## groups by owner/hex first fails here.
+func test_every_roster_view_is_ascending_by_unit_id() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MAX_PLAYERS)
+	assert_eq(_spawn(state, 3, HEX_C), 1, "sanity: id 1 -> owner 3 at C")
+	assert_eq(_spawn(state, 0, HEX_A), 2, "sanity: id 2 -> owner 0 at A")
+	assert_eq(_spawn(state, 3, HEX_A), 3, "sanity: id 3 -> owner 3 at A")
+	assert_eq(_spawn(state, 1, HEX_B), 4, "sanity: id 4 -> owner 1 at B")
+	assert_eq(_spawn(state, 0, HEX_C), 5, "sanity: id 5 -> owner 0 at C")
+	assert_eq(_spawn(state, 3, HEX_A), 6, "sanity: id 6 -> owner 3 at A")
+
+	assert_eq(state.unit_ids(), [1, 2, 3, 4, 5, 6] as Array[int], "§11.1: ascending by id")
+	assert_eq(state.units_of(3), [1, 3, 6] as Array[int], "§11.1: units_of() ascends by id")
+	assert_eq(state.units_of(0), [2, 5] as Array[int], "§11.1: units_of() ascends by id")
+	assert_eq(state.units_of(1), [4] as Array[int], "§11.1: units_of() ascends by id")
+	assert_eq(state.units_of(2), [] as Array[int], "§11.1: a player with no units answers empty")
+	assert_eq(
+		state.units_at(HEX_A),
+		[2, 3, 6] as Array[int],
+		"§6.4 is M4: the CONTAINER stacks freely and answers every id on the hex, ascending"
+	)
+	assert_eq(state.units_at(HEX_C), [1, 5] as Array[int], "§11.1: units_at() ascends by id")
+	assert_eq(state.units_at(HEX_B), [4] as Array[int], "§11.1: units_at() ascends by id")
+
+
+## §11.1/M1-T9 — every roster view is a FRESH Array each call. Pinned with `is_same()` IDENTITY
+## assertions AND a mutate-then-re-read pollution check, because a SELF-CLEARING member cache
+## passes a pollution-only check (the M1-T9 lesson, re-learned from `resource_ids()` at M2-T1).
+func test_roster_views_are_fresh_arrays_every_call() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(_spawn(state, 0, HEX_A), 1, "sanity: id 1")
+	assert_eq(_spawn(state, 0, HEX_A), 2, "sanity: id 2")
+
+	assert_false(
+		is_same(state.unit_ids(), state.unit_ids()),
+		"§11.1: unit_ids() must build a FRESH array every call, never hand out a cache"
+	)
+	assert_false(
+		is_same(state.units_of(0), state.units_of(0)),
+		"§11.1: units_of() must build a FRESH array every call"
+	)
+	assert_false(
+		is_same(state.units_at(HEX_A), state.units_at(HEX_A)),
+		"§11.1: units_at() must build a FRESH array every call"
+	)
+
+	var expected: Array[int] = [1, 2]
+	var pulled_ids: Array[int] = state.unit_ids()
+	pulled_ids.clear()
+	pulled_ids.append(-1)
+	assert_eq(state.unit_ids(), expected, "§11.1: mutating the returned array must not pollute")
+	var pulled_owned: Array[int] = state.units_of(0)
+	pulled_owned.clear()
+	assert_eq(state.units_of(0), expected, "§11.1: mutating the returned array must not pollute")
+	var pulled_here: Array[int] = state.units_at(HEX_A)
+	pulled_here.clear()
+	assert_eq(state.units_at(HEX_A), expected, "§11.1: mutating the returned array must not pollute")
+
+
+## (AX) totality — `units_of` on an out-of-range owner and `units_at` on an empty hex both answer
+## an EMPTY array, never null (the `Los.blocking_hexes` precedent: an explicit empty answer, no
+## magic sentinel).
+func test_units_of_and_units_at_are_total() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	for probed_owner: int in [-1, -99, MIN_PLAYERS, MIN_PLAYERS + 1, 9999]:
+		assert_eq(
+			state.units_of(probed_owner),
+			[] as Array[int],
+			"(AX): units_of(%d) is outside the roster — empty, not null" % probed_owner
+		)
+	assert_eq(state.units_at(HEX_A), [] as Array[int], "(AX): an empty hex answers empty")
+	assert_eq(state.units_at(HEX_OFF_MAP), [] as Array[int], "(AX): an off-map hex answers empty")
+	assert_eq(_spawn(state, 0, HEX_A), 1, "sanity: the spawn is accepted")
+	assert_eq(state.units_at(HEX_B), [] as Array[int], "(AX): a hex holding nothing answers empty")
+	for probed_owner: int in [-1, MIN_PLAYERS, 9999]:
+		assert_eq(
+			state.units_of(probed_owner),
+			[] as Array[int],
+			"(AX): units_of(%d) stays empty on a populated roster" % probed_owner
+		)
+
+
+# =============================================================================================
+# C5. TOTALITY AND ATOMICITY OF spawn_unit ((AX); the (AU)/(AL) totality precedent)
+# =============================================================================================
+
+## (AX) — an owner index outside `0..player_count()-1` is REFUSED (null). §8.1's creeps and §3.2's
+## "their units become neutral hostiles" will need an explicit owner sentinel when M5 lands; -1
+## must NOT be silently invented here.
+func test_spawn_unit_refuses_an_owner_outside_the_roster() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	for bad_owner: int in [-1, -99, MIN_PLAYERS, MIN_PLAYERS + 1, 9999]:
+		assert_null(
+			state.spawn_unit(bad_owner, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP),
+			"(AX): owner %d is outside 0..player_count()-1 and must be refused" % bad_owner
+		)
+	assert_eq(state.unit_ids(), [] as Array[int], "(AX): a refused spawn creates no unit")
+
+
+## (AX) — on the EMPTY roster NO owner index is in range, so every spawn is refused and the
+## degenerate state stays a usable, hashable state.
+func test_every_owner_index_is_refused_on_the_empty_roster() -> void:
+	var state: GameState = GameState.new(GOLDEN_SEED, null, 0)
+	for probed_owner: int in [-1, 0, 1, MAX_PLAYERS]:
+		assert_null(
+			state.spawn_unit(probed_owner, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP),
+			"(AX): the empty roster owns nothing — owner %d is refused" % probed_owner
+		)
+	assert_eq(state.unit_ids(), [] as Array[int], "(AX): the empty roster holds no unit")
+
+
+## (AX) — an EMPTY `type_id` and a non-positive `max_hp` are refused. `type_id` is opaque, so the
+## only thing that can be checked without inventing a whitelist is that it is non-empty; `max_hp`
+## is caller-supplied, and a unit with no health at all is not a representable §12.2 unit.
+func test_spawn_unit_refuses_an_empty_type_id_and_a_non_positive_max_hp() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_null(
+		state.spawn_unit(0, "", HEX_A, UNIT_MAX_HP), "(AX): an empty definition id is refused"
+	)
+	for bad_hp: int in [0, -1, -5]:
+		assert_null(
+			state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, bad_hp),
+			"(AX): max_hp %d is refused — a §12.2 unit has health" % bad_hp
+		)
+	assert_eq(state.unit_ids(), [] as Array[int], "(AX): a refused spawn creates no unit")
+
+
+## (AX) — EVERY refusal is ATOMIC: `content_hash()` is byte-identical before and after, AND THE ID
+## COUNTER DOES NOT ADVANCE. The second half is the assertion that catches an id burned on a
+## rejected spawn — a bug no hash comparison alone can see.
+func test_a_refused_spawn_is_atomic_and_burns_no_id() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var before: int = state.content_hash()
+	assert_null(state.spawn_unit(-1, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP), "sanity: refused")
+	assert_null(state.spawn_unit(MIN_PLAYERS, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP), "sanity: refused")
+	assert_null(state.spawn_unit(0, "", HEX_A, UNIT_MAX_HP), "sanity: refused")
+	assert_null(state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, 0), "sanity: refused")
+	assert_null(state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, -5), "sanity: refused")
+	assert_eq(state.content_hash(), before, "(AX): a refused spawn changes nothing at all")
+
+	var first: UnitState = state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP)
+	assert_not_null(first, "sanity: the legal spawn is accepted")
+	if first == null:
+		return
+	assert_eq(first.unit_id(), FIRST_UNIT_ID, "(AX): five refusals burned NO id — the next id is 1")
+
+	var mid: int = state.content_hash()
+	assert_null(state.spawn_unit(9999, UNIT_TYPE_ID, HEX_B, UNIT_MAX_HP), "sanity: refused")
+	assert_null(state.spawn_unit(0, "", HEX_B, UNIT_MAX_HP), "sanity: refused")
+	assert_eq(state.content_hash(), mid, "(AX): a refused spawn changes nothing at all")
+	var second: UnitState = state.spawn_unit(1, OTHER_UNIT_TYPE_ID, HEX_B, UNIT_MAX_HP)
+	assert_not_null(second, "sanity: the legal spawn is accepted")
+	if second == null:
+		return
+	assert_eq(second.unit_id(), 2, "(AX): refusals after a spawn burn NO id either")
+
+
+## (AX) — PLACEMENT IS NOT VALIDATED HERE. `spawn_unit` accepts any `Vector2i` and never consults
+## `map`: legality (cave hex, in bounds, §5.2 housing free) is a Command rule for a LATER slice,
+## and §6.4's stacking legality is M4. Pinned positively so a later slice cannot claim the
+## container was silently enforcing it.
+func test_spawn_unit_validates_no_placement_and_stacks_freely() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(state.map, "sanity: the fixture carries a map")
+	assert_eq(_spawn(state, 0, HEX_OFF_MAP), 1, "(AX): a hex far outside the map is accepted")
+	assert_eq(
+		state.units_at(HEX_OFF_MAP), [1] as Array[int], "(AX): the unit really is placed there"
+	)
+	assert_eq(_spawn(state, 0, HEX_A), 2, "sanity: a second spawn")
+	assert_eq(_spawn(state, 1, HEX_A), 3, "(AX): two OWNERS may stack on one hex at this layer")
+	assert_eq(_spawn(state, 1, HEX_A), 4, "(AX): §5.2 housing is not enforced by the container")
+	assert_eq(
+		state.units_at(HEX_A), [2, 3, 4] as Array[int], "§6.4 is M4 — the container stacks freely"
+	)
+
+
+# =============================================================================================
+# C6. UNIT RECORDS THROUGH THE CONTAINER ((AX); §3.4 step 2, §4.1)
+# =============================================================================================
+
+## (AX) NEGATIVE PIN — `set_hp(0)` does NOT remove the unit. Whether 0 hp kills is a RULE (§6, §3.4
+## step 2's bleed) and belongs to a later slice; pinned negatively so the container never grows a
+## hidden rule.
+func test_a_unit_at_zero_hp_stays_in_the_roster() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(_spawn(state, 0, HEX_A), FIRST_UNIT_ID, "sanity: the spawn is accepted")
+	var gunner: UnitState = state.unit(FIRST_UNIT_ID)
+	assert_not_null(gunner, "sanity: the unit is in the roster")
+	if gunner == null:
+		return
+	gunner.set_hp(0)
+	assert_eq(gunner.hp(), 0, "(AX): 0 hp is representable")
+	assert_eq(state.unit_ids(), [FIRST_UNIT_ID] as Array[int], "(AX): 0 hp does NOT remove")
+	assert_eq(state.units_of(0), [FIRST_UNIT_ID] as Array[int], "(AX): 0 hp does NOT remove")
+	assert_eq(state.units_at(HEX_A), [FIRST_UNIT_ID] as Array[int], "(AX): 0 hp does NOT remove")
+	assert_not_null(state.unit(FIRST_UNIT_ID), "(AX): 0 hp does NOT remove")
+
+
+## (AX)/§4.1 — `set_hex` moves the unit between the `units_at` buckets, and both buckets stay
+## ascending by id. `units_at` is a LINEAR SCAN over the roster, never a reverse index that could
+## drift out of sync with the units themselves (a second source of truth is a determinism hazard).
+func test_set_hex_moves_a_unit_between_the_units_at_buckets() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(_spawn(state, 0, HEX_A), 1, "sanity: id 1 at A")
+	assert_eq(_spawn(state, 0, HEX_A), 2, "sanity: id 2 at A")
+	assert_eq(_spawn(state, 0, HEX_B), 3, "sanity: id 3 at B")
+	var mover: UnitState = state.unit(1)
+	assert_not_null(mover, "sanity: unit 1 is in the roster")
+	if mover == null:
+		return
+	mover.set_hex(HEX_B)
+	assert_eq(state.units_at(HEX_A), [2] as Array[int], "(AX): the old hex loses the id")
+	assert_eq(state.units_at(HEX_B), [1, 3] as Array[int], "(AX): the new hex gains it, ascending")
+	assert_eq(state.unit_ids(), [1, 2, 3] as Array[int], "(AX): a move changes no id")
+
+
+# =============================================================================================
+# C7. THE ROSTER IN THE CONTENT HASH ((AX); §11.1 line 707/708)
+# =============================================================================================
+
+## §11.1 — two states populated identically hash identically, repeatedly, and within 32 bits.
+func test_identically_populated_states_hash_identically() -> void:
+	var first: GameState = _populated(GOLDEN_SEED)
+	var second: GameState = _populated(GOLDEN_SEED)
+	assert_eq(first.content_hash(), first.content_hash(), "§11.1: the hash is reproducible")
+	assert_eq(
+		first.content_hash(),
+		second.content_hash(),
+		"§11.1: two states with identical rosters hash identically"
+	)
+	var observed: int = first.content_hash()
+	assert_gte(observed, 0, "§11.1: a content hash is unsigned")
+	assert_lte(observed, HASH_MASK, "§11.1: a content hash is 32-bit")
+
+
+## §11.1 — the roster is part of the replayable state: spawning moves the hash, and so does any
+## change to a unit's OWN record (which is what welds `UnitState.content_hash()` into the state).
+func test_content_hash_folds_the_unit_roster_and_each_units_record() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var empty_hash: int = state.content_hash()
+	assert_eq(_spawn(state, 0, HEX_A), FIRST_UNIT_ID, "sanity: the spawn is accepted")
+	var one_hash: int = state.content_hash()
+	assert_ne(empty_hash, one_hash, "§11.1: the unit roster is part of the state")
+
+	var gunner: UnitState = state.unit(FIRST_UNIT_ID)
+	assert_not_null(gunner, "sanity: the unit is in the roster")
+	if gunner == null:
+		return
+	gunner.set_hp(1)
+	var hurt_hash: int = state.content_hash()
+	assert_ne(one_hash, hurt_hash, "§11.1: a unit's hp is part of the state")
+	gunner.set_hex(HEX_B)
+	assert_ne(hurt_hash, state.content_hash(), "§11.1: a unit's position is part of the state")
+
+	assert_eq(_spawn(state, 1, HEX_C), 2, "sanity: a second spawn")
+	assert_ne(hurt_hash, state.content_hash(), "§11.1: EVERY unit is folded, not just the first")
+
+
+## §11.1 line 707 — UNITS ARE FOLDED BY ID, NEVER AS A SET. Two states holding the same two units
+## with the owners SWAPPED between id 1 and id 2 are different match states (a different player
+## owns the first unit), so the hashes must differ. A multiset-shaped fold survives every other
+## test in this file and dies exactly here (the (AU) lesson (b), which only the swap catches).
+func test_content_hash_folds_units_by_id_not_as_a_set() -> void:
+	var straight: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(_spawn(straight, 0, HEX_A), 1, "sanity: id 1 -> owner 0")
+	assert_eq(_spawn(straight, 1, HEX_A), 2, "sanity: id 2 -> owner 1")
+
+	var swapped: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(_spawn(swapped, 1, HEX_A), 1, "sanity: id 1 -> owner 1")
+	assert_eq(_spawn(swapped, 0, HEX_A), 2, "sanity: id 2 -> owner 0")
+
+	assert_eq(straight.unit_ids(), swapped.unit_ids(), "fixture: the two rosters hold the same ids")
+	assert_ne(
+		straight.content_hash(),
+		swapped.content_hash(),
+		"§11.1: units are folded BY ID — swapping two units' owners is a new state"
+	)
+
+
+## §11.1 line 708 "replaying (seed, command\_log) must reproduce the hash" — SPAWNING THREE UNITS
+## AND REMOVING ALL THREE DOES NOT HASH LIKE NEVER HAVING SPAWNED. The two states differ only in
+## `_next_unit_id`, and that difference is real: the next spawn is id 4 in one and id 1 in the
+## other, so every future command log diverges. This is the test that makes folding
+## `_next_unit_id` load-bearing.
+func test_spawning_then_removing_every_unit_does_not_hash_like_never_spawning() -> void:
+	var churned: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	for i: int in range(3):
+		assert_gt(_spawn(churned, 0, HEX_A), 0, "sanity: spawn %d is accepted" % i)
+	for id: int in [1, 2, 3]:
+		assert_true(churned.remove_unit(id), "sanity: unit %d is removed" % id)
+
+	var fresh: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(churned.unit_ids(), [] as Array[int], "fixture: the churned roster is empty")
+	assert_eq(fresh.unit_ids(), [] as Array[int], "fixture: the fresh roster is empty")
+	assert_ne(
+		churned.content_hash(),
+		fresh.content_hash(),
+		"§11.1: the id counter is part of the replayable state — the next spawn differs"
+	)
+
+	var churned_next: UnitState = churned.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP)
+	var fresh_next: UnitState = fresh.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP)
+	assert_not_null(churned_next, "sanity: the churned state still spawns")
+	assert_not_null(fresh_next, "sanity: the fresh state still spawns")
+	if churned_next == null or fresh_next == null:
+		return
+	assert_eq(churned_next.unit_id(), 4, "(AX): ids are never reused after a removal")
+	assert_eq(fresh_next.unit_id(), FIRST_UNIT_ID, "(AX): a fresh state still starts at 1")
+
+
+## §11.1 — the roster is folded INDEPENDENTLY of the rest of the state: two states that differ
+## only in a unit's definition id, and two that differ only in a unit's max_hp, must not collide.
+func test_content_hash_separates_states_differing_only_in_one_units_record() -> void:
+	var left: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var right: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(
+		left.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP), "sanity: the left spawn is accepted"
+	)
+	assert_not_null(
+		right.spawn_unit(0, OTHER_UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP),
+		"sanity: the right spawn is accepted"
+	)
+	assert_ne(
+		left.content_hash(), right.content_hash(), "§12.2: a unit's definition id reaches the hash"
+	)
+
+	var tough: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(
+		tough.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP + 1),
+		"sanity: the tough spawn is accepted"
+	)
+	assert_ne(
+		left.content_hash(), tough.content_hash(), "§3.4 step 2: a unit's max_hp reaches the hash"
+	)
+
+
+# =============================================================================================
+# C8. §13.4 NEGATIVE PINS — what M2-T4 deliberately does NOT add
+# =============================================================================================
+
+## (AX)/G1 — M2-T4 adds NO Command and NO Event. The roster is a pure CONTAINER; the first
+## unit-side consumer of the (AV) spine is a LATER slice's dig Command. Pinned by enumerating the
+## two spine directories so a stray file cannot appear unremarked (§13.4).
+func test_no_command_and_no_event_file_was_added_in_this_slice() -> void:
+	assert_eq(
+		_gd_files("res://scripts/sim/commands"),
+		COMMAND_FILES,
+		"(AX): M2-T4 adds no Command — scripts/sim/commands/ is unchanged"
+	)
+	assert_eq(
+		_gd_files("res://scripts/sim/events"),
+		EVENT_FILES,
+		"(AX): M2-T4 adds no Event — scripts/sim/events/ is unchanged"
+	)
+
+
+## §3.4 (lines 141–165) NEGATIVE PIN, EXTENDED BY (AX) — the nine per-player start-of-turn steps
+## and the three World-phase steps are ALL still unimplemented. After any number of accepted
+## EndTurns NO unit is spawned, moved, paid, bled or killed, and the one seeded stream has still
+## drawn nothing. (`tests/unit/test_end_turn_command.gd` owns the stockpile half of this pin and
+## is untouched; this is the roster half.)
+func test_ending_turns_spawns_no_unit_and_draws_no_roll() -> void:
+	var state: GameState = GameState.new(GOLDEN_SEED, null, MAX_PLAYERS)
+	for k: int in range(3 * MAX_PLAYERS):
+		var rejection: CommandError = EndTurnCommand.new(state.current_player_index()).execute(
+			state, null
+		)
+		assert_null(rejection, "sanity: EndTurn %d is accepted" % k)
+	assert_eq(
+		state.unit_ids(),
+		[] as Array[int],
+		"§3.4: no rule spawns a unit yet — the roster is written only by spawn_unit"
+	)
+	assert_eq(
+		state.rng.rolls_drawn(),
+		0,
+		"§11.1: nothing in this slice is random — the one seeded stream must not advance"
+	)
+
+
+# =============================================================================================
 # D. MECHANICAL SOURCE SCANS ON scripts/sim/game_state.gd (§11.1, §11.2, §11.3, §13.6)
 #    Written FRESH for this file — a new file inherits NOTHING from the other scan suites.
 # =============================================================================================
@@ -602,10 +1165,13 @@ func test_source_is_engine_free_and_builds_no_second_rng() -> void:
 	)
 
 
-## S3 (AU)/§13.5/§13.6 — NO RESOURCE-ID WHITELIST IN ENGINE CODE, on the §4.2 terrain-type
-## precedent (M1-T5 (T), M1-T7 (AH)). GameState must not name a §5.1 resource: the vocabulary is
-## data, pinned by `tests/unit/test_player_state.gd`.
-func test_source_carries_no_resource_id_whitelist() -> void:
+## S3 (AU)/(AX)/§13.5/§13.6 — NO RESOURCE-ID, TRAIT OR HOUSING WHITELIST IN ENGINE CODE, on the
+## §4.2 terrain-type precedent (M1-T5 (T), M1-T7 (AH)). GameState must not name a §5.1 resource
+## (the vocabulary is data, pinned by `tests/unit/test_player_state.gd`); nor §12.7 line 1015's
+## `worker`/`dig_mult`, because WORKER-NESS IS A TRAIT, not a class — the roster stores an opaque
+## `type_id` and knows nothing about what a unit can do; nor `housing`, because §5.2's unit cap is
+## a LATER slice and `housing.hq` must stay UNUSED in `data/ruleset.json`.
+func test_source_carries_no_resource_trait_or_housing_whitelist() -> void:
 	var code: String = _code_text(GAME_STATE_PATH).to_lower()
 	assert_false(code.is_empty(), "sanity: %s must be readable and non-empty" % GAME_STATE_PATH)
 	for id: String in RESOURCE_IDS:
@@ -613,6 +1179,13 @@ func test_source_carries_no_resource_id_whitelist() -> void:
 			code.contains(id),
 			"(AU)/§13.5: resource ids are opaque data — %s must not name \"%s\"" % [
 				GAME_STATE_PATH, id
+			]
+		)
+	for token: String in TRAIT_AND_CAP_TOKENS:
+		assert_false(
+			code.contains(token),
+			"§12.7/§5.2: traits and the housing cap are DATA/later slices — %s must not name %s" % [
+				GAME_STATE_PATH, token
 			]
 		)
 
@@ -670,10 +1243,11 @@ func test_source_declares_no_loader_and_shadows_no_global() -> void:
 
 
 ## S6 §11.3/§13.4 — the expected public surface is listed EXPLICITLY, so a MISSING member fails
-## instead of passing vacuously and an EXTRA member (turn counters, units, buildings, a
-## serializer, a second RNG accessor) fails too. The seed value stays PRIVATE: it is folded into
-## content_hash, not handed out.
-func test_public_api_is_exactly_the_eight_documented_members() -> void:
+## instead of passing vacuously and an EXTRA member (buildings, nodes, a serializer, a second RNG
+## accessor, a `unit_count()` convenience) fails too. The seed value and both roster privates
+## (`_units`, `_next_unit_id`) stay PRIVATE: they are folded into content_hash, not handed out.
+## The list was grown 8 -> 14 by (AX) IN THE SAME COMMIT that adds the roster (the standing rule).
+func test_public_api_is_exactly_the_fourteen_documented_members() -> void:
 	var public_functions: Array[String] = []
 	var undocumented: Array[String] = []
 	_collect_public_functions(GAME_STATE_PATH, public_functions, undocumented)
@@ -779,6 +1353,14 @@ func test_the_header_documents_the_turn_position_in_the_fold() -> void:
 			GAME_STATE_PATH
 		]
 	)
+	assert_true(
+		header.contains("_next_unit_id"),
+		"(AX): %s's header must document the id counter in the fold order" % GAME_STATE_PATH
+	)
+	assert_true(
+		header.contains("unit count"),
+		"(AX): %s's header must document the unit count in the fold order" % GAME_STATE_PATH
+	)
 
 
 # =============================================================================================
@@ -788,6 +1370,54 @@ func test_the_header_documents_the_turn_position_in_the_fold() -> void:
 ## A state on a real (radius `radius`) map, with `count` players.
 func _state(seed_value: int, radius: int, count: int) -> GameState:
 	return GameState.new(seed_value, HexMap.new(radius), count)
+
+
+## Spawns one §12.2-shaped unit for `owner_index` at `where` and returns its minted id, asserting
+## the spawn was accepted. Returns 0 ("no unit", (AX)) when it was refused, so a caller can report
+## a single clear failure instead of a null-call cascade.
+##
+## TRAP measured live at M2-T4: `owner` and `name` are BASE-CLASS PROPERTIES of [Node], which
+## `GutTest` extends, so a parameter or `for` iterator named either is
+## `shadowed_variable_base_class` = level 2 = a HARD ERROR that silently un-collects the whole
+## test file (the `seed`/`log` traps of M1-T5 (R) and M2-T2, in a new disguise).
+func _spawn(state: GameState, owner_index: int, where: Vector2i) -> int:
+	var spawned: UnitState = state.spawn_unit(owner_index, UNIT_TYPE_ID, where, UNIT_MAX_HP)
+	assert_not_null(spawned, "sanity: the spawn for owner %d is accepted" % owner_index)
+	if spawned == null:
+		return NO_UNIT_ID
+	return spawned.unit_id()
+
+
+## A state on a real map with MIN_PLAYERS players, carrying a fixed roster: three units across
+## two owners and three hexes, one of them damaged and one of them a different definition id.
+## Built the same way every time, so two calls must hash identically.
+func _populated(seed_value: int) -> GameState:
+	var state: GameState = _state(seed_value, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(
+		state.spawn_unit(0, UNIT_TYPE_ID, HEX_A, UNIT_MAX_HP), "fixture: unit 1 is spawned"
+	)
+	assert_not_null(
+		state.spawn_unit(1, OTHER_UNIT_TYPE_ID, HEX_B, UNIT_MAX_HP), "fixture: unit 2 is spawned"
+	)
+	assert_not_null(
+		state.spawn_unit(0, UNIT_TYPE_ID, HEX_C, UNIT_MAX_HP), "fixture: unit 3 is spawned"
+	)
+	var hurt: UnitState = state.unit(2)
+	assert_not_null(hurt, "fixture: unit 2 is in the roster")
+	if hurt != null:
+		hurt.set_hp(1)
+	return state
+
+
+## Every `.gd` file in `directory`, ascending, so a stray new file in a spine directory fails the
+## §13.4 negative pin. `.gd.uid` sidecars are filtered out — they are engine bookkeeping.
+func _gd_files(directory: String) -> Array[String]:
+	var out: Array[String] = []
+	for file_name: String in DirAccess.get_files_at(directory):
+		if file_name.ends_with(".gd"):
+			out.append(file_name)
+	out.sort()
+	return out
 
 
 ## `count` consecutive percent rolls drawn through `state.rng`, as a typed array.

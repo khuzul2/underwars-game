@@ -3369,3 +3369,289 @@ cross-referenced by four files and (AV) by five. **M2-T4 continues at (AX).**
   **§14 M2 row — the milestone is STILL OPEN, NOT met. Acceptance criterion text unchanged**; none
   of *"Scripted 20-turn dig scenario matches expected stockpiles exactly"*, *"deficit-bleed test"* or
   *"zone assigns nearest idle worker"* is satisfied yet.
+
+## 2026-08-05 — M2-T4 — `UnitState` + the §11.1 TOP-LEVEL UNIT ROSTER on `GameState` (stable ascending ids, append-only fold extension); resolution (AX); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 28 / Tests 690 /
+Passing 690 / Failing 0 / Asserts 7885** (the M2-T3 baseline was 27 / 643 / 643 / 0 / 7452 — all
+four totals rose and **no previously-landed test regressed**; not one landed assertion moved this
+time); `bash tools/typecheck.sh` exits 0 over **51** files (was 49 — `scripts/sim/unit_state.gd`
+plus the new suite `tests/unit/test_unit_state.gd`); `bash tools/ci.sh` PASSes; `bash
+tools/verify_harness.sh` PASSes across all four phases (A green · B failing canary · C syntactic
+parse error · D statically-impossible construct) with the tree left clean. All ran headless through
+the `tools/` scripts on the repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the
+PATH shim (SETUP-3) and never through WSL bash ((AU) item 10). `sim_smoke` (M7), `content_cli` (E4)
+and `balance_lab` (E5) were correctly **SKIPped, not failed**, per CLAUDE.md's applicability rule.
+`Scripts 28` equals the 28 `test_*.gd` on disk, so the M0-T5 enumeration guard is satisfied and
+nothing was silently un-collected. **No golden was re-recorded and none was created**
+(`goldens_rerecorded: false`) — see item 11;
+`tests/golden/mapgen_concentric_bowl_small_seed1337.json` (`content_hash 0xcad24923`) is
+**byte-untouched and still green**, as are `data/ruleset.json`, `docs/GAME_DESIGN.md`, `scenes/`,
+`project.godot`, `tools/`, `addons/`, `data/mapgen/concentric_bowl.json`,
+`tests/sim/test_turn_replay.gd`, `tests/unit/test_player_state.gd` and
+`tests/unit/test_end_turn_command.gd`. **NO GDD CELL WAS EDITED — no printed number moved.**
+
+**THIS IS SLICE 2 OF §14 M2's "(a) workers + dig progress", AND IT IS THE CONTAINER, NOT A RULE.**
+`scripts/sim/unit_state.gd` (**new**, 146 lines) is one unit INSTANCE as a pure record;
+`scripts/sim/game_state.gd` (**+143 lines**) gains the §11.1 top-level unit ROSTER — `spawn_unit`,
+`unit`, `unit_ids`, `units_of`, `units_at`, `remove_unit` — and its `content_hash()` fold is
+**extended by appending**. Total production change **289 lines**, inside the ≤ ~300 LOC ceiling.
+**M2 is still NOT done**: none of its three §14 acceptance criteria (*"Scripted 20-turn dig scenario
+matches expected stockpiles exactly; deficit-bleed test; zone assigns nearest idle worker"*) is met.
+The follow-on slices, unchanged in order, are (3) `DigHexCommand` + `CancelDigCommand` + dig-site
+progress state, (4) §3.4 step 4's dig tick + yield application + hex-becomes-Cave + events + **the
+owed tier-3 golden**.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §11.1
+(**line 704** — *"GameState: single serializable object - map …, players (stockpiles, techs,
+meters), units, buildings, nodes, turn counters, and one RandomNumberGenerator seeded at match
+start"*; **line 707** — *"iterate collections in stable ID order"* and *"GameState.hash() (FNV over
+canonical serialization) must be reproducible"*), §11.2, §11.3, §12.2 (the printed unit definition —
+`"id": "dwarf_crossbow"` at line 840, `"hp": 70`, and `"dwarf_shield_bearer"` at line 880), §12.7
+(**line 1015** — `worker | dig_mult | Can Dig/Build; dig-speed multiplier`), §3.1 (line 120's
+starting kit), §3.3, §3.4 (step 2's *"10% max HP"*), §5.2 (line 293's housing cap), §6.4, §8.1,
+§13.2, §13.4, §13.6 and §14's M2 row. `docs/decisions.md` was re-scanned end to end at Tests and
+again at Verify: **no logged override touches units, §12.2, §12.7, §5.2 or §3.1** — (AU)/(AV)/(AW)
+are the M2 entries and none of them does — so the printed sections governed unamended and **no
+constant needed correcting in either direction**. Binding prior resolutions: **(T)/(AH)/(AU)(iv)/(f)**
+(no vocabulary whitelist in engine code), **(AU)** (the fold order, the fresh-Array/`is_same()`
+freshness rule, `content_hash` never `hash`, the `PlayerState._SEPARATOR` precedent, and the
+equivalent-mutant honesty rule), **(AV)** (how a fold amendment is recorded; the command spine this
+slice deliberately does not touch), **(AW)** (a pure non-mutating unit of work makes §13.6's *events*
+clause vacuous, and that must be SAID), **(AJ)** (a named algorithmic constant is not a §13.6
+violation), **(AL)/(B)/(L)/(AS)** (totality), **(AT)/(f)** (§11.2's printed file list is
+illustrative). The lettering genuinely ended at **(AW)**, so this entry is **(AX)** — and **none of
+(AU)/(AV)/(AW) is renumbered**: (AU) is cross-referenced by four files, (AV) by five, (AW) by
+several. **M2-T5 continues at (AY).**
+
+- **What changed / was decided:**
+  1. **(AX)(i) — UNITS ARE A TOP-LEVEL `GameState` COLLECTION, NOT A `PlayerState` FIELD, AND A UNIT
+     CARRIES ITS OWNER AS AN INTEGER INDEX.** §11.1 **line 704** lists *"units"* beside *"players"*,
+     *"buildings"* and *"nodes"* as siblings inside the one serializable object; putting the roster
+     on `PlayerState` would have made *"every unit on this hex"* a cross-player scan of a nested
+     container and would have broken §11.1 line 707's single stable-ID order. So the roster lives on
+     `GameState` and `UnitState._owner_index` is a **player index**. **`PlayerState`'s public surface
+     did not move** — still exactly `amount_of`, `add`, `spend`, `can_afford`, `resource_ids`,
+     `content_hash` and zero public vars — and `tests/unit/test_player_state.gd` is **byte-untouched
+     and still green**, which is the mechanical proof that the decision was implemented rather than
+     merely intended.
+  2. **(AX)(ii) — IDS START AT 1, ADVANCE ONLY ON A SUCCESSFUL SPAWN, AND ARE NEVER REUSED; 0 MEANS
+     "NO UNIT".** `_next_unit_id` is a monotone counter initialised to **1**. **0 is an algorithmic
+     constant** (the (AJ) precedent — `HexPicker.PICK_SCALE`, `DigRules._HALVE_DIVISOR`),
+     deliberately **not** a §12.1 key: it is the *absence* value that lets `unit(0)`, `unit(-1)` and
+     any never-minted id all answer **null** without a sentinel object. Reuse is forbidden because a
+     recycled id would silently **rebind a dangling reference** — a stale command or event referring
+     to the dead unit 2 would start addressing a live one — and §11.1's replay contract could never
+     surface that as a hash difference. Pinned by test: spawn 1,2,3 → `remove_unit(2)` → the next
+     spawn is **4** and `unit_ids()` is `[1, 3, 4]`.
+  3. **(AX)(iii) — `spawn_unit` IS TOTAL AND EVERY REFUSAL IS ATOMIC, INCLUDING THE ID COUNTER.**
+     Refused (null) for an `owner_index` outside `0..player_count()-1` (so on a 0-player state
+     **every** index is refused), an **empty** `type_id`, and a `max_hp` of 0 or negative. A refusal
+     leaves `content_hash()` **byte-identical** *and* **burns no id** — the next successful spawn
+     gets exactly the id it would have got had the refused calls never happened. The id half is the
+     load-bearing one and has its own test before *and* after a successful spawn: an implementation
+     that increments the counter before validating passes a hash-only atomicity check.
+  4. **(AX)(iv) — `type_id` IS AN OPAQUE STRING, `max_hp` IS CALLER-SUPPLIED, AND §12.7's `worker` IS
+     A TRAIT (DATA), NOT A CLASS.** §12.2's unit definitions are `data/units/*.json`, an **M6**
+     deliverable, so this container holds **no stat table and no unit-type whitelist**: `type_id` is
+     the definition's opaque `id` (the §4.2 terrain-id **(T)/(AH)** and §5.1 resource-id **(AU)(iv)**
+     precedent) and `max_hp` comes from the caller. §12.7 **line 1015** prints `worker | dig_mult |
+     Can Dig/Build; dig-speed multiplier` — worker-ness is a **trait row in data**, so there is
+     deliberately **no `UnitState.is_worker()`** and no trait accessor at all; the tokens `worker`,
+     `dig_mult`, `sapper`, `digger`, `thrall`, the four faction names, the seven §5.1 resource ids
+     and `housing` are **forbidden** in both production files on comment-stripped source. §5.2 line
+     293's housing cap is likewise **not** enforced here: `housing.hq` (6) is already shipped in
+     `data/ruleset.json` and stays **UNUSED**.
+  5. **(AX)(v) — IDENTITY IS READ-ONLY; ONLY POSITION AND HP ARE WRITABLE, AND `set_hp` CLAMPS
+     RATHER THAN REFUSING.** `unit_id`, `owner_index` and `type_id` have **no setters** (a unit that
+     could change owner or definition mid-match breaks replay in a way no hash comparison shows).
+     `set_hp` is **TOTAL** and clamps into `[0, max_hp]` — an overheal saturates, an overkill floors
+     — and **0 hp does NOT remove the unit**: whether 0 hp kills is a **RULE** (§3.4 step 2's bleed,
+     §6 combat) belonging to a later slice, and it is pinned **negatively** so the container cannot
+     grow a hidden rule. `max_hp` never changes after `_init`; `hp` starts equal to it.
+  6. **(AX)(vi) — PLACEMENT IS NOT VALIDATED AND STACKING IS UNLIMITED AT THIS LAYER.** `spawn_unit`
+     accepts **any** `Vector2i` and **never consults `map`**; `units_at` happily returns more than
+     one id for a hex. Legality (cave hex, in bounds, §5.2 housing free) is a **Command** rule for a
+     later slice and §6.4's stacking legality is **M4**. Putting either here would have duplicated a
+     rule inside a container and given the project two places to change it.
+  7. **(AX)(vii) — NEUTRAL OWNERSHIP IS DELIBERATELY NOT MODELLED, AND M5 MUST ADD AN EXPLICIT
+     SENTINEL.** Every owner index outside `0..player_count()-1` is refused, so there is **no -1
+     "neutral" owner** today. §8.1's creeps and §3.2's *"their units become neutral hostiles"* will
+     need one; the next author must add it **explicitly and with its own entry**, never by silently
+     relaxing the range check into accepting a negative index.
+  8. **(AX)(viii) — THE FOLD IS EXTENDED BY *APPENDING ONLY*, `_next_unit_id` FIRST OF THE THREE —
+     and the unit-count step is a KNOWN EQUIVALENT MUTANT.** The order is now: private seed →
+     `rng.rolls_drawn()` → turn → current_player_index → map-presence flag → `map.content_hash()`
+     when present → `player_count()` → per player index ascending (the index, then that player's
+     hash) → **`_next_unit_id`** → **the unit count** → **per unit id ascending (the id, then that
+     unit's `content_hash()`)**. **No existing step was renamed or reordered** ((AV)(vi) is the
+     precedent for how to amend it), and two tests scan for exactly this sequence — one over
+     `content_hash()`'s comment-stripped body, one over the header doc block. **`_next_unit_id` folds
+     FIRST of the three because it is the only thing that makes "spawned 3 units then removed all 3"
+     differ from "never spawned"** — same seed, same (empty) roster, and §11.1's replay contract
+     requires the difference, since A's next spawn is id 4 and B's is id 1. **The unit-count step is
+     knowingly EQUIVALENT given the per-id fold that follows it** — it is kept for symmetry with the
+     player fold, exactly as (AU) item 11 recorded for `player_count()`. **Do not chase it in a later
+     mutation battery.** Units fold **BY ID, never as a multiset**, proven by the owner-swap
+     discriminator (two states holding the same two units with owner 0/1 swapped between id 1 and id
+     2 must hash differently — the (AU) lesson (b), the only shape that catches a set fold).
+  9. **(AX)(ix) — THE `_SEPARATOR` BYTE IN `UnitState.content_hash()` CANNOT BE KILLED BY A
+     CONFUSABLE-PAIR FIXTURE, AND THAT IS AN ANALYSIS, NOT A GAP.** The task spec asked (item E5) for
+     a `PlayerState`-style confusable pair whose naive separator-less byte stream is identical.
+     **That fixture is UNCONSTRUCTIBLE at this record's shape**, independently derived at Tests and
+     re-derived at Verify: every field folded before `type_id` is **fixed-width** (six
+     `Fnv.fold_int64` = 48 bytes) and `type_id` is the **single variable-length field, folded LAST**,
+     so the byte stream is already injective. Rather than ship a vacuous test that would pass against
+     a deleted separator, the separator is pinned **two honest ways**: the ordered fold-order
+     **source scan** (which also requires the named private const via the regex
+     `const _[A-Z][A-Z0-9_]*: int = 0x1f`) and an **`Fnv`-derived ORACLE test** that re-derives the
+     whole fold independently, so any reorder/omission/extra step reds. The byte is kept for
+     **symmetry with `PlayerState._SEPARATOR`** (identical value `0x1f`,
+     `scripts/sim/player_state.gd:34`) and because the record will gain variable-length fields later.
+     Contrast (AU): in `PlayerState` the separator **is** load-bearing (two variable-length fields
+     adjacent) and Verify measured that deleting it left the whole suite green until the
+     confusable-id test existed. **The difference is the field layout, and the layout was chosen
+     deliberately: fixed-width first, variable-length last.**
+  10. **(AX)(x) — MUTATORS ARE COMMAND-ONLY BY DOCUMENTATION, AND §13.6's *EVENTS* CLAUSE IS
+     VACUOUS FOR THIS SLICE — stated, not assumed** (the (AW) item 8 precedent). `spawn_unit`,
+     `remove_unit`, `UnitState.set_hex` and `UnitState.set_hp` all carry the same *"intended to be
+     written only from a Command's apply()"* doc comment that `GameState.set_turn_position` and
+     `HexMap.set_elevation` carry — GDScript has no package-private, so this is a documented
+     convention plus review, not a compiler guarantee. **No rule runs in this slice**: no `Command`,
+     no `Event`, no data key, no tick. Pinned negatively — `scripts/sim/commands/` and
+     `scripts/sim/events/` gained **no file** (a test enumerates both directories),
+     `tests/sim/test_turn_replay.gd` is untouched and still green, and the §3.4-absence pin was
+     **extended**: after any number of `EndTurnCommand.execute()` calls on a fresh state
+     `unit_ids()` is **still empty** and `rng.rolls_drawn()` is **still 0**. §13.6's
+     *constants-read-from-data* clause is likewise **vacuous but verified**: there are no constants
+     to read, and `unit_state.gd`'s only standalone numerals on comment-stripped source are `0`, `1`
+     and the hex `0x1f` — every §7.1/§12.2/§5.2/§3.1 value (3, 4, 6, 20, 40, 45, 50, 55, 60, 70,
+     100, 130, 200, 1000) is a **forbidden token**.
+  11. **(AX)(xi) — §13.2 TIER 3's GOLDEN IS *STILL* OWED, DEFERRED A THIRD TIME, AND THIS IS THE
+     REQUIRED RE-STATEMENT** ((AV) item 7 → (AW) item 5 → here). §13.2 tier 3 is *"fixed seed +
+     recorded command log ⇒ recorded `GameState.hash()` after N turns"*. This slice adds a
+     **container**, not a tick: nothing yet moves a unit, pays for one, or turns a hex into a Cave,
+     so freezing the fold now would still force a re-record on the very next slice — and §13.6
+     permits a re-record only *with a logged reason*. The obligation is unchanged and inherited:
+     **the slice that lands §3.4 step 4's dig tick (slice 4) should record it**, and if it still
+     looks premature there, that must be **said in decisions.md** rather than skipped a fourth time.
+  12. **(AX)(xii) — THE EXPECTED-PUBLIC-MEMBER LISTS ARE EXACT AND BOTH WERE WRITTEN IN THIS SAME
+     COMMIT** (the standing PROGRESS rule). `UnitState` = **nine** public functions — `unit_id`,
+     `owner_index`, `type_id`, `hex`, `set_hex`, `hp`, `max_hp`, `set_hp`, `content_hash` — plus
+     `_init(p_unit_id, p_owner_index, p_type_id, p_hex, p_max_hp)`, and **ZERO public vars and ZERO
+     public consts** (`_SEPARATOR` is `_`-prefixed and therefore private; a **missing OR extra**
+     member fails). `GameState`'s exact list **grew 8 → 14 in this commit**: vars `map`, `rng`;
+     funcs `player_count`, `player`, `turn`, `current_player_index`, `set_turn_position`,
+     `content_hash`, `spawn_unit`, `unit`, `unit_ids`, `units_of`, `units_at`, `remove_unit`. There
+     is deliberately **no `errors` var** on `UnitState`: it loads no document, so its scan asserts
+     `RulesError` is **ABSENT** (the M1-T9 no-second-loader rule), and class kind is checked via
+     `get_class() == "RefCounted"`, **never** `is Node`.
+  13. **(AX)(xiii) — STORAGE AND ORDER: NO `Dictionary` KEY ORDER MAY EVER REACH AN OUTPUT, AND
+     `units_of`/`units_at` ARE LINEAR SCANS ON PURPOSE.** `_units` is keyed by int id and touched
+     **only** by lookup/assign/erase — it is never iterated for output. `unit_ids()` sorts a **fresh
+     copy** of the keys and returns a **fresh Array every call**; `units_of`/`units_at` are linear
+     scans **over `unit_ids()`**, so there is exactly one source of ordering truth. **No reverse
+     index was built**: a second index is a determinism hazard and premature at this size (build it
+     only when a measured hot path demands it, and pin it against the linear scan when you do).
+     Freshness is pinned **both** ways — `is_same()` **identity** assertions *and* a
+     mutate-then-re-read pollution check — because the M1-T9 lesson is that a **self-clearing member
+     cache passes a pollution-only check**. `unit(id)` returns the **SAME object** every call (the
+     M2-T1 `player(i)` precedent), so a mutation through it persists.
+  14. **A NEW PARSE TRAP MEASURED LIVE, AND IT BELONGS BESIDE `seed` AND `log`: `owner` AND `name`
+     ARE BASE-CLASS PROPERTIES OF `Node`.** `GutTest` extends `Node`, so a parameter or `for`
+     iterator named `owner` or `name` in a test file is **`shadowed_variable_base_class` = level 2 =
+     a HARD ERROR**, which **silently un-collects the whole test file** (the M0-T5 item (a) false
+     green). Hit live this iteration and fixed by renaming; the explanation is recorded in a doc
+     comment on `_spawn` in `tests/unit/test_game_state.gd`. The running list of traps is now:
+     `seed` and `log` (shadowed global identifiers), `owner`/`name` (shadowed base-class properties
+     in anything extending `Node`, i.e. every GUT test), `func hash(` (`native_method_override`), a
+     literal `%` inside a String later used with the format operator, and `x is Node` against a
+     RefCounted-typed variable (a statically impossible cast, rejected at parse time).
+  15. **§13.6 DEFINITION OF DONE, clause by clause, stated rather than assumed.** *Tests green
+     headless*: yes — **690/690**, exit 0, `Scripts 28` == the 28 `test_*.gd` on disk. *Static typing
+     clean*: `bash tools/typecheck.sh` exit 0 over **51** files at the M0-T4 gate; every declaration
+     is `var x: T = …`; **no `float` token and no float literal** in either production file.
+     *Constants read from data, not code*: **vacuously satisfied and verified** — item 10.
+     *Events emitted for every state change*: **VACUOUS** — item 10. *Goldens re-recorded only with a
+     logged reason*: **none re-recorded, none created** — item 11. *Relevant GDD cell updated if
+     numbers moved*: **no number moved and NO GDD EDIT WAS MADE**; `docs/GAME_DESIGN.md` is
+     byte-unchanged in this commit.
+  16. **THE TESTS-STAGE STUB CONVENTION WAS USED AGAIN AND WORKED — EIGHTH CONSECUTIVE TIME**
+     (M1-T2 item 10 → (AV) item 14 → (AW) item 13). A whole-file `unit_state.gd` stub (correct public
+     surface, sentinel bodies) and six `## §11.1 — STUB` bodies in `game_state.gd` were shipped to
+     Implement under DO-NOT-SHIP banners so the suites would **parse** — a call to a missing method
+     is a GDScript parse error that silently un-collects the whole file. RED was measured at
+     **Scripts 28 / Tests 690 / Passing 657 / Failing 33**, every failure **behavioural** (14 in
+     `test_unit_state.gd`, 19 in `test_game_state.gd`), with the collected-script count already equal
+     to the on-disk count.
+  17. **IMPLEMENTER AND VERIFIER DEVIATIONS, REVIEWED AND ACCEPTED — no rule change follows from any
+     of them.** (a) The implementer reported **no behavioural deviation**: the signatures, refusal
+     conditions, fold order and doc-section tags were implemented exactly as the Tests stage dictated.
+     (b) **One documentation addition:** `scripts/sim/game_state.gd`'s header doc block (which
+     previously ended at (AV)'s *"DELIBERATELY NOT IN M2-T2"*) gained a new **(AX) resolution
+     paragraph** before `class_name GameState`, required by the header scan's new
+     `_next_unit_id` / `unit count` assertions. Land reviewed that paragraph against this entry and
+     they are consistent; **keep them in sync** — the header is the copy a future author reads first.
+     (c) Implement correctly left `docs/GAME_DESIGN.md`, `docs/decisions.md` and `docs/PROGRESS.md`
+     **untouched** (Land-stage artefacts; the GDD is read-only for Tests/Implement/Verify) — the
+     standing stage boundary, **not** a deviation. (d) Verify made **no fix** (`fixes_made` empty —
+     the **third** iteration running) and reported **no failures remaining**; its `deviations` array
+     is the source of items 7–11 above. (e) Verify ran an **adversarial mutation spot-check** in
+     place of a full numbered battery: deleting
+     `hash_value = Fnv.fold_int64(hash_value, _next_unit_id)` from `GameState.content_hash()` reds
+     **exactly the two right tests** —
+     `test_spawning_then_removing_every_unit_does_not_hash_like_never_spawning` and
+     `test_source_folds_the_turn_position_in_the_documented_order` — proving the most load-bearing
+     new fold step is pinned **behaviourally AND by the order scan**; the mutation was reverted and
+     the tree restored byte-identical. (f) Two new `.uid` siblings
+     (`scripts/sim/unit_state.gd.uid`, `tests/unit/test_unit_state.gd.uid`) are committed alongside
+     their scripts, matching all 136 pre-existing tracked `.gd.uid` files.
+  18. **NOT BUILT HERE, DELIBERATELY (§13.4 — invent nothing ahead of its milestone), named so no
+     later slice can claim they were forgotten:** §3.1's **starting kit** (still needs its **own**
+     §12.1 key and therefore its **own** amendment — (AU) item 8, re-affirmed by (AV) item 9 and
+     (AW) item 4; every player still starts **empty** and every roster still starts **empty**), §5.2's
+     **housing cap** (`housing.hq` shipped, unused), **upkeep** and §3.4 step 2's **deficit bleed**,
+     **income**, dig **assignment**/idle state, `DigHexCommand`/`CancelDigCommand`, **dig-site
+     progress**, yield **application**, the hex-becomes-Cave transition, **vein-node state**,
+     **Extractors**, **buildings**, **Mining Zones**, §12.7's **trait set**, movement/combat/damage,
+     unit **serialization** (`to_dict`) and any `data/units/*.json` stat block (**M6**), and the
+     `EventBus` → `MapRenderer.mark_hex_dirty` wiring ((AV) item 9).
+
+- **Why:** slices 3 and 4 of the dig chain both need *"which unit, owned by whom, standing where"*
+  before they can argue about anything else — a dig command needs a digger, §4.2's max-2-diggers cap
+  needs to count units on a hex, and §3.4 step 2's bleed needs `max_hp`. Landing the **container**
+  first, with no rule attached, means those slices argue about **state transitions** rather than
+  about storage, and it keeps this task honestly inside the ≤ ~300 LOC ceiling. The two genuinely
+  new decisions are item 1 (the roster's **home**, settled by §11.1 line 704 rather than by taste)
+  and item 8 (**how** a fold is extended once a golden is owed against it — append only, and fold the
+  id counter first so the replay contract can see a spawn/remove cycle). Item 9 is recorded at length
+  because it is the first time a test the task spec **asked for** was found **unconstructible**: the
+  honest answer was an analysis plus two real pins, not a fixture that would have passed against a
+  deleted line. Items 2, 3 and 5 are each a place where the simplest implementation is subtly wrong —
+  a reused id, an id burned on a refusal, a `set_hp` that refuses instead of clamping — and each has
+  a test whose only job is that mistake.
+
+- **GDD sections affected:** **NO CELL EDITED — `docs/GAME_DESIGN.md` is byte-unchanged in this
+  commit** (no printed number moved, and nothing needed an amendment). **§11.1** (line 704's
+  top-level `units` collection built as printed — item 1; line 707's stable-ID order and reproducible
+  FNV hash — items 8 and 13; pure `RefCounted` sim core: engine-free, integer/String only, no float,
+  every returned Array fresh and ascending). **§11.2** (`scripts/sim/` gains `unit_state.gd` — the
+  printed file list is illustrative, the (f)/(AT) precedent). **§11.3** (typing gate green over
+  **51** files; a `## §<section>` doc comment on every public function; both public surfaces
+  **exact** — item 12). **§12.2** (a unit instance references its definition by the **opaque** `id`
+  and carries `hp`/`max_hp`; the definitions themselves are `data/units/*.json` at **M6** — item 4).
+  **§12.7** (line 1015's `worker` is a **trait**, i.e. DATA — there is no worker *class* and no trait
+  accessor; forbidden tokens — item 4). **§3.4** (step 2's *"10% max HP"* is what `max_hp()` exists
+  for; the bleed itself is **not** built, and the §3.4-absence pin was **extended** to the roster —
+  item 10). **§3.1** (the starting kit is **still deferred** and still needs its own §12.1 key —
+  item 18). **§5.2** (housing cap **not** enforced; `housing.hq` shipped and unused — item 4).
+  **§6.4** (stacking legality is **M4**; the container stacks freely — item 6). **§8.1/§3.2**
+  (neutral ownership **deferred to M5**, with an explicit sentinel required — item 7). **§13.2**
+  (one new **tier-1** suite `tests/unit/test_unit_state.gd` (25 tests) and `tests/unit/test_game_state.gd`
+  grown 25 → 56; **tier 3's golden is STILL OWED** — item 11). **§13.4** (procedure exercised: every
+  silence resolved under (AX), nothing stalled, nothing invented ahead of its milestone). **§13.6**
+  (definition of done **MET**, every clause re-checked in item 15; the *events* and
+  *constants-from-data* clauses are **vacuous and said to be so**; no golden re-recorded).
+  **§14 M2 row — the milestone is STILL OPEN, NOT met. Acceptance criterion text unchanged**; none
+  of *"Scripted 20-turn dig scenario matches expected stockpiles exactly"*, *"deficit-bleed test"* or
+  *"zone assigns nearest idle worker"* is satisfied yet.
