@@ -138,51 +138,88 @@ static func hex_count_for_radius(radius: int) -> int:
 	return 3 * radius * (radius + 1) + 1
 
 
-# =================================================================================================
-# SLICE 2 (M1-T2) — DELIBERATELY-WRONG TESTS-STAGE STUBS.
-#
-# These five members exist ONLY so that `tests/unit/test_hex_math.gd` PARSES: a call to a missing
-# method is a GDScript parse error, which silently un-collects the whole test file (the M0-T5
-# false green, docs/decisions.md M0-T5 item (a)). Every body below returns a wrong value on
-# purpose, so the new tests fail on VALUES rather than on loading. The Implement stage replaces
-# this whole block with resolutions (C)–(G) above.
-# =================================================================================================
-
-
-## §4.1 "lerp in cube space, round" — STUB (M1-T2 Tests stage, deliberately wrong). Rounds the
-## exact rational `numerators / denom` to the nearest cube coordinate per resolutions (C)/(C2).
+## §4.1 "lerp in cube space, round" (resolutions (C)/(C2)) — rounds the exact rational
+## `numerators / denom` to the nearest valid cube coordinate, computed exactly over rationals via
+## [method _floor_div] (never in floats — no roundi/round/lerp/epsilon). Ties are broken by the
+## largest-diff cascade on the scaled integer diffs, repairing z on a two-way or three-way tie. A
+## non-positive `denom` returns `numerators` unchanged (no crash, no assert abort headless).
 static func cube_round_scaled(numerators: Vector3i, denom: int) -> Vector3i:
-	return numerators * denom
+	if denom <= 0:
+		return numerators
+	var rx: int = _floor_div(2 * numerators.x + denom, 2 * denom)
+	var ry: int = _floor_div(2 * numerators.y + denom, 2 * denom)
+	var rz: int = _floor_div(2 * numerators.z + denom, 2 * denom)
+	var dx: int = absi(rx * denom - numerators.x)
+	var dy: int = absi(ry * denom - numerators.y)
+	var dz: int = absi(rz * denom - numerators.z)
+	if dx > dy and dx > dz:
+		rx = -ry - rz
+	elif dy > dz:
+		ry = -rx - rz
+	else:
+		rz = -rx - ry
+	return Vector3i(rx, ry, rz)
 
 
-## §4.1 "Line of sight uses standard hex line-drawing (lerp in cube space, round)" — STUB (M1-T2
-## Tests stage, deliberately wrong). The hexes from `a` to `b` inclusive, per resolution (D).
+## §4.1 "Line of sight uses standard hex line-drawing (lerp in cube space, round)" (resolution
+## (D)) — the hexes from `a` to `b` inclusive, walked with exact-integer rational arithmetic
+## (denominator N = distance(a, b), no epsilon nudge), so `line(a, b)` is exactly the reverse of
+## `line(b, a)`. Always a fresh [Array] (never shared/cached, per §11.1).
 static func line(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
-	out.append(a)
-	out.append(b)
+	var n: int = distance(a, b)
+	if n == 0:
+		out.append(a)
+		return out
+	var ca: Vector3i = axial_to_cube(a)
+	var cb: Vector3i = axial_to_cube(b)
+	var delta: Vector3i = cb - ca
+	for i: int in range(n + 1):
+		var numerators: Vector3i = ca * n + delta * i
+		out.append(cube_to_axial(cube_round_scaled(numerators, n)))
 	return out
 
 
-## §4.1 — STUB (M1-T2 Tests stage, deliberately wrong). The hexes at exactly `radius` from
-## `center`, in the fixed traversal order of resolution (E).
+## §4.1 (resolution (E)) — the hexes at exactly `radius` from `center`, in the fixed traversal
+## order: corner i is `center + DIRECTIONS[i] * radius`, and each side walks `radius` steps in
+## direction `DIRECTIONS[(i + 2) % 6]`, appending before stepping. `radius < 0` is the empty array;
+## `radius == 0` is `[center]` (resolution (F)). Always a fresh [Array].
 static func ring(center: Vector2i, radius: int) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
-	out.append(center + Vector2i(radius, 0))
+	if radius < 0:
+		return out
+	if radius == 0:
+		out.append(center)
+		return out
+	for i: int in range(6):
+		var h: Vector2i = center + DIRECTIONS[i] * radius
+		var step: Vector2i = DIRECTIONS[(i + 2) % 6]
+		for _s: int in range(radius):
+			out.append(h)
+			h += step
 	return out
 
 
-## §4.1 — STUB (M1-T2 Tests stage, deliberately wrong). The hexes within `radius` of `center` in
-## spiral order, per resolution (G).
+## §4.1 (resolution (G)) — the hexes within `radius` of `center` in spiral order: `[center] +
+## ring(center, 1) + ring(center, 2) + … + ring(center, radius)`, in that order. `radius < 0` is
+## the empty array (resolution (F)). Always a fresh [Array].
 static func hexes_in_range(center: Vector2i, radius: int) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
-	out.append(center + Vector2i(0, radius))
+	if radius < 0:
+		return out
+	out.append(center)
+	for r: int in range(1, radius + 1):
+		out.append_array(ring(center, r))
 	return out
 
 
-# STUB (M1-T2 Tests stage, deliberately wrong): this truncates toward zero instead of flooring,
-# which is exactly the trap resolution (C) exists to close.
+## §4.1 (resolution (C)) — TRUE floor division of `n / d` (`d` assumed > 0 by all call sites in
+## this file). GDScript's `/` truncates toward zero, so e.g. -7 / 3 truncates to -2 rather than
+## flooring to -3; this corrects toward -infinity by decrementing whenever the division was
+## inexact and the operands' signs disagree.
 static func _floor_div(n: int, d: int) -> int:
 	@warning_ignore("integer_division")
 	var q: int = n / d
+	if n % d != 0 and (n < 0) != (d < 0):
+		q -= 1
 	return q

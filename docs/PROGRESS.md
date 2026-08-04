@@ -15,51 +15,30 @@ not-yet-committed.
   RulesLoader + `ruleset.json`, CI script, `decisions.md`), **both** §14 acceptance clauses pass
   headless, and the signal that reports clause (a) is itself proven against the false-green mode
   M0-T4 measured. **M1 is NOT done:** its §14 row lists five deliverables (HexMath, concentric-bowl
-  generator, chunked MultiMesh renderer, camera rig, hex picking) and M1-T1 delivered the **first
-  slice of the first one**; **none of the three §14 M1 acceptance criteria pass yet** (no golden
-  mapgen test exists, no greybox/renderer exists to measure 60 fps on, no LOS code exists to
-  property-test).
-- **Next task:** **M1-T2 (RESUME) — finish HexMath slice 2: exact-integer hex lines, rings and
-  ranges.** The iteration of 2026-08-04 landed **WIP(blocked)**: the Tests stage completed and is
-  committed (20 new tests, sections H–M of `tests/unit/test_hex_math.gd`, confirmed RED for the
-  right reason), but the **Implement stage returned no result** (agent died/skipped) and Verify ran
-  nothing. `scripts/core/hex_math.gd` therefore currently ships **deliberately-wrong stubs** for the
-  four new public members plus `_floor_div`, under a banner comment. **The next iteration's job is
-  the Implement + Verify half only** — the spec, the derived values and the (C)–(G) resolutions are
-  all already on disk (see the HexMath contract note below). Do **not** re-open the design, do
-  **not** edit `tests/unit/test_hex_math.gd`, and do **not** start M1-T3.
-- **Blockers:** **`bash tools/run_tests.sh` exits 1** — Scripts 8 / Tests 106 / Passing 87 /
-  **Failing 19** / Asserts 950/1023. All 19 failures are the new M1-T2 tests failing on **values**
-  against the deliberately-wrong stubs in `scripts/core/hex_math.gd` (the 24 pre-existing hex_math
-  tests and the 62 tests in the other 7 files are all green, and `bash tools/typecheck.sh` exits 0
-  over 13 files — so the red is purely value-based, not a gate or parse artefact). The 19:
-  `test_floor_div_is_true_floor_not_truncation_toward_zero`,
-  `test_floor_div_satisfies_the_defining_floor_inequality`,
-  `test_cube_round_scaled_rounds_half_toward_positive_infinity`,
-  `test_cube_round_scaled_breaks_ties_by_repairing_z`,
-  `test_cube_round_scaled_always_returns_a_valid_nearby_cube`,
-  `test_cube_round_scaled_is_the_identity_for_a_non_positive_denominator`,
-  `test_line_degenerate_and_straight_runs`,
-  `test_line_tie_cases_resolve_through_the_z_repair`,
-  `test_line_reversed_endpoints_give_the_reversed_line`,
-  `test_line_long_off_origin_case`, `test_ring_radius_one_is_exactly_neighbors`,
-  `test_ring_hand_walked_cases`, `test_ring_and_range_degenerate_radii_are_total`,
-  `test_hexes_in_range_is_the_spiral_composition_of_rings`,
-  `test_hexes_in_range_size_matches_the_hex_count_formula`,
-  `test_line_properties_over_the_radius_four_disc`,
-  `test_ring_properties_out_to_radius_eight`,
-  `test_hexes_in_range_properties_out_to_radius_eight`,
-  `test_line_ring_and_range_return_fresh_arrays_each_call`.
-  (`test_slice_two_calls_are_repeatable` passes against the stubs and is therefore not a red signal
-  — any deterministic function satisfies it; it becomes load-bearing only against a real
-  implementation that might cache.)
+  generator, chunked MultiMesh renderer, camera rig, hex picking) and M1-T1 + M1-T2 delivered the
+  **first one only** (HexMath, both slices, complete); **none of the three §14 M1 acceptance
+  criteria pass yet** (no golden mapgen test exists, no greybox/renderer exists to measure 60 fps
+  on, no LOS code exists to property-test).
+- **Next task:** **M1-T3 — `Los`** in `scripts/core/los.gd` (§11.2 names it as a separate `core/`
+  peer). Pin §4.1's blocking rule **verbatim**: *"a line is blocked by any Solid hex, or by any hex
+  whose elevation exceeds **both** endpoints' elevation"* (GDD line 170, re-read verbatim at Land),
+  built on the now-complete `HexMath.line()`. **Open design question M1-T3 must resolve under
+  §13.4:** no `GameState` and no map type exist yet, so `Los` must take terrain as **injected query
+  parameters** (two `Callable`s, or a tiny typed read-only view) rather than inventing a map type
+  ahead of §4.4's generator. Note also that `test_hex_math.gd`'s no-float / no-map-size / engine-free
+  source scans cover `hex_math.gd` **only** — a new `los.gd` is not automatically covered, so write
+  the equivalent scans for it.
+- **Blockers:** **none.** The M1-T2 blocked state is CLEARED: all 19 previously-failing tests are
+  green. `bash tools/run_tests.sh` exits **0** at Scripts 8 / Tests 106 / **Passing 106** /
+  Failing 0 / Asserts 1023; `bash tools/typecheck.sh` exits 0 over 13 files; `bash tools/ci.sh`
+  exits 0; `bash tools/verify_harness.sh` exits 0 across all four phases with the tree left clean.
 
 ## Milestone tracker
 
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
-| M1 World | **in progress** (opened 2026-08-04, M1-T1) · **M1-T2 BLOCKED (2026-08-04)** | **NONE of the three §14 M1 criteria met yet, checked against the §14 row this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: no generator and no golden file exist (the project's first golden); (b) *60 fps on Medium map greybox*: no renderer, camera rig or greybox scene exists; (c) *LOS property tests*: no LOS code exists — that is M1-T3, and it is **not** reached yet. **Deliverables built so far: HexMath slice 1 only** (`scripts/core/hex_math.gd` — axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; 24 tests, all §4.1 values pinned). **Slice 2 (lines/rings/ranges) is SPEC'D AND TEST-PINNED BUT NOT IMPLEMENTED** — 20 tests landed RED against deliberately-wrong stubs; the suite is red at 19 failures and M1-T2 must be resumed at the Implement stage. Still to build: HexMath lines/rings/ranges bodies (M1-T2 resume), `Los` (M1-T3, `scripts/core/los.gd` per §11.2), concentric-bowl generator (§4.4), chunked MultiMesh renderer, camera rig, hex picking. |
+| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 landed 2026-08-04) | **NONE of the three §14 M1 criteria met yet, re-checked against the §14 row this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: no generator and no golden file exist (the project's first golden); (b) *60 fps on Medium map greybox*: no renderer, camera rig or greybox scene exists; (c) *LOS property tests*: no LOS code exists — that is M1-T3, the next task, and it is **not** reached yet. **The milestone is therefore NOT marked done.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`; 44 tests over 15 public members, all §4.1 values pinned, all green). Still to build: `Los` (M1-T3, `scripts/core/los.gd` per §11.2), concentric-bowl generator (§4.4), chunked MultiMesh renderer, camera rig, hex picking. |
 | M2 Dig & Economy | not started | — |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
@@ -85,74 +64,75 @@ not-yet-committed.
 | 2026-08-04 | M0-T5 | Harden run_tests.sh against silently skipped test scripts (**closes M0**) | landed | M0-T5: Harden run_tests.sh against silently skipped test scripts |
 | 2026-08-04 | SETUP-5 | Workflow boilerplate: run_tests.sh is strengthening-only, not frozen | landed | SETUP-5: workflow boilerplate — run_tests.sh strengthening-only, not frozen |
 | 2026-08-04 | M1-T1 | HexMath slice 1: axial/cube conversions, fixed neighbour order, cube distance (**opens M1**) | landed | M1-T1: HexMath slice 1: axial/cube conversions, fixed neighbour order, cube distance |
-| 2026-08-04 | M1-T2 | HexMath slice 2: exact-integer hex lines, rings and ranges | **blocked** (tests landed RED; Implement stage returned no result) | WIP(blocked) M1-T2: HexMath slice 2: exact-integer hex lines, rings and ranges |
+| 2026-08-04 | M1-T2 | HexMath slice 2: exact-integer hex lines, rings and ranges (tests stage; landed RED) | superseded → landed | WIP(blocked) M1-T2: HexMath slice 2: exact-integer hex lines, rings and ranges |
+| 2026-08-04 | M1-T2 | HexMath slice 2: exact-integer hex lines, rings and ranges (**resumed at Implement; blocker cleared**) | landed | M1-T2: HexMath slice 2: exact-integer hex lines, rings and ranges |
 
 ## Notes for the next iteration
 
-- **Pick up: FINISH M1-T2 — it is blocked mid-iteration, not finished.** The repo is committed in a
-  deliberately RED state (see **Blockers** above for the exact 19 failing test names). Everything
-  the Implement stage needs is already on disk:
-  - **Where the open question was settled:** lines/rings/ranges live in `scripts/core/hex_math.gd`,
-    **not** a new file — §14's M1 row names the deliverable *"HexMath (axial/cube, LOS, lines,
-    rings)"*, so only the LOS predicate splits out, into `scripts/core/los.gd` at **M1-T3** per
-    §11.2. **Do not create `los.gd` in M1-T2.**
-  - **What to do:** replace the block in `scripts/core/hex_math.gd` banner-marked
-    `SLICE 2 (M1-T2) — DELIBERATELY-WRONG TESTS-STAGE STUBS` with real bodies implementing
-    resolutions **(C)–(G)**, which are written out in full in that file's own header doc block and
-    again in `tests/unit/test_hex_math.gd`'s header. Fix **code** to match the pinned values; never
-    the reverse — `tests/unit/test_hex_math.gd` is not to be edited, and its expected values were
-    each re-derived independently against a reference model before being pinned.
-  - **The five traps the suite exists to catch:** (1) a shared/static/`const` cached return array —
-    all three array-returning functions must build a fresh `Array[Vector2i]` per call; (2)
-    truncating division on negatives (GDScript `int/int` truncates toward zero — `_floor_div` must
-    correct it); (3) a tie-break that repairs `y` instead of `z`; (4) `roundi()`/half-away-from-zero
-    instead of round-half-up-toward-+inf; (5) any epsilon nudge — the reverse-symmetry property over
-    3,721 ordered pairs fails immediately.
-  - **Then run:** `bash tools/run_tests.sh` (expect exit 0, Scripts 8, Tests 106),
-    `bash tools/typecheck.sh` (exit 0, 13 files), `bash tools/ci.sh`, `bash tools/verify_harness.sh`.
-    At Verify make the two subtlest pins **live**, exactly as M1-T1 did for `neighbors()`: mutate
-    `ring()` to return a shared cached array and confirm the freshness test goes red; flip the
-    cascade's final `else` to repair `y` and confirm `line((0,0),(2,-1))` and `line((0,0),(1,1))` go
-    red; restore byte-identically (md5) after each probe.
-  - **Only after that is green** does the pointer move to **M1-T3 = `Los`** in `scripts/core/los.gd`
-    (§11.2), pinning §4.1's blocking rule verbatim: *"a line is blocked by any Solid hex, or by any
-    hex whose elevation exceeds **both** endpoints' elevation"*. **Open design question M1-T3 must
-    resolve under §13.4:** no `GameState` and no map type exist yet, so `Los` must take terrain as
-    **injected query parameters** (two `Callable`s, or a tiny typed read-only view) rather than
-    inventing a map type ahead of §4.4. Note also that `test_hex_math.gd`'s no-float / no-map-size
-    source scans cover `hex_math.gd` **only** — a new `los.gd` is not automatically covered, so
-    write the equivalent scans for it.
+- **Pick up: M1-T3 = `Los`, a NEW file `scripts/core/los.gd` (§11.2 lists it as a separate `core/`
+  peer; §14's M1 row folds "LOS" into the HexMath deliverable, but the file split is §11.2's).**
+  M1-T2 is finished and the tree is green — nothing is carried over.
+  - **The rule to pin, verbatim from §4.1 (re-read at Land, GDD line 170):** *"Line of sight uses
+    standard hex line-drawing (lerp in cube space, round); a line is blocked by any Solid hex, or by
+    any hex whose elevation exceeds **both** endpoints' elevation."* The line-drawing half is
+    **already built and pinned** — call `HexMath.line()`; do not re-implement or "optimize" it.
+  - **The open design question M1-T3 must resolve under §13.4 (do not stall, log the choice):** no
+    `GameState`, no map type and no terrain enum exist yet, and §4.2's hex types / §4.1's elevation
+    0–3 belong to the §4.4 generator's milestone. So `Los` must receive terrain as **injected query
+    parameters** — two `Callable`s (`is_solid(Vector2i) -> bool`, `elevation(Vector2i) -> int`) or a
+    tiny typed read-only view — rather than inventing a map type ahead of §4.4. Whichever shape is
+    picked, decide and log: what a query on an off-map hex returns, and whether the two **endpoints**
+    are exempt from the Solid test (the natural reading: a Solid *endpoint* does not block its own
+    line, and "exceeds **both** endpoints' elevation" is a strict `>` against `maxi(e_a, e_b)`).
+    Continue the decisions.md lettering — M1-T2 ended at **(G)**, so M1-T3 starts at **(H)**.
+  - **`test_hex_math.gd`'s source scans cover `hex_math.gd` ONLY.** A new `los.gd` is not
+    automatically covered, so write the equivalent scans for it: no float literal (regex `\.[0-9]`)
+    and no `float` token; no `randi(` / `randf(` / `extends Node` / `SceneTree` / `get_tree` /
+    `Engine.` / `Time.` / `OS.`; no map-size literal (`24|32|40|1801|3169|4921`); every public
+    function carrying a `## §4.1` doc comment. Assert non-Node-ness via `get_class()`, **never**
+    `is Node` (statically impossible — parse-errors; decisions.md M0-T2 item 11 / M0-T5 item (a)).
+  - **§13.2 wants LOS *property* tests** (they are one of the three §14 M1 acceptance criteria), not
+    only hand-walked cases: symmetry (`los(a,b) == los(b,a)` given the same terrain), reflexivity,
+    and "an all-open board never blocks" are the obvious three. M1-T2's radius-4-disc sweep (3,721
+    ordered pairs) is the template.
   `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd`, `core/event.gd` +
   `core/event_bus.gd` and `core/hex_math.gd`, and nothing else, deliberately (§13.4: invent nothing
   ahead of its milestone). No GameState, Command, generator, renderer or map code exists yet, and
   **no concrete `Event` subclass exists** — those belong to the milestones that emit them. M1 is
   the first milestone allowed to add hex/map code and the first to record a **golden**.
-- **HexMath contract (`scripts/core/hex_math.gd`, landed M1-T1) — the coordinate layer every later
-  system indexes; read decisions.md M1-T1 (A)/(B) before extending it.** `class_name HexMath extends
-  RefCounted`, **all-static, never instantiated**. Axial is a plain `Vector2i` (q, r), cube a plain
-  `Vector3i` (x, y, z) — integer Variant built-ins, not Nodes, so §11.1 purity holds and a
-  4,921-hex Large map allocates no per-hex objects. **API surface is now 15 public + 1 private, but
-  only the first 11 are IMPLEMENTED** — do not grow it casually:
-  - **Landed and stable (M1-T1, 11 members):** `DIRECTIONS` (`Array[Vector2i]`), `DIRECTION_NAMES`
+- **HexMath contract (`scripts/core/hex_math.gd`, COMPLETE as of M1-T2) — the coordinate layer every
+  later system indexes; read decisions.md M1-T1 (A)/(B) and M1-T2 (C)–(G) before extending it.**
+  `class_name HexMath extends RefCounted`, **all-static, never instantiated**. Axial is a plain
+  `Vector2i` (q, r), cube a plain `Vector3i` (x, y, z) — integer Variant built-ins, not Nodes, so
+  §11.1 purity holds and a 4,921-hex Large map allocates no per-hex objects. **API surface is 15
+  public + 1 private, ALL IMPLEMENTED, ALL GREEN** — do not grow it casually:
+  - **Slice 1 (M1-T1, 11 members):** `DIRECTIONS` (`Array[Vector2i]`), `DIRECTION_NAMES`
     (`PackedStringArray`), `axial_to_cube`, `cube_to_axial`, `is_valid_cube`, `neighbor`,
     `neighbors`, `opposite`, `distance`, `is_within_radius`, `hex_count_for_radius`.
-  - **Present as DELIBERATELY-WRONG STUBS (M1-T2, blocked — 4 public + 1 private):**
+  - **Slice 2 (M1-T2, 4 public + 1 private):**
     `cube_round_scaled(numerators: Vector3i, denom: int) -> Vector3i`,
     `line(a: Vector2i, b: Vector2i) -> Array[Vector2i]`,
     `ring(center: Vector2i, radius: int) -> Array[Vector2i]`,
     `hexes_in_range(center: Vector2i, radius: int) -> Array[Vector2i]`, and the private
-    `_floor_div(n: int, d: int) -> int`. They exist **only** so the test file parses (a call to a
-    missing method is a parse error, which silently un-collects the whole file — the M0-T5 false
-    green, decisions.md M0-T5 item (a)). **Nothing may call them until M1-T2 is finished.** Their
-    contract is resolutions **(C)–(G)**, written out verbatim in the file header and in
-    `tests/unit/test_hex_math.gd`'s header — the header lettering `(A)`/`(B)`/`(C)`/`(C2)`/`(D)`/
-    `(E)`/`(F)`/`(G)` is cross-referenced by `hex_math.gd`, `test_hex_math.gd` and `decisions.md`,
-    so **keep it stable and continue the sequence**. In one line each: (C) round-half-up means
-    toward **+infinity**, computed exactly over rationals (`floor_div(2n + d, 2d)`), never floats,
-    and **`roundi()` is the WRONG primitive** (it rounds half away from zero); (C2) the cube-repair
-    cascade breaks ties by repairing **z**; (D) exact numerators make `line(a,b)` exactly
-    `reverse(line(b,a))`; (E) `ring(c, 1) == neighbors(c)` element-for-element; (F) a negative
-    radius is the **empty array**; (G) `hexes_in_range` is the spiral `[c] + ring(1) + … + ring(r)`.
+    `_floor_div(n: int, d: int) -> int`. Their contract is resolutions **(C)–(G)**, written out
+    verbatim in the file header and in `tests/unit/test_hex_math.gd`'s header — the header lettering
+    `(A)`/`(B)`/`(C)`/`(C2)`/`(D)`/`(E)`/`(F)`/`(G)` is cross-referenced by `hex_math.gd`,
+    `test_hex_math.gd` and `decisions.md`, so **keep it stable and continue the sequence at (H)**.
+    In one line each: (C) round-half-up means toward **+infinity**, computed exactly over rationals
+    (`_floor_div(2n + d, 2d)`), never floats, and **`roundi()` is the WRONG primitive** (it rounds
+    half away from zero); (C2) the cube-repair cascade breaks ties by repairing **z**; (D) exact
+    numerators make `line(a,b)` exactly `reverse(line(b,a))`; (E) `ring(c, 1) == neighbors(c)`
+    element-for-element; (F) a negative radius is the **empty array**; (G) `hexes_in_range` is the
+    spiral `[c] + ring(1) + … + ring(r)`.
+  - **The five traps the slice-2 suite exists to catch — re-read before touching any of the five
+    bodies**, because each is silent and each breaks determinism (and M1's first golden): (1) a
+    shared/static/`const` cached return array — all three array-returning functions build a **fresh**
+    `Array[Vector2i]` per call; (2) truncating division on negatives (GDScript `int/int` truncates
+    toward zero, so `_floor_div` corrects it — without that every negative-coordinate line rounds the
+    wrong way); (3) a tie-break that repairs `y` instead of `z`; (4) `roundi()`/half-away-from-zero
+    instead of round-half-up-toward-+inf; (5) any epsilon nudge — the reverse-symmetry property over
+    3,721 ordered pairs fails immediately. Traps (1) and (3) were **proven live by adversarial
+    mutation probes at Verify** (see decisions.md M1-T2 completion entry), not merely asserted.
   - **Direction indices are FIXED and load-bearing** (§4.1): `0 E (+1,0)`, `1 NE (+1,-1)`,
     `2 NW (0,-1)`, `3 W (-1,0)`, `4 SW (-1,+1)`, `5 SE (0,+1)`; `opposite(i) == (i+3)%6`, which is a
     true geometric property here (`DIRECTIONS[i] + DIRECTIONS[opposite(i)] == ZERO` for all six).
@@ -216,14 +196,14 @@ not-yet-committed.
   Errors surface as `RulesError` (`line` 1-based, `path` dotted, `message`,
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
-- **CURRENT SUITE STATE IS RED BY DESIGN, and it is the M1-T2 blocker, not a harness fault.**
-  `bash tools/run_tests.sh` → **exit 1** with **Scripts 8 / Tests 106 / Passing 87 / Failing 19 /
-  Asserts 950/1023** (measured at Land, 2026-08-04). `Scripts 8` equals the number of `test_*.gd`
-  on disk, so nothing is silently skipped, and `bash tools/typecheck.sh` still exits **0** over 13
-  files — the red is purely value-based. The last **green** baseline was M1-T1's
-  **Scripts 8 / Tests 86 / Passing 86 / Asserts 835** (it was 7 / 62 / 62 / 473 at the close of M0 —
-  the M0 tracker row above deliberately keeps that historical figure). **Target once M1-T2's
-  Implement stage lands: exit 0 at Scripts 8 / Tests 106 / Passing 106.**
+- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 8 /
+  Tests 106 / Passing 106 / Failing 0 / Asserts 1023** (measured at Land, 2026-08-04, M1-T2).
+  `Scripts 8` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
+  `bash tools/typecheck.sh` exits **0** over 13 files; `bash tools/ci.sh` and
+  `bash tools/verify_harness.sh` both exit 0. Prior green baselines, for reference: M1-T1's
+  8 / 86 / 86 / 835, and 7 / 62 / 62 / 473 at the close of M0 (the M0 tracker row above deliberately
+  keeps that historical figure). **Expect these totals to RISE as you add tests — they are
+  enumerated, not hard-coded.**
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 on a healthy tree, and
   `bash tools/typecheck.sh` → exit 0 over **13** project `.gd` files, and
   `bash tools/verify_harness.sh` → exit 0
@@ -295,16 +275,19 @@ not-yet-committed.
   satisfies. The behavioural proof (live Phases C/D + the negative control) covers the property
   today. Tightening it to anchor on the guard's own code line is a fine opportunistic fix; it was
   scope creep inside M0-T5.
-- **Process risk observed 2026-08-04 (M1-T2), recorded so the next iteration recognises the
-  shape:** the workflow's **Implement** stage returned **no result at all** (agent died or was
-  skipped) and **Verify** consequently ran nothing and reported `green: false` with zero suites run.
-  The loop then correctly degraded to `WIP(blocked)` per CLAUDE.md rather than landing a false
-  green. Two consequences worth internalising: (1) a *committed red tree* is a legitimate,
-  documented loop state — do **not** "fix" it by deleting or weakening the failing tests, and do
-  **not** re-run Orient to invent a different task; resume at Implement. (2) The Tests-stage stub
-  convention is what made this safe: because the stubs keep `hex_math.gd` parseable, the red is
-  loud (19 named value failures) instead of the silent whole-file un-collection that M0-T5 closed.
-  Keep using it.
+- **Process pattern proven 2026-08-04 (M1-T2), now CLOSED — kept as the standing playbook for the
+  next time a stage dies.** The workflow's **Implement** stage returned **no result at all** (agent
+  died or was skipped) and **Verify** consequently ran nothing and reported `green: false` with zero
+  suites run. The loop correctly degraded to `WIP(blocked)` per CLAUDE.md rather than landing a false
+  green, and the **next iteration resumed the same task at the Implement stage and finished it** —
+  no re-Orient, no re-spec, no test churn. Three consequences worth internalising: (1) a *committed
+  red tree* is a legitimate, documented loop state — do **not** "fix" it by deleting or weakening
+  the failing tests, and do **not** re-run Orient to invent a different task; resume at Implement.
+  (2) The Tests-stage stub convention is what made this safe: because the stubs kept `hex_math.gd`
+  parseable, the red was loud (19 named value failures) instead of the silent whole-file
+  un-collection that M0-T5 closed. Keep using it. (3) Naming the exact failing tests in **Blockers**
+  is what made the resume mechanical — the resuming iteration matched all 19 names before touching
+  anything, which proved the tree had not drifted. Always record the failure list, never just a count.
 - **Golden discipline, first exercised in M1:** no golden file exists yet. When M1 records the
   mapgen hash, §13.6 applies from that moment — a golden may be re-recorded **only** with a logged
   reason in `decisions.md` in the *same commit*. Get the seeded generation deterministic first

@@ -482,17 +482,24 @@ table value moved, so **no `docs/GAME_DESIGN.md` cell was edited in this commit*
   greybox to measure 60 fps on, no LOS to property-test). Acceptance criterion text unchanged.
   **No numeric table value moved, so NO `docs/GAME_DESIGN.md` cell was edited in this commit.**
 
-## 2026-08-04 — M1-T2 (WIP, BLOCKED) — Hex-line/ring conventions (C)–(G) fixed and test-pinned; Implement stage did not run
+## 2026-08-04 — M1-T2 (tests stage; SUPERSEDED — see the M1-T2 completion entry below) — Hex-line/ring conventions (C)–(G) fixed and test-pinned
 
-**Status of the commit this entry accompanies: `WIP(blocked)`. The suite is RED on purpose** —
-`bash tools/run_tests.sh` exits **1** at Scripts 8 / Tests 106 / Passing 87 / **Failing 19** /
-Asserts 950/1023, while `bash tools/typecheck.sh` exits **0** over 13 files. The Tests stage
-completed and is committed; the **Implement stage returned no result** (agent died or was skipped),
+> **STATUS SUPERSEDED 2026-08-04 by the "M1-T2 (COMPLETE)" entry at the end of this file.** The
+> blocked status described in the next paragraph is **no longer current**: the following iteration
+> resumed M1-T2 at the Implement stage, the five bodies landed, and the suite is **green** at
+> Scripts 8 / Tests 106 / Passing 106 / Failing 0 / Asserts 1023. **This entry's body (items 1–14) is
+> NOT superseded** — resolutions **(C)/(C2)/(D)/(E)/(F)/(G)** remain the binding record of the
+> hex-line/ring/range conventions and are unchanged by the completion. Only the status header below
+> is historical.
+
+**Status of the commit this entry accompanied: `WIP(blocked)`. The suite was RED on purpose** —
+`bash tools/run_tests.sh` exited **1** at Scripts 8 / Tests 106 / Passing 87 / **Failing 19** /
+Asserts 950/1023, while `bash tools/typecheck.sh` exited **0** over 13 files. The Tests stage
+completed and was committed; the **Implement stage returned no result** (agent died or was skipped),
 so Verify ran nothing (`green: false`, zero suites run) and the loop degraded to `WIP(blocked)` per
-CLAUDE.md rather than landing a false green. `scripts/core/hex_math.gd` therefore ships four public
+CLAUDE.md rather than landing a false green. `scripts/core/hex_math.gd` therefore shipped four public
 members plus one private helper as **deliberately-wrong stubs** under an explicit banner comment.
-The next iteration resumes M1-T2 **at the Implement stage**; see `docs/PROGRESS.md` for the exact
-19 failing test names and the resume checklist.
+The next iteration resumed M1-T2 **at the Implement stage** and completed it.
 
 §4.1 gives an **algorithm** for this task, not a table — *"Line of sight uses standard hex
 line-drawing (lerp in cube space, round)"*, *"Distance = cube distance"*, *"Neighbor order (fixed,
@@ -612,4 +619,122 @@ test today and will be pinned by *passing* test when Implement lands.
   met — tests are red, see the status paragraph; two clauses vacuous, see item 12); **§14 M1 row —
   still OPEN and NOT met: `HexMath` slice 2 is spec'd and test-pinned but NOT implemented, and none
   of the three M1 acceptance criteria pass.** Acceptance criterion text unchanged. **NO
+  `docs/GAME_DESIGN.md` edit accompanies this entry, because no numeric table value changed.**
+
+## 2026-08-04 — M1-T2 (COMPLETE) — Slice 2 implemented and landed green; (C)–(G) unchanged, both subtle pins proven live
+
+**This entry supersedes the STATUS HEADER — and only the status header — of the
+"2026-08-04 — M1-T2 (tests stage)" entry above.** That entry's items 1–14 stand verbatim as the
+binding record of resolutions **(C)/(C2)/(D)/(E)/(F)/(G)**; nothing in them was re-opened,
+re-interpreted or amended by this iteration. What changed is the *state of the work*: the blocked
+iteration was resumed **at the Implement stage** (no re-Orient, no re-spec, no new or edited test),
+the five bodies landed in `scripts/core/hex_math.gd`, and the suite is **green**.
+
+- **What changed / was decided:**
+  1. **The blocker is cleared; the recorded red baseline is retired.** `bash tools/run_tests.sh`
+     exits **0** at **Scripts 8 / Tests 106 / Passing 106 / Failing 0 / Asserts 1023** — all 19
+     failing tests named in `docs/PROGRESS.md`'s Blockers section are green, with 0 pending and 0
+     orphaned. `bash tools/typecheck.sh` exits 0 over 13 files; `bash tools/ci.sh` exits 0;
+     `bash tools/verify_harness.sh` exits 0 across all four phases with the tree left clean. All four
+     were run headless through the `tools/` scripts on the repo-local pinned
+     `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3). The three §13.1
+     tools that later milestones deliver (`sim_smoke` → M7, `content_cli` → E4, `balance_lab` → E5)
+     were correctly **SKIPped, not failed**, per CLAUDE.md's applicability rule.
+  2. **ZERO new rule interpretations.** The five bodies (`_floor_div`, `cube_round_scaled`, `line`,
+     `ring`, `hexes_in_range`) implement (C)/(C2)/(D)/(E)/(F)/(G) clause-for-clause as already
+     logged. The `(A)`–`(G)` lettering is untouched and stable; **M1-T3 continues the sequence at
+     (H)**. No new letter was needed, which is the intended outcome for a task whose design was
+     closed by its Tests stage.
+  3. **Scope was exactly one code file.** `scripts/core/hex_math.gd` (+65/−28): the five stub bodies
+     replaced and the `SLICE 2 (M1-T2) — DELIBERATELY-WRONG TESTS-STAGE STUBS` banner block deleted,
+     with every public function retaining its `## §4.1` doc-comment block. Verified by
+     `git status --porcelain` showing a single modified path. Deliberately **not** created (§13.4,
+     invent nothing ahead of its milestone): `scripts/core/los.gd` (M1-T3), the §4.4 generator, any
+     golden file, renderer/camera/hex-picking, `GameState`, any `Command`, any concrete `Event`
+     subclass, any new key in `data/ruleset.json`, any `addons/` change. `tools/run_tests.sh` is
+     byte-identical to HEAD (md5 re-checked) — the harness contract was neither weakened nor needed
+     strengthening here.
+  4. **NO TEST WAS EDITED, WEAKENED OR EXTENDED by any stage this iteration.**
+     `tests/unit/test_hex_math.gd` is byte-identical to HEAD (md5 `b59171f7e6088cdf91a83aac2343afd7`,
+     1,421 lines) and never appears in `git status`. Verify additionally diffed the Tests-stage
+     commit itself (`1f49d84` → `f36c0ab`): **734 insertions, zero deleted lines** across `tests/`,
+     so the M1-T1 assertions were extended, never relaxed. The standing rule held in both directions:
+     **code was fixed to match the pinned values, never the reverse.**
+  5. **BOTH required adversarial mutation probes were executed live AT VERIFY** — the same standard
+     of proof M1-T1 item 8 set for `neighbors()`, and the reason a pin counts as load-bearing rather
+     than decorative. Baseline md5 `8912d2125837ed1fcaa9135fbf11b38c` was captured first and
+     re-verified identical after each probe; the final tree carries that same md5.
+     - **Probe 1 (trap 1: a shared/cached return array).** `ring()` was made to return a
+       module-level cached array. `test_line_ring_and_range_return_fresh_arrays_each_call` went
+       **RED** (104/106) with the intended message — *"§11.1: ring((0,0),1) must return a fresh
+       array, not a shared/cached one"* — plus the live second-result corruption assert. **Bonus
+       signal:** the §11.3 doc-comment scanner also went red (`missing on: ["ring"]`), proving that
+       guard is live too.
+     - **Probe 2 (trap 3: the tie-break repairing `y` instead of `z`).** The cascade's final
+       `else: rz = -rx - ry` was flipped to `ry = -rx - rz`.
+       `test_line_tie_cases_resolve_through_the_z_repair` went **RED on both** pinned witnesses —
+       `line((0,0),(2,-1))` yielded `[(0,0),(1,0),(2,-1)]` and `line((0,0),(1,1))` yielded
+       `[(0,0),(1,1),(1,1)]` — and five further tests fell with it (the reversibility witnesses, the
+       long off-origin case, and the 3,721-ordered-pair P4 sweep). **(C2) is therefore not a
+       cosmetic choice: it is the sole determinant of two pinned line values, exactly as the tests
+       stage claimed.**
+
+     (Recorded for traceability: the Implement stage self-ran probe 2 as a non-authoritative sanity
+     check before returning, restoring byte-identically. Verify re-ran **both** probes itself rather
+     than taking that on trust. Self-checking at Implement is welcome; it is never a substitute for
+     Verify executing the test plan.)
+  6. **Determinism (§11.1) and typing (§11.3) were independently re-scanned at Verify, not merely
+     trusted.** Over comment-stripped source: zero float literals (regex `\.[0-9]`) and zero `float`
+     tokens; zero engine-bound tokens (`randi(`, `randf(`, `extends Node`, `SceneTree`, `get_tree`,
+     `Engine.`, `Time.`, `OS.`); zero map-size literals (`24|32|40|1801|3169|4921`).
+     `roundi`/`round`/`floor`/`snapped`/`lerp`/`Vector3(` appear **only inside doc comments that
+     explain why they are forbidden** — never in code. All arithmetic is `Vector2i`/`Vector3i`/
+     `absi`/`maxi`; the single `n / d` in `_floor_div` keeps its `@warning_ignore("integer_division")`
+     at the site (M0-T4 item d). No `:=`, no untyped `var`, every loop variable typed.
+     `line`/`ring`/`hexes_in_range` each allocate a **fresh** `Array[Vector2i]` per call and
+     `hexes_in_range` `append_array`s `ring()`'s fresh arrays into its own. Magnitudes are safe: a
+     Large map (radius 40) gives `n <= 80` and numerators ≈ 6,400, nowhere near int overflow.
+  7. **The M1-T1/M1-T2 arithmetic correction was re-confirmed a third time and NOT reverted.**
+     `distance((1,-3),(4,2)) == 8` (cubes `(1,2,-3)` and `(4,-6,2)`, diffs 3/8/5), so
+     `line((1,-3),(4,2))` has **9** elements. The original M1-T1 task spec's `5` remains a
+     miscalculation. Verify re-derived this by hand, along with `cube_round_scaled((-1,-1,2),2) ==
+     (0,-1,1)` (where `roundi` genuinely disagrees), the two z-repair witnesses, the full 12-element
+     `ring((0,0),2)` walk, and the `_floor_div` negatives — all agreeing with the frozen pins. **Do
+     not "fix" it back to 5.**
+  8. **§13.6 clauses that are vacuous here, restated because they were re-checked rather than
+     assumed:** the task reads **zero** §12.1 constants — hex geometry is *algorithm, not tunable
+     content*, the line M1-T1 item 4 drew — and `data/ruleset.json` gained no key. `HexMath` mutates
+     no `GameState` and references no `EventBus`, so *"events emitted for every state change"* has no
+     subject matter (no `Command`/`validate`/`apply` surface exists yet to violate).
+     **Goldens: none re-recorded — none exist yet.** The project's first golden still lands with the
+     §4.4 mapgen terrain hash; §13.6's re-record-only-with-a-logged-reason rule starts applying from
+     that moment.
+  9. **Stage-boundary note, recorded so it is not mistaken for a scope violation.** The task spec's
+     top-level `files_expected` listed `docs/PROGRESS.md` and `docs/decisions.md` alongside the code
+     file; the Implement stage correctly did **not** touch either, since both are **Land**-stage
+     artefacts (this entry and the tracker update). That is the intended division of labour under
+     CLAUDE.md's five-stage loop, not a missed deliverable — the same call M0-T5 item (i) records.
+- **Why:** A blocked iteration is only safe if resuming it is mechanical, and this one was: the
+  frozen tests plus the already-logged (C)–(G) meant the Implement stage had nothing to decide, only
+  something to write. That is worth recording as a *process* result, because it validates the
+  Tests-stage stub convention (item 10 of the entry above) end-to-end — red tree committed, blocker
+  named test-by-test, resumed at the failed stage, landed green with zero test churn. Item 5 is
+  recorded at length because a property test that has never been observed failing is
+  indistinguishable from a property test that cannot fail; both of this task's subtlest invariants —
+  the fresh-array contract and the z-repair tie-break — are now *measured* as load-bearing, and the
+  probes also incidentally proved the §11.3 doc-comment scanner is live.
+- **GDD section affected:** §4.1 (algorithm **implemented**; its silences were already resolved under
+  §13.4 by the entry above — **no numeric table value moved, no cell edited**. §4.1's only numeric
+  table, *Map sizes (hex radius): Small 24 (1,801), Medium 32 (3,169), Large 40 (4,921)*, is unmoved
+  and remains pinned via `hex_count_for_radius(r) == 3r(r+1)+1`, with those six literals mechanically
+  confirmed **absent** from `hex_math.gd`. `decisions.md` was re-scanned end-to-end this iteration:
+  **no logged override touches §4.1**); §11.1 (integer-only determinism and the fresh-array contract,
+  both re-scanned); §11.2 (`scripts/core/hex_math.gd`; `Los` still deferred to its own file at
+  M1-T3); §11.3 (mechanical typing gate green over 13 files; every public function carries its
+  `## §4.1` doc comment, scanner proven live); §13.2 (tier 1 "every core/ function" plus the §14
+  property tests for lines and rings — the LOS half is M1-T3); §13.6 (definition of done **MET**:
+  tests green headless, typing gate clean, no constants to read, no events to emit, no golden to
+  re-record); **§14 M1 row — still OPEN and NOT met. The `HexMath` deliverable is now COMPLETE (both
+  slices), but none of the three M1 acceptance criteria pass: no golden mapgen test, no greybox to
+  measure 60 fps on, no LOS to property-test.** Acceptance criterion text unchanged. **NO
   `docs/GAME_DESIGN.md` edit accompanies this entry, because no numeric table value changed.**
