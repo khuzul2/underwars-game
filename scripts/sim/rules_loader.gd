@@ -193,6 +193,11 @@ func _spec() -> Array[Dictionary]:
 				{"path": "soft", "kind": "object", "children": [{"path": "food", "kind": "int"}]},
 				{"path": "hard", "kind": "object", "children": [{"path": "stone", "kind": "int"}]},
 				{"path": "granite", "kind": "object", "children": [{"path": "stone", "kind": "int"}]},
+				{
+					"path": "artificial_granite",
+					"kind": "object",
+					"children": [{"path": "stone", "kind": "int"}],
+				},
 				{"path": "rubble", "kind": "object", "children": [{"path": "stone", "kind": "int"}]},
 			],
 		},

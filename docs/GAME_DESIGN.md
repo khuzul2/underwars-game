@@ -781,7 +781,7 @@ All content is JSON validated by RulesLoader (also used by editors and the CLI â
 
   
 
-  "dig\_yields": {"soft": {"food": 1}, "hard": {"stone": 2}, "granite": {"stone": 4}, "rubble": {"stone": 1}},
+  "dig\_yields": {"soft": {"food": 1}, "hard": {"stone": 2}, "granite": {"stone": 4}, "artificial\_granite": {"stone": 2}, "rubble": {"stone": 1}},
 
   
 

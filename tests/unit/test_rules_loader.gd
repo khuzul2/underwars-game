@@ -27,6 +27,28 @@ const MISSING_PATH: String = "res://data/__no_such_ruleset__.json"
 const SOURCE: String = "ruleset.json"
 const EPS: float = 1e-9
 
+## M0-T2 item 7 — `data/ruleset.json`'s layout is load-bearing: line 1 is a lone `{` and each
+## §12.1 top-level group sits entirely on one line. `dig_yields` is the fourth line (1-based:
+## `{`, version, dig_turns, dig_yields), which is where M0-T2 item 3's forward-scan fallback
+## attributes a missing dig_yields CHILD.
+const DIG_YIELDS_LINE: int = 4
+
+## §4.2's Solid-hex rows that carry a Stone/Food yield, in table order — which is also
+## `dig_turns`'s key order in §12.1. `artificial_granite` is the M2-T1 addition (M0-T2 item 10).
+const DIG_YIELD_KEYS: Array[String] = [
+	"soft",
+	"hard",
+	"granite",
+	"artificial_granite",
+	"rubble",
+]
+
+## The exact JSON member M2-T1 inserts into `dig_yields` (§4.2: Artificial Granite yields
+## \+2 Stone). Written with its trailing separator so removing it leaves valid JSON and an
+## unchanged line count — the fixture for the missing-key rejection below. The `: {"stone": 2}`
+## suffix is what makes it unambiguous: `dig_turns` also carries an `"artificial_granite"` key.
+const ARTIFICIAL_GRANITE_YIELD: String = "\"artificial_granite\": {\"stone\": 2}, "
+
 
 # ---------------------------------------------------------------------------------------------
 # A. VALID LOAD — every §12.1 value, read through the accessors.
@@ -65,12 +87,106 @@ func test_dig_turns() -> void:
 
 
 ## §12.1 + §5.1 — dig_yields, keyed by the §5.1 resource names.
+##
+## M2-T1 CLOSES THE M0-T2 item-10 CROSS-TABLE GAP. §4.2's Solid-hex table (line 185) prints
+## "Artificial Granite | 3 (owner: 1) | **\\+2 Stone**", but the §12.1 `dig_yields` excerpt
+## omitted `artificial_granite` entirely — recorded by M0-T2 item 10 as a known gap and
+## explicitly deferred to M2 ("M2 (Dig & Economy) must add it with its own decisions.md entry").
+## The value below is transcribed from the §4.2 row, and the §12.1 line is amended to match in
+## the same commit as the decisions.md entry (CLAUDE.md: only the Land stage edits the GDD).
+## Every unchanged neighbour is re-asserted so the edit cannot drift the rest of the group.
 func test_dig_yields() -> void:
 	var loader: RulesLoader = _loaded()
 	assert_eq(loader.get_int("dig_yields.soft.food"), 1, "§12.1/§5.1 dig_yields.soft.food")
 	assert_eq(loader.get_int("dig_yields.hard.stone"), 2, "§12.1/§5.1 dig_yields.hard.stone")
 	assert_eq(loader.get_int("dig_yields.granite.stone"), 4, "§12.1/§5.1 dig_yields.granite.stone")
+	assert_eq(
+		loader.get_int("dig_yields.artificial_granite.stone"),
+		2,
+		"§4.2 (Artificial Granite yields \\+2 Stone) / §12.1 dig_yields.artificial_granite.stone"
+	)
 	assert_eq(loader.get_int("dig_yields.rubble.stone"), 1, "§12.1/§5.1 dig_yields.rubble.stone")
+
+
+## §12.1 + §4.2 — the new key is REQUIRED by the schema, not merely present in the shipped file:
+## deleting it must be rejected with a line-numbered error (§14 M0's still-binding acceptance
+## clause), the ruleset must stay unpublished, and the error must be attributed to the
+## `dig_yields` group line. That attribution is M0-T2 item 3's forward-scan fallback in action:
+## with the pair gone, no `"artificial_granite"` token exists at or after the `"dig_yields"` line
+## (`dig_turns` sits ABOVE it), so the walk falls back to the last segment it did find.
+func test_reject_missing_dig_yields_artificial_granite() -> void:
+	var text: String = _ruleset_text()
+	var present: bool = text.contains(ARTIFICIAL_GRANITE_YIELD)
+	assert_true(
+		present,
+		"§4.2/§12.1: data/ruleset.json must carry `%s` inside dig_yields (Artificial Granite "
+		% ARTIFICIAL_GRANITE_YIELD
+		+ "yields \\+2 Stone), inserted between \"granite\" and \"rubble\""
+	)
+	if not present:
+		return
+	var patched: String = text.replace(ARTIFICIAL_GRANITE_YIELD, "")
+	assert_ne(patched, text, "fixture: the planted defect must actually change the document")
+	if not _require_parses(patched):
+		return
+
+	var loader: RulesLoader = RulesLoader.new()
+	var ok: bool = loader.load_text(patched, SOURCE)
+	assert_false(ok, "§12.1: dig_yields.artificial_granite is REQUIRED, not optional")
+	assert_true(loader.rules.is_empty(), "§14: a rejected ruleset must not be published")
+	assert_eq(loader.errors.size(), 1, "§12.1: exactly one leaf is missing, so exactly one error")
+	if loader.errors.is_empty():
+		return
+	var err: RulesError = loader.errors[0]
+	assert_true(
+		err.path == "dig_yields.artificial_granite"
+		or err.path == "dig_yields.artificial_granite.stone",
+		"§12.1: the error names the missing dotted path (got \"%s\")" % err.path
+	)
+	assert_eq(
+		err.line,
+		DIG_YIELDS_LINE,
+		"§14/M0-T2 item 3: the missing child is attributed to the dig_yields group line"
+	)
+	assert_true(
+		err.message.contains("artificial_granite"), "§12.1: the message names the missing key"
+	)
+
+
+## §12.1 layout — M0-T2 item 7 made `data/ruleset.json`'s pretty-printing LOAD-BEARING (line 1 is
+## a lone `{`; each top-level group sits entirely on one line) so single-line defects are
+## plantable and expected line numbers are derivable. The new `dig_yields` member must therefore
+## be inserted INTO the existing line, in §4.2 row order (which is also `dig_turns`'s key order):
+## soft, hard, granite, artificial_granite, rubble.
+func test_ruleset_layout_keeps_the_whole_dig_yields_group_on_one_line() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_fixture(lines):
+		return
+	assert_gte(lines.size(), DIG_YIELDS_LINE, "fixture: the document reaches the dig_yields line")
+	if lines.size() < DIG_YIELDS_LINE:
+		return
+	assert_eq(lines[0].strip_edges(), "{", "M0-T2 item 7: line 1 of the ruleset is a lone `{`")
+
+	var group: String = lines[DIG_YIELDS_LINE - 1]
+	assert_true(
+		group.contains("\"dig_yields\""),
+		"M0-T2 item 7: the dig_yields group must stay on line %d" % DIG_YIELDS_LINE
+	)
+	for key: String in DIG_YIELD_KEYS:
+		assert_true(
+			group.contains("\"%s\"" % key),
+			"§4.2/§12.1: dig_yields.%s must sit on the same line as its group" % key
+		)
+	assert_lt(
+		group.find("\"granite\""),
+		group.find("\"artificial_granite\""),
+		"§4.2 row order: artificial_granite follows granite"
+	)
+	assert_lt(
+		group.find("\"artificial_granite\""),
+		group.find("\"rubble\""),
+		"§4.2 row order: artificial_granite precedes rubble"
+	)
 
 
 ## §12.1 + §5.2 — vein nodes: immediate lump, total stock, per-turn extractor rate.

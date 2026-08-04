@@ -2484,3 +2484,298 @@ continues at (AU)**.
   forbidden tokens), already-landed content (`hex_width_m` 18, `elevation_step_m` 3) or **derived**
   from them (R = 9.0, column pitch 13.5, row pitch 15.588457268119896), and §9.1 prints **no picking
   geometry at all**.
+
+## 2026-08-04 — M2-T1 — `GameState` + `PlayerState` stockpiles on a shared `Fnv` content hash; resolution (AU); **the §12.1 `dig_yields` AMENDMENT (one GDD cell edited)**; landed GREEN; **OPENS M2**
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 21 / Tests 503 /
+Passing 503 / Failing 0 / Asserts 5646** (the M1-T9 baseline was 18 / 425 / 425 / 0 / 5144 — all
+four totals rose and no previously-landed test regressed); `bash tools/typecheck.sh` exits 0 over
+**38** files (was 32); `bash tools/ci.sh` exits 0 (PASS); `bash tools/verify_harness.sh` exits 0
+across all four phases (A green · B failing canary · C syntactic parse error · D
+statically-impossible construct) with the tree left clean. All ran headless through the `tools/`
+scripts on the repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim
+(SETUP-3). `sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5) were correctly **SKIPped, not
+failed**, per CLAUDE.md's applicability rule. `Scripts 21` equals the number of `test_*.gd` on disk,
+so the M0-T5 enumeration guard is satisfied and nothing was silently un-collected. **No golden was
+re-recorded** (`goldens_rerecorded: false`): `tests/golden/mapgen_concentric_bowl_small_seed1337.json`
+(`content_hash 0xcad24923`) is **byte-untouched and still green**, as are `scripts/sim/hex_map.gd`,
+`data/mapgen/concentric_bowl.json`, `data/render/*`, `scenes/Main.tscn`, `project.godot`, `addons/`
+and `tools/` — md5s were captured before and re-verified after **every** mutation probe.
+
+**THIS TASK OPENS M2 (Dig & Economy).** §14's M2 row (*"Workers, Dig/Cancel commands, yields, vein
+nodes + Extractors, stockpiles/income/upkeep, housing, Mining Zones v0"*) is far larger than the
+≤ ~300 LOC house rule, so it is being sliced. **This slice lands only the §11.1 state container**
+— `GameState`, `PlayerState` and the shared `Fnv` fold they hash through — plus the data-gap fix
+`docs/PROGRESS.md` had mandated for M2's first task. **M2 is NOT done**: none of its three
+acceptance criteria (*"Scripted 20-turn dig scenario matches expected stockpiles exactly; deficit-bleed
+test; zone assigns nearest idle worker"*) is met yet, and neither the Command spine nor a single
+gameplay system is built.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §5.1
+(line 288: *"No storage caps. Stockpiles are per-player integers; income/expense preview shown in
+HUD"*, and the seven resources Food / Gold / Stone / Iron / Magestone / Mithril / Scrap), §3.4 step
+2 (line 146: *"Upkeep: pay per unit. Deficit: every unpaid unit loses 10% max HP this turn"*), §3.3
+(fixed order by player index), §3.1 (*"2–4 players"* and the starting kit), §4.2's terrain table
+(line 188: `Artificial Granite | 3 (owner: 1) | \+2 Stone`), §11.1 (lines 703–708: the single
+serializable `GameState`, the ONE `RandomNumberGenerator` seeded at match start, `GameState.hash()`
+as *"FNV over canonical serialization"*, stable-ID iteration order), §11.2, §11.3, §12.1's
+`dig_turns` / `dig_yields` lines, §13.4, §13.6 and §14's M2 row. `docs/decisions.md` was re-scanned
+end to end at Tests **and** at Verify: **no logged override touched §12.1, §4.2, §5.1, §3.4, §3.3 or
+§11.1**, so the printed tables governed unamended — **and this entry creates the project's FIRST
+§12.1 override.** The binding prior resolutions are (O)/(U) (M1-T4/M1-T5: `HexMap`'s canonical order
+and its private FNV fold, and the golden that records them), (R) (M1-T5: `Rng` is the single home of
+`RandomNumberGenerator`), (T)/(AH) (no terrain-type whitelist in engine code), (B)/(L)/(Y)/(AB)/(AS)
+(totality) and (AR)/M1-T9 item 6 (the `is_same()` freshness lesson). The lettering genuinely ended
+at **(AT)**, so this entry is **(AU)** — cross-referenced by the header doc blocks of
+`scripts/core/fnv.gd`, `scripts/sim/player_state.gd`, `scripts/sim/game_state.gd` and by all three
+new test files. **Keep it stable; M2-T2 continues at (AV).**
+
+- **What changed / was decided:**
+  1. **(AU)(i) — THE ONE GDD EDIT: §12.1's `dig_yields` gains `artificial_granite`.** This is the
+     **M0-T2 item 10 forward gap**, deferred explicitly to M2 by that entry and re-flagged in
+     `docs/PROGRESS.md` ever since. §4.2's terrain table (line 188) prints **`Artificial Granite |
+     3 (owner: 1) | \+2 Stone`** — a dig yield of **+2 Stone** — while the §12.1 constants excerpt's
+     `dig_yields` object listed only `soft`/`hard`/`granite`/`rubble`, and `data/ruleset.json`
+     mirrored that omission **faithfully and deliberately**. Per CLAUDE.md *"where prose and a numeric
+     table disagree, the table wins"*, the §4.2 row is the governing value; §12.1 was the incomplete
+     transcription. **Resolution: `dig_yields.artificial_granite.stone = 2`**, inserted into
+     `data/ruleset.json` between `granite` and `rubble` (mirroring both §4.2's row order and the
+     already-shipped `dig_turns` key order), and made a **REQUIRED, line-numbered-validated INT
+     leaf** by one new row in `scripts/sim/rules_loader.gd`'s `_spec()`. **`docs/GAME_DESIGN.md` line
+     784 is edited in THIS SAME COMMIT** (the only sanctioned GDD edit; CLAUDE.md gives it to Land
+     alone) to read `… "granite": {"stone": 4}, "artificial\_granite": {"stone": 2}, "rubble":
+     {"stone": 1}}`. **No other §12.1 or §4.2 value moved.** `dig_turns`' eight values
+     (soft 1, hard 2, granite 4, artificial_granite 3, artificial_granite_owner 1, rubble 1, vein 2,
+     mithril 4) and the four pre-existing `dig_yields` values are re-asserted by test precisely so
+     this edit cannot drift a neighbour. `data/ruleset.json`'s **load-bearing layout is preserved** —
+     line 1 is still a lone `{` and the whole `dig_yields` group is still on line 4 — which is what
+     lets the M0-T2 item-3 forward-scan attribute a **missing** `artificial_granite` child to **line
+     4** by its group-line fallback; a test deletes the key from the text and pins exactly that (one
+     error, path `dig_yields.artificial_granite`, line 4, `rules` left EMPTY).
+  2. **(AU)(ii) — STOCKPILES ARE NON-NEGATIVE AND `spend` REFUSES ATOMICALLY.** §5.1 prints *"No
+     storage caps. Stockpiles are per-player integers"* and legislates **no lower bound**; §3.4 step
+     2 legislates what a shortage costs — *"every unpaid unit loses **10% max HP** this turn"* — i.e.
+     **a deficit is paid in HP, never in negative stock.** Taken together the simplest interpretation
+     consistent with §1.1 is: a stockpile is a non-negative integer, and a debit that cannot be paid
+     **changes nothing at all**. `spend(id, n)` therefore returns `false` and leaves the balance
+     **byte-identical** when `n > held`, when `n <= 0` or when `id` is empty — no partial payment, no
+     clamp to zero, no negative balance. `add(id, n)` is the mirror image (the M1-T1 **(B)** / M1-T3
+     **(L)** totality spirit): non-positive `n` or an empty `id` is refused and creates **no entry**.
+     `can_afford` is defined to be **literally the `spend` predicate** (`n > 0 and amount_of(id) >=
+     n`) so validation and mutation can never drift — a property sweep runs it against the *actual*
+     `spend` outcome on a fresh copy over a matrix of ids × amounts including 0, −1, held−1, held and
+     held+1. **§3.4's HP bleed itself is NOT implemented here** — it needs units, and units are a
+     later slice.
+  3. **(AU)(iii) — SPENDING A BALANCE TO EXACTLY ZERO REMOVES THE ENTRY.** After
+     `spend("gold", 200)` from 200, `resource_ids()` does **not** contain `gold`. *"Never had it"*
+     and *"spent it all"* are therefore **indistinguishable**, which is what makes `content_hash()` a
+     function of the **observable** stockpile rather than of its history. Without the rule a replay
+     that happens to touch a resource and drain it would hash differently from one that never touched
+     it, breaking §11.1's *"replaying (seed, command_log) must reproduce the hash"* for no
+     game-visible reason. `amount_of()` on an absent id answers **0**, so nothing else changes.
+  4. **(AU)(iv) — RESOURCE IDS ARE OPAQUE STRINGS; THERE IS NO WHITELIST IN ENGINE CODE.** This is
+     the §4.2 terrain-type precedent (M1-T5 **(T)**, M1-T7 **(AH)**, and the EventBus event-type
+     precedent M0-T3 **(f)**) applied to §5.1's resource vocabulary. The seven printed ids —
+     `food`, `gold`, `stone`, `iron`, `magestone`, `mithril`, `scrap` (Goblin-only per §7.3, but
+     still just an id) — are **FORBIDDEN tokens** in `player_state.gd` and `game_state.gd`, scanned
+     case-insensitively on **comment-stripped** source, and the vocabulary is pinned **by test only**.
+     No enum, no `const` array, no validation against a known set: an unrecognised id simply reads 0.
+     This is what will let M6's *"adding content requires zero engine-code changes"* canary (§13.5)
+     hold for resources, and it is the reason `spend`/`add` answer `false` on an **empty** id rather
+     than on an **unknown** one.
+  5. **(AU)(v) — CANONICAL STOCKPILE ORDER IS ASCENDING ID, AND EVERY RETURNED ARRAY IS FRESH.**
+     §11.1 requires *"iterate collections in stable ID order"*, and a `Dictionary`'s key order is an
+     insertion artefact that must never reach an output. `resource_ids()` therefore sorts a **fresh
+     copy** of the keys ascending by `String` on every call and returns a **new** `Array[String]`
+     each time — pinned with **`is_same()` IDENTITY** assertions, never the weaker
+     "pollution-does-not-survive" shape, because M1-T9 item 6 measured that a **self-clearing member
+     cache passes the weak form while aliasing every caller**. Order independence is pinned both ways:
+     adding `food` then `gold` and adding `gold` then `food` produce the same array **and** the same
+     `content_hash()`.
+  6. **(AU)(vi) — `GameState.content_hash()`'s FOLD ORDER, INCLUDING THE RNG STREAM POSITION.** §11.1
+     names *"`GameState.hash()` (FNV over canonical serialization)"* but prints no composition, so
+     this fixes one — **documented in `game_state.gd`'s header because a future golden will record
+     it**: the **private seed value**, then **`rng.rolls_drawn()`**, then a **map-presence flag (0/1)**
+     followed by `map.content_hash()` **when present**, then `player_count()`, then, for each player
+     index in **ascending order**, the **index itself** followed by that player's `content_hash()`.
+     Three parts of that are deliberate and each is separately pinned:
+     **(a) the RNG stream position is part of the replayable state** — §11.1's contract is over
+     `(seed, command_log)`, and two states that have drawn a different number of rolls will diverge on
+     the next roll, so they are **not** the same state; drawing one `roll_percent()` moves the hash.
+     **(b) players are folded BY INDEX, never as a set** (§3.3 *"fixed order by player index"*) —
+     swapping two players' stockpiles between index 0 and 1 **must** change the hash, and the swap
+     test is the only pin that catches a multiset fold. **(c) the map-presence flag** exists so a
+     `null` map can never collide with a real map whose 32-bit hash happens to be 0.
+     `PlayerState.content_hash()` folds, per held id in ascending order, the id's **UTF-8 bytes**, the
+     amount as **eight little-endian bytes**, then a **separator byte** (`0x1f`, matching `HexMap`'s
+     (U) separator) — see item 9 for why the separator is load-bearing and how that was measured.
+     The function is `content_hash()`, **never `hash()`** (overriding `Object.hash()` trips
+     `native_method_override`, level 2 = a hard error under the M0-T4 gate), and a source scan asserts
+     `func hash(` is absent; the seed parameter is `p_seed_value`, **never `seed`** (GDScript's global
+     `seed()` makes that `shadowed_global_identifier`, the same trap M1-T5 (R) hit for `Rng`).
+  7. **(AU)(vii) — WHERE `Fnv` LIVES, AND THE DELIBERATE `HexMap` DUPLICATION, RECORDED NOT FIXED.**
+     `Fnv` is a new **all-static, never-instantiated** namespace at `scripts/core/fnv.gd` — §11.2's
+     printed file list is **illustrative** (the M0-T3 **(f)** / M1-T9 **(AT)** precedent) and
+     `scripts/core/` is where pure, unit-tested algorithm helpers belong. Its parameters are the
+     **published FNV-1a 32-bit constants** (`OFFSET_BASIS 2166136261`, `PRIME 16777619`, `MASK
+     0xffffffff`), pinned against the **published test vectors** as an external oracle
+     (`fold_string(OFFSET_BASIS, "") == 0x811c9dc5`, `"a" == 0xe40c292c`, `"foobar" == 0xbf9cf968`,
+     re-derived independently at the Tests stage and agreeing on all twelve vectors) rather than
+     against itself — self-consistency proves nothing about an algorithm.
+     **`scripts/sim/hex_map.gd` was NOT retrofitted and is byte-untouched.** It keeps its own
+     **private** `_fold_byte`/`_fold_bytes`/`_fold_int`, and its `_fold_int` folds an int as **FOUR**
+     little-endian bytes (elevations are 0–3, and the M1-T5 golden `0xcad24923` records that fold),
+     while `Fnv.fold_int64` folds **EIGHT** because §5.1's *"No storage caps"* stockpiles are honest
+     64-bit integers — `add("gold", 5000000000)` must read back exactly, and two amounts differing
+     only above 2^32 must hash differently (a `PackedInt32Array` store or a 4-byte fold dies on that
+     pin). **The duplication is therefore a KNOWN, GUARDED item, not an oversight**: collapsing it
+     would either re-record the golden (a logged event forever, §13.6) or require `HexMap` to keep a
+     4-byte fold under a shared roof. A later **opportunistic** task may collapse it, **with the
+     golden as its proof**; until then both files carry the cross-reference in their headers.
+  8. **(AU)(viii) — DELIBERATELY DEFERRED, so the next slice does not think they were forgotten
+     (§13.4: invent nothing ahead of its milestone).** NOT built here, and each is named in the file
+     headers: the **`Command` base class**, **`CommandError`**, `EndTurnCommand`, **any concrete
+     `Event` subclass**, **turn / current-player counters**, workers, dig progress, yield application,
+     vein nodes, Extractors, income, upkeep, housing and Mining Zones. **§3.1's starting kit
+     (200 Gold / 100 Food / 50 Stone / 20 Iron / 0 Magestone / 0 Mithril) is ALSO deferred**: it needs
+     a **new §12.1 ruleset key** and therefore its **own §12.1 amendment** in the task that lands it,
+     exactly like item 1 above — so **every player starts EMPTY here**, and that is a decision, not a
+     gap. The **Command spine is M2-T2**; the `EventBus` is wired to the first Command, never to a
+     constructor.
+  9. **A REAL TEST HOLE WAS FOUND AT VERIFY AND CLOSED BY STRENGTHENING THE SUITE — the separator
+     byte.** Mutation probe 12 deleted the `Fnv.fold_byte(hash_value, _SEPARATOR)` step from
+     `PlayerState.content_hash()` and **the entire 502-test suite stayed GREEN.** That is a genuine
+     ambiguity in §11.1's *"FNV over canonical serialization"*: an amount is always exactly 8 bytes
+     and an id carries **no length prefix**, so without a delimiter the stockpile
+     `{"a": 0x7878787878787878, "b": n}` and the stockpile `{"axxxxxxxxb": n}` serialize to the
+     **identical 18-byte stream** and collide. `tests/unit/test_player_state.gd::
+     test_content_hash_cannot_be_confused_by_an_id_that_spells_out_a_neighbour` now builds the
+     confusable id **from the amount's own little-endian bytes**, so it *demonstrates* the confusion
+     rather than asserting it; probe 12 re-runs **RED**. Purely additive — **no existing assertion was
+     touched or weakened**, and **no production code changed**: the implementation always had the
+     separator. Suite 502 → 503 tests, 5638 → 5646 asserts. This is the **third consecutive
+     iteration** in which probing found a weak **TEST** rather than weak code (M1-T9 item 6 found
+     two), and the standing lesson holds: **probe the SUITE, not only the implementation — a green
+     mutant is a hole in the test.**
+  10. **EIGHTEEN ADVERSARIAL MUTATION PROBES RUN LIVE AT VERIFY** (the M1-T1 item 8 → M1-T9 item 7
+     standard, **ten iterations running**), md5 captured before and re-verified **byte-identical**
+     after every restore, on **every** production file and on the golden. **Thirteen went red on
+     demand:** a 4-byte amount fold; dropping `rng.rolls_drawn()` from the `GameState` fold; dropping
+     the seed; a **sort-by-hash multiset** player fold (caught by exactly the swap test, as designed);
+     letting `spend` go negative; a `spend` off-by-one; keeping zero-amount entries; iterating the
+     stockpile `Dictionary` directly instead of the sorted key copy; a **cached/self-clearing**
+     `resource_ids()` (caught **only** by the `is_same()` identity assert, as designed); `add`
+     accepting non-positive amounts; `can_afford` dropping the strictly-positive guard; `player(i)`
+     returning a throwaway copy; and **reverting the `data/ruleset.json` key** (22 failures, with the
+     missing child correctly attributed to **line 4**). Probe 12 is item 9. **A PROCEDURAL WARNING
+     WORTH KEEPING: Verify's FIRST probe pass was INVALID and was discarded** — the driver resolved
+     `bash` to **WSL**, which cannot see the repo, so all eight "red" results were
+     `CreateProcessCommon` failures rather than test failures. **A probe that fails for the wrong
+     reason proves nothing.** Re-run against `C:/Program Files/Git/bin/bash.exe`. Also: the spec's
+     literal *"fold players as an unordered set (drop the index)"* mutant is an **EQUIVALENT mutant** —
+     positional iteration still encodes the index — and was replaced with the genuine sort-by-hash
+     multiset fold.
+  11. **THREE RESIDUAL GREEN MUTANTS, ANALYSED AND JUDGED EQUIVALENT OR UNREACHABLE — recorded so a
+     later stage does not re-derive them, and so nobody mistakes them for holes.** (a) Dropping
+     `Fnv.fold_int64(hash_value, player_count())` stays green because the **per-index fold already
+     encodes the roster size** — the mutant is a *different but equally correct* hash. (b) Dropping
+     the **map-presence flag** stays green because a collision would need a map whose 32-bit
+     `content_hash` satisfies `fold_int64(h, v) == h`, which cannot be constructed in a test; the
+     **observable** property (*"no map" never collides with the empty or one-hex map*) **is** pinned
+     and passes. (c) Folding the amount as a **decimal String** instead of `fold_int64` stays green
+     because decimal strings are still **injective** on amounts — the 8-byte fold is pinned at the
+     `Fnv` level by `test_fnv.gd`'s 1-vs-1+2^32 separation. **None is a code defect**: the
+     implementation has the flag, the count fold and the 8-byte fold.
+  12. **§13.6 DEFINITION OF DONE, clause by clause.** *Tests green headless*: yes — **503/503**,
+     exit 0, `Scripts 21` == the 21 `test_*.gd` on disk. *Static typing clean*: `bash
+     tools/typecheck.sh` exit 0 over **38** files at the M0-T4 gate's 46 warnings-as-errors; every
+     declaration is `var x: T = …` (no `:=`, no bare `var x =`); **no division anywhere**, so no
+     `@warning_ignore("integer_division")` appears (a scan forbids the string); no float literal and
+     no `float` token in any of the three new files. *Constants read from data, not code*: **one
+     subject and it is satisfied** — the only new constant is `dig_yields.artificial_granite.stone =
+     2`, and it lives in `data/ruleset.json` as a **required** validated leaf. The FNV parameters are
+     **hash-algorithm** constants and correctly live as `const` in `.gd` (the M1-T5 item 7 precedent);
+     `_SEPARATOR = 0x1f` is likewise algorithmic. *Events emitted for every state change*: **VACUOUS
+     and stated rather than assumed** (the M0-T3 item (j) / M1-T9 item 11 practice) — there is **no
+     Command spine yet**, `GameState` is a container built by a **constructor**, and §11.1 wires the
+     `EventBus` to the first Command (M2-T2), not to `_init`. *Goldens re-recorded only with a logged
+     reason*: **NONE re-recorded.** *Relevant GDD table cell updated if numbers moved*: **YES — §12.1
+     line 784, in this same commit**, per item 1.
+  13. **IMPLEMENTER DEVIATIONS, REVIEWED AT VERIFY AND ACCEPTED — no separate rule change.**
+     (a) `PlayerState` stores amounts in a **private `Dictionary`** touched only by key
+     lookup/assign/erase, with `resource_ids()` sorting a fresh copy of the keys, rather than the
+     `HexMap`-style parallel sorted arrays. The task spec **explicitly permitted either**; the choice
+     is **behaviourally indistinguishable**, and that is measured, not assumed — probe 7 (return
+     `keys()` unsorted) and probe 1 (self-clearing member cache) both go **red**, so no `Dictionary`
+     key order can reach an output and the fresh-array contract is `is_same()`-pinned. (b)
+     `GameState` clamps a non-positive `p_player_count` with a ternary rather than an early-return
+     guard — pure style, identical behaviour, inside the spec'd totality contract. (c) The Implement
+     stage did **not** run the eight-probe battery, on the (correct) reading that adversarial probing
+     is **standing Verify-stage practice**; Verify ran eighteen. (d) The Implement stage left
+     `docs/decisions.md` and `docs/GAME_DESIGN.md` untouched — see item 14.
+  14. **STAGE-BOUNDARY NOTE**, the same call M0-T5 item (i) → M1-T9 item 12 record: `docs/PROGRESS.md`
+     and `docs/decisions.md` are **Land**-stage artefacts, and `docs/GAME_DESIGN.md` is **read-only for
+     Tests / Implement / Verify** — CLAUDE.md gives the single sanctioned table-cell edit to **Land
+     alone, in the same commit as the decisions.md entry**. The Tests, Implement and Verify stages
+     correctly left all three untouched; that is not a deviation from anything. Verify's **only** edit
+     was the additive test in item 9 — **the implementation was not touched to reach green**, and no
+     source scan in `scripts/core/` or `scripts/sim/` was weakened.
+  15. **THE TESTS-STAGE STUB CONVENTION WAS USED AGAIN AND WORKED** (M1-T2 item 10 → M1-T9 item 8).
+     All three new production files were first written as deliberately-wrong stubs under explicit
+     **DO-NOT-SHIP banners** so the suite would **parse** — a call to a missing method is a GDScript
+     parse error that silently un-collects the whole file (M0-T5 item (a)'s false green). RED was
+     measured at **Scripts 21 / Tests 502 / Passing 458 / Failing 44**, with **zero** occurrences of
+     `SCRIPT ERROR` / `Parse Error` / `Ignoring script` / `Failed to load script` / `Invalid call` /
+     `Nonexistent` in the whole run: every one of the 44 failures was a value/behaviour mismatch or a
+     source-scan miss inside the four touched test files. **HARNESS TRAP RE-HONOURED**: no failure
+     message in the new suite contains any of `tools/run_tests.sh`'s five refusal phrases.
+
+- **Why:** M2 is where §11.1's spine is born, and **nothing in that spine can be built before the
+  state object it mutates exists** — a `Command` needs a `GameState` to `validate` against and
+  `apply` to, and `(seed, command_log)` is only a replay contract if the state can be **hashed**.
+  Slicing the container out first keeps the change inside the ≤ ~300 LOC house rule (production
+  change measured at **~271 LOC**) and makes every subsequent M2 slice additive. The `dig_yields`
+  amendment rides along because `docs/PROGRESS.md` and M0-T2 item 10 both assigned it explicitly to
+  **M2's first task**, and because leaving a printed §4.2 yield unreachable from `data/` would make
+  the very first dig rule either hard-code a number (§13.6 violation) or silently yield nothing.
+  Items 2–8 are recorded at length because each closes a §13.4 **silence** that would otherwise be
+  re-decided differently by a later slice: §5.1 prints no lower bound, §11.1 prints no fold
+  composition, and §3.1's starting kit is a *table* that needs a *key* before it can be data. Item 9
+  is the item to remember — it is the **third consecutive iteration** in which the probe battery found
+  a defect in the **tests** rather than the code, which is the more uncomfortable and more valuable
+  half of the practice: **a property test that has never been observed failing is indistinguishable
+  from one that cannot fail.** Item 10's WSL note is recorded because a probe pass that fails for the
+  wrong reason is **worse than no probe pass** — it manufactures false confidence in exactly the
+  place the practice exists to remove it.
+
+- **GDD sections affected:** **§12.1 — ONE TABLE CELL EDITED, line 784**, the `dig_yields` object,
+  which now reads `{"soft": {"food": 1}, "hard": {"stone": 2}, "granite": {"stone": 4},
+  "artificial\_granite": {"stone": 2}, "rubble": {"stone": 1}}`. That is the **only**
+  `docs/GAME_DESIGN.md` change in this commit, it is made by **Land**, and its governing source is
+  §4.2. §4.2 (its `Artificial Granite | 3 (owner: 1) | \+2 Stone` row is the **authority** for the
+  new value and is **unchanged**; dig *time* 3 / owner 1 was already in `dig_turns` and is
+  re-asserted). §5.1 (*"No storage caps. Stockpiles are per-player integers"* implemented as honest
+  **64-bit** per-player integers with **no cap and no negative**; its seven resource ids pinned **by
+  test only**, forbidden as tokens in engine code; **no cell edited**). §3.4 (its step-2 deficit
+  clause is the **reason** `spend` refuses atomically; **the 10 % max-HP bleed itself is NOT
+  implemented** — it needs units; **no cell edited**). §3.3 (*"fixed order by player index"*
+  realised as an index-stable roster and an **index-keyed** hash fold; **no cell edited**). §3.1 (its
+  *"2–4 players"* used as a test fixture; **its starting kit deliberately NOT implemented** — it
+  needs its own §12.1 key and amendment; **no cell edited**). §11.1 (the single serializable
+  `GameState` and the **ONE** `state.rng` realised; *"FNV over canonical serialization"* given a
+  concrete, documented composition; *"iterate collections in stable ID order"* realised as
+  ascending-id canonical order; **`Command`, `CommandError` and every `Event` subclass deliberately
+  NOT built** — M2-T2). §11.2 (`scripts/core/fnv.gd` added to the core tree, whose printed file list
+  is **illustrative** — the M0-T3 (f) / M1-T9 (AT) precedent). §11.3 (typing gate green over **38**
+  files; every public function carries its `## §` doc comment; public surfaces are **exact** — `Fnv`
+  3 consts + 4 static folds and **zero** public vars, `PlayerState` **six** functions and **zero**
+  public vars, `GameState` `map` + `rng` + **three** functions — a missing *or extra* member fails).
+  §13.2 (three new tier-1 unit suites — 22 Fnv + 29 PlayerState + 24 GameState, plus 3 new
+  `RulesLoader` tests and 1 added at Verify). §13.4 (procedure exercised: eight silences resolved
+  under (AU), nothing stalled, nothing invented ahead of its milestone). §13.5 (the no-whitelist rule
+  extended from terrain types and event types to **resource ids**, which is what will let the M6
+  zero-engine-change canary hold for §5.1's vocabulary). §13.6 (definition of done **MET**, every
+  clause re-checked in item 12; **no golden re-recorded**). **§14 M2 row — the milestone is OPENED,
+  NOT met. Acceptance criterion text unchanged**; none of *"Scripted 20-turn dig scenario matches
+  expected stockpiles exactly"*, *"deficit-bleed test"* or *"zone assigns nearest idle worker"* is
+  satisfied yet, and only the *stockpiles* half of one deliverable is built.
