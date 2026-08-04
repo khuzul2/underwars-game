@@ -738,3 +738,225 @@ the five bodies landed in `scripts/core/hex_math.gd`, and the suite is **green**
   slices), but none of the three M1 acceptance criteria pass: no golden mapgen test, no greybox to
   measure 60 fps on, no LOS to property-test.** Acceptance criterion text unchanged. **NO
   `docs/GAME_DESIGN.md` edit accompanies this entry, because no numeric table value changed.**
+
+## 2026-08-04 — M1-T3 — `Los`: the §4.1 line-of-sight blocking predicate; resolutions (H)–(L); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 9 / Tests 129 /
+Passing 129 / Failing 0 / Asserts 1308** (the M1-T2 baseline was 8 / 106 / 106 / 0 / 1023);
+`bash tools/typecheck.sh` exits 0 over **15** files (was 13); `bash tools/ci.sh` and
+`bash tools/verify_harness.sh` both exit 0 with the tree left clean. All four were run headless
+through the `tools/` scripts on the repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`,
+never the PATH shim (SETUP-3). The three §13.1 tools that later milestones deliver
+(`sim_smoke` → M7, `content_cli` → E4, `balance_lab` → E5) were correctly **SKIPped, not failed**,
+per CLAUDE.md's applicability rule. `Scripts 9` equals the number of `test_*.gd` on disk, so the
+M0-T5 enumeration guard is satisfied and nothing was silently un-collected.
+
+**The sentence implemented, transcribed verbatim from `docs/GAME_DESIGN.md` §4.1 line 172 (re-read
+at Land):** *"Line of sight uses standard hex line-drawing (lerp in cube space, round); a line is
+blocked by any Solid hex, or by any hex whose elevation exceeds **both** endpoints' elevation."*
+Supporting §4.1 facts used: *"Elevation: integer 0–3 per hex"* (line 173) and §4.2's *"Solid hexes
+(volumetric rock; block movement, LOS, and light)"*. §4.1 legislates an **algorithm** here, not a
+table, so there is **no printed cell to transcribe** and every expected value in
+`tests/unit/test_los.gd` is **derived**. `docs/decisions.md` was re-scanned end-to-end this
+iteration: **no logged override touches §4.1**, so the printed text governs unamended. The
+resolutions below are therefore §13.4 decisions, not deviations from a printed value. Their
+lettering continues M1-T1's `(A)`/`(B)` and M1-T2's `(C)`–`(G)` and is cross-referenced by the
+header doc blocks of `scripts/core/los.gd` and `tests/unit/test_los.gd` — **keep it stable; M1-T4
+continues at (M)**.
+
+- **What changed / was decided:**
+  1. **(H) TERRAIN INJECTION SHAPE — the open design question `docs/PROGRESS.md` raised at M1-T2 is
+     now settled.** No `GameState`, no map type and no terrain enum exist yet (§4.4's generator is a
+     later M1 task), so `Los` receives terrain as **two injected `Callable`s** —
+     `is_solid(Vector2i) -> bool` and `elevation(Vector2i) -> int` — as parameters 3 and 4 of both
+     public functions. Rationale: a `Callable` is a Variant built-in, not a `Node` or singleton, so
+     §11.1 purity holds and the file stays headless-byte-identical; inventing a map type here would
+     pre-empt §4.4 and force a rewrite. When `GameState` lands, callers bind closures over it and
+     `los.gd` itself never changes. The alternative considered and rejected was a tiny typed
+     read-only view class, which would have been a map type in all but name.
+  2. **(I) ENDPOINT EXEMPTION.** Only **interior** hexes — line indices `1..N-1` where
+     `N == path.size() - 1` — are tested. `path[0]` (`== a`) and `path[N]` (`== b`) are **never**
+     tested, so a **Solid endpoint does not block its own line**: you can always see out of, and
+     into, the hex you stand on or look at. The elevation half of the exemption is arithmetically
+     vacuous under (J) (an endpoint's own elevation can never *exceed* `maxi` of the two endpoints),
+     but it is stated explicitly so that no later stage "fixes" it into existence. Pinned by test
+     case A2 (both endpoints Solid ⇒ open) and by properties P2/P4.
+  3. **(J) "EXCEEDS BOTH ENDPOINTS' ELEVATION" IS A STRICT `>` AGAINST `maxi(elev(a), elev(b))`.**
+     Equal elevation does **not** block. `elevation exceeds both endpoints` reads as "greater than
+     the higher of the two", i.e. `elev(h) > cap` with `cap = maxi(elev(a), elev(b))` computed
+     **once** before the loop (both for cost and, more importantly, so the cap cannot drift
+     per-hex). An implementation using `>=` fails exactly at pinned case A4
+     (`elev(a)=2, elev(b)=1, elev(mid)=2 ⇒ open`) — proven live by probe 1 below.
+  4. **(K) DEGENERATE LINES ARE ALWAYS OPEN, as a CONSEQUENCE of (I) and not as a special case.**
+     `distance == 0` (line `[a]`) and `distance == 1` (line `[a, b]`) have **zero** interior hexes,
+     so they are unconditionally open regardless of terrain — even when the hex is Solid and at
+     elevation 3. This is implemented with **no early return**: `range(1, path.size() - 1)` is
+     naturally empty for path sizes 1 and 2, so the behaviour cannot drift away from (I). Pinned by
+     cases A8/A9 and by properties P2 (reflexivity) and P4 (adjacency under worst-case terrain).
+  5. **(L) AN INVALID `Callable` MEANS OPEN TERRAIN, and off-map semantics are the CALLER's.** If
+     either `Callable` fails `is_valid()`, `has_line_of_sight` returns `true` and `blocking_hexes`
+     returns `[]` (never `null`) — a **total function**: no crash, no engine error, no assert abort
+     headless, the same spirit as M1-T1 resolution (B), and for the same reason (a bad argument must
+     never tear down a 60-turn headless run). `Los` knows **no map bounds**, calls the `Callable`s
+     only for the two endpoints and the interior hexes of the line, and imposes **no elevation range
+     check** — §4.1's 0–3 is the *generator's* contract, not this file's. `Los` compares; it does not
+     police. Pinned by case A10.
+  6. **Public API is EXACTLY two functions and must not grow.**
+     `static func has_line_of_sight(a: Vector2i, b: Vector2i, is_solid: Callable, elevation: Callable) -> bool`
+     (may short-circuit on the first blocker) and
+     `static func blocking_hexes(a: Vector2i, b: Vector2i, is_solid: Callable, elevation: Callable) -> Array[Vector2i]`
+     (collects all blockers, in line order, nearest to `a` first, into a **fresh** `Array[Vector2i]`
+     per call — M1-T2 trap 1, re-pinned here by P7 with a live mutation probe). One private helper
+     `_blocks(h, cap, is_solid, elevation)` implements the OR, checking Solid first. Property P5 pins
+     that the two public functions agree (`has_line_of_sight == blocking_hexes().is_empty()`).
+     **Deliberately NOT added:** `visible_hexes` / fog-of-war / vision-range helpers — §4.3's
+     *"Default unit vision: 4 hexes"* and the Dark/Darkvision rules (§4.7) belong to later
+     milestones (§13.4: invent nothing ahead of its milestone).
+  7. **The line-drawing half was CALLED, never re-implemented.** `los.gd` delegates to
+     `HexMath.line(a, b)` (resolutions (C)/(C2)/(D)); the mechanical source scan asserts the literal
+     text `HexMath.line(` is present, so a future "optimization" that inlines a second line walk
+     fails the suite. This matters because §14's LOS **symmetry** property is true only because
+     `line(a,b) == reverse(line(b,a))` exactly (resolution (D), no epsilon), combined with the
+     symmetric `maxi()` cap.
+  8. **Every derived value was re-derived independently — TWICE, by two different stages, from the
+     GDD text rather than from the task spec's answer list** (M1-T1 item 3 / M1-T2 item 9: a wrong
+     number that survives into the log is worse than no number). The Tests stage built a standalone
+     reference model of §4.1 plus (C)/(C2)/(D) *without reading* `hex_math.gd`; Verify built a second,
+     independent one *without reading* `los.gd`. Both re-derived: the direction-0 axis interior
+     `[(1,0),(2,0),(3,0)]`; all ten hand-walked cases A1–A10; the fixture's 5 Solid / 14
+     elevation-3 / 1 both (`(4,-3)`) over the 61-hex radius-4 disc; and all eight property sweeps
+     (3,721 ordered pairs — **0** symmetry breaks, **0** reverse-blocker breaks, **0**
+     agreement/membership/ordering breaks, blocked 2,044 vs open 1,677, of which solid-blocked 922
+     and elevation-only 1,122, so **both clauses of the OR genuinely fire** and the fixture is not
+     degenerate; P2 over 61 hexes; P3 over 3,721; P4 over 366 adjacency checks; P6 over 305 checks
+     with 0 LOS creations and 5 genuine flips). **Zero mismatches, and zero corrections needed** to
+     the task spec's ten values.
+  9. **THREE adversarial mutation probes were executed live AT VERIFY** (the standard M1-T1 item 8
+     and M1-T2 item 5 set: a property test never observed failing is indistinguishable from one that
+     *cannot* fail). Baseline md5 `39d2e6e4020afab0380312bd4084c02d` was captured first and
+     re-verified identical after each probe; the landed file carries that same md5, and Verify
+     additionally `diff`ed against a pristine backup.
+     - **Probe 1 — (J), `>` → `>=`.** `test_elevation_equal_to_the_higher_endpoint_does_not_block`
+       went **RED on both its A4 and A6 assertions**, with documented collateral in A1/A2/A5/P3/P7
+       (an unset hex reads elevation 0, so `>=` makes every elevation-0 interior hex block).
+       Suite exit 1, 123 passing / 6 failing.
+     - **Probe 2 — (I), the endpoint exemption dropped (`range(1, size-1)` → `range(0, size)`).**
+       Exactly the predicted set went **RED**: `test_solid_endpoints_do_not_block_their_own_line`
+       (A2), `test_degenerate_and_adjacent_lines_are_always_open` (A8/A9),
+       `test_los_is_reflexive_even_on_solid_and_peak_hexes` (P2),
+       `test_adjacent_hexes_always_see_each_other_even_on_worst_case_terrain` (P4), plus
+       `test_predicate_and_blocker_list_agree_over_the_radius_four_disc` (P5) as documented
+       collateral. 124 passing / 5 failing.
+     - **Probe 3 (Verify-initiated, NOT in the task spec, and the most informative of the three) —
+       an ASYMMETRIC cap: `cap = maxi(elev(a), elev(b))` → `cap = elev(a)` (viewer-only).** This
+       variant is **invisible to every single hand-walked case** (in A4, `cap == elev(a) == 2`
+       either way) and is caught **only** by the 3,721-ordered-pair symmetry sweep:
+       `test_los_is_symmetric_over_the_radius_four_disc` (P1) and
+       `test_adding_one_solid_hex_never_creates_line_of_sight` (P6) went red, 127 passing / 2
+       failing. **This is direct evidence that §14's "LOS property tests" wording is doing real work
+       that an example-based suite could not do**, and it is recorded here so no future task
+       "simplifies" the sweep away as a slow restatement of the hand-walked cases.
+  10. **TWO SMALL TEST-PLAN DEVIATIONS from the task spec, both introduced by the Tests stage, both
+     deliberate and both verified harmless.** (a) The sweep disc is built by a local `_disc()` helper
+     over the already-pinned `HexMath.distance` (mirroring `test_hex_math.gd`) rather than by
+     `HexMath.hexes_in_range`, so the LOS suite does **not** take a dependency on resolution (G)'s
+     spiral **ordering** — a change to (G)'s order must not be able to silently re-shape the LOS
+     property sweeps. Verify confirmed independently that `_disc(4)` yields exactly 61 hexes and
+     `_disc(5)` exactly 91. (b) Terrain is populated out to **radius 5** (91 hexes) while pairs are
+     swept over **radius 4** (61 hexes / 3,721 ordered pairs), so no line ever leaves populated
+     ground; off-disc hexes still read as open / elevation-0, which is a property of the **fixture**,
+     not of `Los` (resolution (L)). No RNG appears anywhere in the suite (§11.1) — the fixture is
+     hand-built and fully populated before the `Callable`s are created.
+  11. **No test was weakened, edited or re-valued to make the implementation pass.**
+     `tests/unit/test_los.gd` is byte-identical between the Tests stage and Land
+     (md5 `36e1bb34dad8a872593d3f823d23651a`, 965 lines) and never appears in `git status` after the
+     Implement stage. The Implement stage touched exactly one file, `scripts/core/los.gd` (stub
+     bodies replaced, the `!!! M1-T3 TESTS-STAGE STUBS !!!` banner deleted), and Verify made **zero**
+     fixes — the standing rule held in both directions: **code was fixed to match the derived values,
+     never the reverse.** Zero tracked files were modified by this commit's code diff; `data/`,
+     `project.godot`, `tools/`, `addons/` and `docs/GAME_DESIGN.md` are byte-identical to HEAD, so
+     the harness contract was neither weakened nor touched.
+  12. **The Tests-stage stub convention was used again and again paid for itself** (M1-T2 item 10):
+     `los.gd` shipped from the Tests stage with deliberately-wrong bodies under an explicit banner,
+     so the red was **10 named value failures** rather than the silent whole-file un-collection that
+     M0-T5 closed, and `Scripts 9` already equalled the on-disk count while the tree was red. The
+     Tests stage additionally **proved the suite satisfiable** before handing over — a correct
+     implementation was swapped in live (129/129, exit 0), then the wrong stub restored
+     byte-identically (md5 checked) — so the red was known-reachable rather than merely loud.
+  13. **Source scans were written fresh for the new file, because a new file inherits nothing.**
+     `test_hex_math.gd`'s scans cover `hex_math.gd` **only**. `test_los.gd` mirrors all five onto
+     `los.gd` over comment-stripped source (comment stripping is load-bearing: the doc block contains
+     "§4.1", which the no-float regex would otherwise hit): S1 no float literal (`\.[0-9]`) and no
+     `float` token; S2 none of `randi(` / `randf(` / `extends Node` / `SceneTree` / `get_tree` /
+     `Engine.` / `Time.` / `OS.`; S3 no map-size literal (`24|32|40|1801|3169|4921`); S4 doc comments
+     naming `§4.1` on every public function **plus** the tightened assertion (M1-T2 item 11) that the
+     public surface is **exactly** `has_line_of_sight` + `blocking_hexes`, so a missing or an extra
+     member fails rather than passing vacuously, **plus** the presence of `HexMath.line(`; S5 purity
+     via `Los.new().get_class() == "RefCounted"` — **never `x is Node`**, which is statically
+     impossible against a `RefCounted` and is a parse error that silently un-collects the whole test
+     file (decisions.md M0-T2 item 11 / M0-T5 item (a)). Verify re-ran all five independently rather
+     than trusting the in-suite versions.
+  14. **§13.6 clauses that are VACUOUS here, stated explicitly because they were re-checked rather
+     than assumed:** this task reads **zero** §12.1 constants and `data/ruleset.json` gained **no**
+     key — the blocking predicate is *algorithm, not tunable content*, the same data-vs-code line
+     M1-T1 item 4 and M1-T2 item 12 drew for hex geometry. `Los` mutates no `GameState` and touches
+     no `EventBus`, so *"events emitted for every state change"* has **no subject matter** (no
+     `Command`/`validate`/`apply` surface exists yet to violate). **Goldens: NONE re-recorded —
+     none exist yet**; the project's first golden still lands with the §4.4 mapgen terrain hash, and
+     §13.6's re-record-only-with-a-logged-reason rule starts applying from that moment.
+  15. **Scope held (§13.4).** Deliberately **not** written: the concentric-bowl generator (§4.4) or
+     any map / terrain type or enum; any golden file; the chunked MultiMesh renderer, camera rig or
+     hex picking; `GameState`; any `Command`; any concrete `Event` subclass; movement / pathfinding /
+     ZOC / elevation-cost rules (§4.1 prose, but §14 assigns those to **M4**); fog-of-war knowledge
+     states (§4.3); light / Dark / Darkvision rules (§4.7); any new key in `data/ruleset.json`; any
+     `addons/` change; any edit to `tools/run_tests.sh` (harness contract — strengthening only, and
+     nothing here needed it) or to `docs/GAME_DESIGN.md`.
+  16. **SIZE OBSERVATION, recorded so it is not misread as scope creep.** The task estimated ~295 LOC
+     and the delivered change is **27 code lines** in `los.gd` (90 lines with its doc block) plus
+     **~626 code lines** in `test_los.gd` (965 total). The overshoot is entirely in the **test** file
+     and is driven by §14's *"LOS property tests"* acceptance criterion — eight property sweeps over
+     3,721 ordered pairs plus the five mechanical source scans. The production surface is exactly the
+     two functions the spec allowed; no system, resource or stat was invented. The ≤ ~300 LOC house
+     rule is a *change-size* budget for production scope, and it was honoured there; a §14 acceptance
+     criterion that names property tests is not something to ration.
+  17. **STAGE-BOUNDARY NOTE, so it is not mistaken for a missed deliverable** (the same call M0-T5
+     item (i) and M1-T2 item 9 record). The task spec's `files_expected` listed `docs/decisions.md`
+     and `docs/PROGRESS.md` alongside the code, and the Implement stage correctly did **not** touch
+     either: both are **Land**-stage artefacts (this entry and the tracker update). That is the
+     intended division of labour under CLAUDE.md's five-stage loop.
+- **Why:** LOS is not a leaf utility — fog of war (§4.3), AI targeting (§10), ranged combat and cover
+  (§7) and the light/Dark rules (§4.7) all key off this one predicate, so every silence in §4.1's
+  single sentence had to be closed **now**, in integer arithmetic, before four systems close them
+  accidentally and inconsistently. (H) is the load-bearing one: it lets M1-T3 exist at all without
+  pre-empting §4.4's generator, and it costs nothing later because a closure over `GameState`
+  satisfies the same signature. (I)+(K) are recorded together because the natural implementation of
+  (I) *is* (K), and writing (K) as its own early return is precisely how the two would drift apart.
+  (J) and probe 3 together are the strongest evidence in the log so far that §13.2's property tier
+  earns its keep: the asymmetric-cap bug is a plausible one-token slip that **no** hand-walked case in
+  this suite detects, and only the symmetry sweep does. Recording all three probe results at length
+  follows M1-T2 item 5's precedent for the same reason.
+- **GDD section affected:** §4.1 (the LOS sentence **implemented**; five silences resolved under
+  §13.4 — **no numeric table value moved, no cell edited**. §4.1's only numeric table, *Map sizes
+  (hex radius): Small 24 (1,801), Medium 32 (3,169), Large 40 (4,921)*, is unmoved, and those six
+  literals are mechanically confirmed **absent** from `los.gd`. §4.1's *"Elevation: integer 0–3"* is
+  honoured by the test fixture, which asserts its own elevations lie in 0–3, while `Los` itself
+  deliberately imposes no range check — part of resolution (L). `decisions.md` was re-scanned
+  end-to-end this iteration: **no logged override touches §4.1**); §4.2 (its *"Solid hexes … block
+  movement, LOS, and light"* definition is the Solid clause's source; no terrain type or table was
+  created here — that is §4.4's generator); §11.1 (engine-free determinism: pure `RefCounted`, no
+  `Node`/`SceneTree`/singleton, no `randi()`/`randf()`, no wall-clock, no float anywhere — all
+  `Vector2i`/`Vector3i`/`maxi` — plus the fresh-array contract, all re-scanned at Verify);
+  §11.2 (`scripts/core/los.gd` — §11.2's second named `core/` peer, now built); §11.3 (mechanical
+  typing gate green over **15** files; both public functions carry `## §4.1` doc-comment blocks,
+  scanner proven live; every `Callable.call()` Variant converted through an explicit `bool()`/`int()`
+  before use; no `:=`, no untyped `var`, no `@warning_ignore` anywhere since no division exists);
+  §13.2 (tier 1 *"every core/ function"* plus the §14 property tests — the LOS half, now delivered);
+  §13.4 (procedure exercised: five silences resolved (H)–(L), nothing stalled); §13.6 (definition of
+  done **MET**: tests green headless, typing gate clean, no constants to read, no events to emit, no
+  golden to re-record); **§14 M1 row — the row is STILL OPEN and NOT met. Exactly ONE of its three
+  acceptance criteria now passes: *"LOS property tests"* (met headless). *"Golden mapgen test
+  (seed ⇒ terrain hash)"* and *"60 fps on Medium map greybox"* remain unmet — no generator, no golden
+  file, no renderer, camera rig or greybox scene exists. Of the five M1 deliverables, HexMath (both
+  slices) and `Los` are complete; the concentric-bowl generator, chunked MultiMesh renderer, camera
+  rig and hex picking are not.** Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit
+  accompanies this entry, because no numeric table value changed.**
