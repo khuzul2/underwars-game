@@ -245,7 +245,9 @@ Binding constraints (CLAUDE.md / GDD §11):
 - Static typing everywhere; class_name PascalCase; files snake_case; one class per file; public
   rule functions annotated with the GDD § they implement.
 - Integer/percent math, round-half-up at the final step; stable-ID iteration order.
-- Do not modify addons/, docs/GAME_DESIGN.md, or tools/run_tests.sh. Do not edit tests except to
+- Do not modify addons/ or docs/GAME_DESIGN.md. Never WEAKEN tools/run_tests.sh (its guards,
+  refusal strings and exit codes are the harness contract); strengthening-only edits are allowed
+  when the task spec explicitly requires them. Do not edit tests except to
   fix a genuine test bug — and every such edit MUST be listed in deviations with the reason.
 - Every ambiguity you resolve per GDD §13.4 (simplest interpretation consistent with §1.1
   pillars) goes in deviations so the Land stage can log it in docs/decisions.md.
