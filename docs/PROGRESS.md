@@ -14,41 +14,50 @@ not-yet-committed.
   by M0-T5): every §14 M0 deliverable is built (Godot project, GUT wired, `run_tests.sh`, EventBus,
   RulesLoader + `ruleset.json`, CI script, `decisions.md`), **both** §14 acceptance clauses pass
   headless, and the signal that reports clause (a) is itself proven against the false-green mode
-  M0-T4 measured. **M1 is NOT done:** its §14 row lists five deliverables (HexMath, concentric-bowl
+  M0-T4 measured. **M1 is NOT done — but for the first time the reason is the DELIVERABLE list, not
+  the acceptance criteria.** Its §14 row (line 1097) lists five deliverables (HexMath, concentric-bowl
   generator, chunked MultiMesh renderer, camera rig, hex picking); M1-T1/M1-T2/M1-T3 delivered
   **HexMath (both slices) and `Los`**, M1-T4 + M1-T5 delivered the **concentric-bowl generator
   COMPLETE** (`HexMap` + the §4.4 band/elevation bowl, then the seeded `Rng`, the §4.4 terrain-type
-  composition, `content_hash` and the first golden), and M1-T6 + M1-T7 delivered the **chunked
+  composition, `content_hash` and the first golden), M1-T6 + M1-T7 delivered the **chunked
   MultiMesh renderer COMPLETE** (`HexLayout` — flat-top hex→world placement + the deterministic chunk
   partition; then `MapRenderer` — the project's **first `Node`**: one `MultiMeshInstance3D` per chunk,
   shared prism mesh + material, per-instance type/tint custom data and the dirty-chunk rebuild seam,
-  plus `data/render/terrain_palette.json`). Still missing: the **camera rig (M1-T8, which also carries
-  the greybox scene and the 60-fps measurement) and hex picking (M1-T9)**. **TWO of the three §14 M1
-  acceptance criteria pass — re-checked against the §14 row (line 1097) this iteration** — *"Golden
-  mapgen test (seed ⇒ terrain hash)"* (M1-T5, green headless) and *"LOS property tests"* (M1-T3,
-  green headless). *"60 fps on Medium map greybox"* **REMAINS UNMET after M1-T7**: there is still no
-  scene and no camera, and per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all** (the
-  `--headless` dummy renderer has no renderer) — it is a **manual windowed measurement now owed at
-  M1-T8** (see the M1-T7 re-slice, decisions.md M1-T7 item 1: **(Z)**'s forward reference to "M1-T7"
-  now points to **M1-T8**).
-- **Next task:** **M1-T8 — the greybox scene + camera rig + the 60-fps measurement.** Create the first
-  `scenes/Main.tscn` (a `MapRenderer` instanced from the scene, `WorldEnvironment` with **SDFGI off**
-  per §10 line 680), the **CameraRig**, and then run the **MANUAL WINDOWED 60-fps measurement on the
-  Medium map** (radius 32 / 3,169 hexes) and **log the number in decisions.md at that task even if it
-  is bad** — that is the last unmet §14 M1 acceptance criterion. Read decisions.md **M1-T7 (AA)–(AH)**
-  first; three carry-overs bite here: (a) `_clear_chunks()` frees **all** children of the
-  `MapRenderer` node, so the `.tscn` must **not** give it non-chunk children; (b) `set_layout()` must
-  be called **once** per renderer — the shared mesh is sized on first `build()` and is not resized
-  later; (c) the **open cosmetic item** — whether Godot's `CylinderMesh` starts its first radial vertex
-  at +X (flat-top, matching **(V)**) or 30° off is not verifiable headless, so check it **by eye** in
-  the windowed run and log a yaw only if one is genuinely needed. `project.godot` still deliberately
-  has **no** `run/main_scene`; if M1-T8 sets one, it must point at a scene that actually exists (a
-  dangling path breaks `--import`). Hex picking is **M1-T9**; size each slice to ≤ ~300 LOC. Continue
-  the decisions.md lettering at **(AI)** — M1-T7 ended at (AH).
-- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 15 / Tests 321 /
-  **Passing 321** / Failing 0 / Asserts 3380; `bash tools/typecheck.sh` exits 0 over 26 files;
-  `bash tools/ci.sh` exits 0 (all three re-measured at Land, 2026-08-04, M1-T7); `bash
-  tools/verify_harness.sh` exits 0 across all four phases with the tree left clean (re-run at
+  plus `data/render/terrain_palette.json`), and **M1-T8 delivered the camera rig COMPLETE** together
+  with the project's **first scene** (`scenes/Main.tscn`), `GreyboxBoot`, `data/render/camera.json`
+  and **THE MEASUREMENT**. Still missing: **hex picking (M1-T9) — the last M1 deliverable**.
+  **ALL THREE §14 M1 acceptance criteria now PASS — re-checked against the §14 row (line 1097) this
+  iteration** — *"Golden mapgen test (seed ⇒ terrain hash)"* (M1-T5, green headless), *"LOS property
+  tests"* (M1-T3, green headless) and, **as of M1-T8, *"60 fps on Medium map greybox"*: MET.**
+- **THE MEASUREMENT (M1-T8, decisions.md M1-T8 items in the header + (AO)) — logged, MET, and not
+  re-openable by a later "optimisation" without a fresh number.** Windowed (per M1-T6 **(Z)** it is
+  **not headless-measurable at all**), unattended, run twice on the repo-local pinned binary:
+  `./godot/Godot_v4.7-stable_win64_console.exe --path . --resolution 1600x900`. Subject: `Main.tscn`
+  at boot defaults — **hexes=3169** (Medium, radius 32) · **chunks=65** · **SDFGI off** · 1600×900 ·
+  auto-orbiting. **Default (vsync on, 144 Hz panel): `fps_min=144.00 fps_avg=144.00 fps_max=144.00`
+  in both runs. Uncapped (`--disable-vsync`): 236 / 357 / 395 / 608 fps** — every uncapped run ≥ 236,
+  i.e. ≥ 3.9× the 60-fps target. Machine: Intel Core i7-14700HX · RTX 4070 Laptop (driver
+  32.0.15.9282) · 64 GB · Windows 11 · Vulkan 1.4.325 Forward+. **Caveat that travels with the
+  number:** at §9.1's widest legal framing (zoom 60 m, pitch 80°) only **8–9 of the 65 chunks** are in
+  frustum, and with `hex_width_m` 18 the Medium map is ≈1150 m across, so the **whole** map cannot be
+  framed inside §9.1's 60 m ceiling — the figure is honest for the view §9.1 permits, not for all 65
+  chunks at once. The ceiling was **not** widened; the criterion was **not** reinterpreted.
+- **Next task:** **M1-T9 — hex picking (screen ray → hex), the LAST M1 deliverable; it CLOSES M1.**
+  §14 M1's deliverable list ends with *"hex picking"* and §9.1 names *"tap-select, drag-box
+  multi-select (mobile-friendly hit targets)"* — build **only the picking half** (screen point →
+  `Vector2i` hex, or "no hex"); **selection state, tap-select semantics and drag-box are M4/M8**
+  (§13.4). Read decisions.md **M1-T6 (V)–(Z)**, **M1-T7 (AA)–(AH)** and **M1-T8 (AI)–(AP)** first —
+  the inverse of **(W)**'s `hex_to_world` is the whole job, and **(AI)**'s camera frame (+Y up, ground
+  XZ, `looking_at`) is what a ray is cast in. Decide up front whether picking lives on `CameraRig`
+  (its public surface is **exactly** `errors` + 19 functions and a scan fails on an **extra** member,
+  so adding one means updating `tests/unit/test_camera_rig.gd`'s expected list **in the same commit**)
+  or in a new file — a new pure-`RefCounted` helper in `scripts/render/` is testable headless, which a
+  method needing a live `Camera3D` is **not**. Size it ≤ ~300 LOC. Continue the decisions.md lettering
+  at **(AQ)** — M1-T8 ended at (AP).
+- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 17 / Tests 388 /
+  **Passing 388** / Failing 0 / Asserts 4959; `bash tools/typecheck.sh` exits 0 over 30 files;
+  `bash tools/ci.sh` exits 0 (all three re-measured at Land, 2026-08-04, M1-T8); `bash
+  tools/verify_harness.sh` exits 0 across all four phases with the tree left clean (last re-run at
   M1-T7 Verify).
 
 ## Milestone tracker
@@ -56,7 +65,7 @@ not-yet-committed.
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
-| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 … M1-T7 landed 2026-08-04) | **2 of 3 §14 M1 criteria met, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand; **untouched and still green after M1-T7**, which hashes nothing); (b) *60 fps on Medium map greybox*: **STILL NOT met after M1-T7** — the chunked MultiMesh renderer is now COMPLETE as a `Node`, but there is still **no `.tscn` and no camera**, and per decisions.md M1-T6 **(Z)** this criterion is **not headless-measurable at all** (the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), so it is scheduled as a **manual windowed measurement on the Medium map (radius 32 / 3,169 hexes, SDFGI off) logged in decisions.md at M1-T8** — the re-slice moved it one task later (decisions.md M1-T7 item 1); (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is therefore NOT marked done — criterion (b), the camera rig and hex picking remain.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer COMPLETE, both slices** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests. M1-T7 slice 2 — `scripts/render/map_renderer.gd` + `data/render/terrain_palette.json`: the project's **first `Node`** (`class_name MapRenderer extends Node3D`), one `MultiMeshInstance3D` per chunk in canonical order, ONE shared hexagonal `CylinderMesh` + ONE shared `StandardMaterial3D` for the whole renderer, per-instance transforms and type/tint custom data written from `HexLayout`/`HexMap`, the in-place dirty-chunk rebuild seam M2's dig will call, and the (AF) palette load contract reusing `RulesError`; resolutions (AA)–(AH), 43 tests, six adversarial probes). Still to build: **the greybox scene + camera rig + the 60-fps measurement (M1-T8) and hex picking (M1-T9)** — no `.tscn` and no `scenes/` directory exists yet, and `project.godot` still deliberately has no `run/main_scene`. |
+| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 … M1-T8 landed 2026-08-04) | **ALL 3 of 3 §14 M1 acceptance criteria MET, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand; **untouched and still green after M1-T8**, which hashes nothing and moves neither `HexMap` storage nor the canonical order); (b) *60 fps on Medium map greybox*: **MET as of M1-T8** — measured **windowed** (per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all**: the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), unattended, **twice**, on `scenes/Main.tscn` at boot defaults — **hexes=3169** (Medium, radius 32) / **chunks=65** / **SDFGI off** / 1600×900 / auto-orbiting: **`fps_min=144.00 fps_avg=144.00 fps_max=144.00` in both vsync-capped runs (144 Hz panel), and 236 / 357 / 395 / 608 fps uncapped** on an i7-14700HX + RTX 4070 Laptop. Logged in full at decisions.md M1-T8 **with its caveat** (at §9.1's widest legal framing only 8–9 of the 65 chunks are in frustum; the whole ≈1150 m map cannot be framed inside §9.1's 60 m zoom ceiling, which was **not** widened); (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is STILL NOT marked done, and the reason is now the DELIVERABLE list, not the criteria: §14 M1 names five deliverables and *hex picking* (M1-T9) is not started.** A milestone closes only when its deliverables **and** its acceptance criteria are both satisfied. **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer COMPLETE, both slices** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests. M1-T7 slice 2 — `scripts/render/map_renderer.gd` + `data/render/terrain_palette.json`: the project's **first `Node`** (`class_name MapRenderer extends Node3D`), one `MultiMeshInstance3D` per chunk in canonical order, ONE shared hexagonal `CylinderMesh` + ONE shared `StandardMaterial3D` for the whole renderer, per-instance transforms and type/tint custom data written from `HexLayout`/`HexMap`, the in-place dirty-chunk rebuild seam M2's dig will call, and the (AF) palette load contract reusing `RulesError`; resolutions (AA)–(AH), 43 tests, six adversarial probes). **camera rig COMPLETE, plus the project's first scene** (M1-T8 — `scripts/render/camera_rig.gd` + `data/render/camera.json`: the §9.1 orbiting rig with yaw **wrapping** into [0,360), pitch/zoom **clamping inclusively** to the printed 15–80° / 8–60 m bands read from data, the derived `looking_at` transform, camera-relative ground pan, the (AL) `RulesError` load contract and a thin WASD/Q-E/R-F/wheel/edge-pan input layer; `scripts/render/greybox_boot.gd` + `scenes/Main.tscn` — the project's **FIRST scene**, `run/main_scene` now set, `WorldEnvironment` with **SDFGI explicitly off**, a lit `DirectionalLight3D`; and the **flat-top correction yaw** in `MapRenderer` that M1-T7 item 16 owed; resolutions (AI)–(AP), 67 tests, seven adversarial probes). Still to build: **hex picking (M1-T9)** — the last §14 M1 deliverable. |
 | M2 Dig & Economy | not started | — |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
@@ -89,66 +98,135 @@ not-yet-committed.
 | 2026-08-04 | M1-T5 | Seeded Rng core, terrain-type composition (generator slice 2) and the project's first golden (**meets the §14 M1 "golden mapgen test" criterion; completes the generator deliverable**) | landed | M1-T5: Seeded Rng core, terrain-type composition (generator slice 2) and the project's first golden |
 | 2026-08-04 | M1-T6 | HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) (**opens `scripts/render/`; half of the chunked-MultiMesh-renderer deliverable**) | landed | M1-T6: HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) |
 | 2026-08-04 | M1-T7 | MapRenderer: chunked MultiMesh nodes, type/tint custom data and dirty-chunk rebuilds (renderer slice 2) (**the project's first `Node`; completes the chunked-MultiMesh-renderer deliverable; re-slices the scene/camera/60-fps measurement to M1-T8 and picking to M1-T9**) | landed | M1-T7: MapRenderer: chunked MultiMesh nodes, type/tint custom data and dirty-chunk rebuilds (renderer slice 2) |
+| 2026-08-04 | M1-T8 | Greybox Main scene, CameraRig and the Medium-map 60 fps measurement (**the project's first `.tscn`; completes the camera-rig deliverable; MEETS the last §14 M1 acceptance criterion — 144/144/144 vsync-capped, ≥236 fps uncapped on 3,169 hexes / 65 chunks with SDFGI off; also resolves M1-T7's open flat-top `CylinderMesh` yaw**) | landed | M1-T8: Greybox Main scene, CameraRig and the Medium-map 60 fps measurement |
 
 ## Notes for the next iteration
 
-- **Pick up: M1-T8 = the greybox scene + CameraRig + THE 60-FPS MEASUREMENT.** M1-T7 is finished and
-  the tree is green; nothing is carried over. The whole **sim** side of M1 is done and pinned
-  (HexMath, Los, HexMap, MapGenerator, Rng, the golden) and the **chunked MultiMesh renderer is now
-  COMPLETE** (`HexLayout` placement + partition, `MapRenderer` the Node — see both contract bullets
-  below). What is left in M1: `scenes/Main.tscn` (a `MapRenderer` instanced from the scene, a
-  `WorldEnvironment` with **SDFGI off** per §10 line 680), the **CameraRig**, the **manual windowed
-  60-fps measurement on the Medium map** (radius 32 / 3,169 hexes) — then hex picking at **M1-T9**.
-  Read §11.1's renderer/UI boundary and §11.2's directory layout before speccing, and read
-  decisions.md **M1-T6 (V)–(Z)** and **M1-T7 (AA)–(AH)** in full.
-  - **THE MEASUREMENT IS THE POINT OF M1-T8, not a postscript.** *"60 fps on Medium map greybox"* is
-    the **last unmet §14 M1 acceptance criterion** and the one criterion that is **not headless-testable
-    at all** — `--headless` has no renderer (decisions.md M1-T6 **(Z)**). It is a **MANUAL WINDOWED**
-    measurement against the greybox scene with **SDFGI off** (§10 line 680), on **3,169 hexes**
-    (§4.1 Medium radius 32). Plan it before writing the scene, run it, and **log the number in
-    decisions.md at M1-T8 even if it is bad**. The re-slice that moved it here is decisions.md M1-T7
-    item 1 — **(Z)**'s forward reference to "M1-T7" now points to M1-T8.
-  - **Three carry-overs from M1-T7 that bite at M1-T8** (decisions.md M1-T7 item 13): (a)
-    `MapRenderer._clear_chunks()` frees **all** children of the node, so the `.tscn` must **not** give
-    the `MapRenderer` node non-chunk children — hang the camera and environment elsewhere in the
-    scene; (b) `set_layout()` is effectively **once per renderer** — the shared prism mesh is sized on
-    the first `build()` and is **not** resized by a later layout; (c) the **open cosmetic item**:
-    whether Godot's `CylinderMesh` starts its first radial vertex at **+X** (flat-top, matching
-    **(V)**) or 30° off is **not verifiable headless** and no yaw was guessed — check it **by eye** in
-    the windowed run and log a yaw only if one is genuinely needed.
-  - **`project.godot` still deliberately has NO `run/main_scene`.** If M1-T8 sets one, it must point
-    at a scene that actually exists — a dangling path breaks `--import`, which every `tools/` script
-    runs first.
+- **Pick up: M1-T9 = HEX PICKING — the LAST §14 M1 deliverable, and the task that CLOSES M1.** M1-T8
+  is finished, the tree is green, and **nothing is carried over**: the three M1-T7 carry-overs are all
+  discharged (the `.tscn` gives `MapRenderer` **zero** children and a test pins it; `set_layout()` is
+  called **exactly once** and a test pins that too; and the open `CylinderMesh` orientation item is
+  **resolved by measurement** — see the flat-top bullet below). **All three §14 M1 acceptance criteria
+  now pass**, so M1-T9 is the only thing standing between the project and a closed milestone.
+  - **What M1-T9 is:** the inverse of **(W)** — screen point → ray → ground/prism intersection →
+    `Vector2i` hex, or an explicit "no hex". §14 M1's deliverable list ends with *"hex picking"*;
+    §9.1 adds *"tap-select, drag-box multi-select (mobile-friendly hit targets)"* — build **only the
+    picking half**. **Selection state, tap-select semantics, drag-box, overlays, the compass and the
+    minimap are M4/M8** (§13.4: invent nothing ahead of its milestone). Elevation makes the naive
+    "project onto y=0" answer wrong on a bowl whose hexes sit at four different heights — decide and
+    **log** how that is resolved (the simplest interpretation consistent with §1.1 wins; never stall).
+  - **Where it lives is a real design choice, decide it at Orient.** `CameraRig`'s public surface is
+    **exactly** `errors` + 19 functions and its scan fails on an **extra** member, so putting picking
+    there means updating `tests/unit/test_camera_rig.gd`'s expected list **in the same commit**. A new
+    pure-`RefCounted` helper in `scripts/render/` (the `HexLayout` shape) is **fully testable
+    headless**; a method that needs a live `Camera3D` and a viewport is **not** — and (Z) means an
+    untestable pick is an unpinnable pick. Prefer the shape that can be swept.
+  - **Read first:** decisions.md **M1-T6 (V)–(Z)**, **M1-T7 (AA)–(AH)** and **M1-T8 (AI)–(AP)** in
+    full, plus §11.1's renderer/UI boundary and §11.2's directory layout. **(AI)** fixes the frame a
+    ray is cast in (+Y up, ground XZ, north −Z, `looking_at`, yaw about +Y); **(W)** fixes
+    `hex_to_world`; **(AP)** fixes the prism's yaw.
   - **(Z) STILL GOVERNS EVERY RENDERER ASSERTION.** Under `--headless` the dummy renderer **does not
     store MultiMesh instance data** — `set_instance_transform` → `get_instance_transform` returns the
     **identity**, `set_instance_custom_data` reads back `(0,0,0,1)`, and `MultiMesh.buffer` is **size
     0** even at `instance_count = 3` (re-measured at M1-T7). Readable headless: `instance_count`,
-    `transform_format`, `use_custom_data`, `use_colors`, `mesh != null`, resource properties,
-    `get_class()`, node parenting/naming/order, `get_instance_id()`. Renderer tests stay **STRUCTURAL
-    only**; an instance read-back assertion can only ever pass **vacuously**. Placement math is covered
-    by `test_hex_layout.gd` — do not re-test it through a MultiMesh.
-  - **Size it: ≤ ~300 LOC per slice.** Scene + camera + measurement is one task; picking is M1-T9.
+    `transform_format`, `use_custom_data`, `use_colors`, `mesh != null`, **resource properties**
+    (which is what makes the SDFGI pin real), `get_class()`, node parenting/naming/order,
+    `get_instance_id()`. Renderer tests stay **STRUCTURAL only**; an instance read-back assertion can
+    only ever pass **vacuously**. Placement math is covered by `test_hex_layout.gd` — do not re-test
+    it through a MultiMesh. **M1-T8 added the corollary: a `.tscn` may be `load()`ed and
+    `instantiate()`d in a unit test but must NEVER be added to the tree** — `_ready()` would generate
+    a 3,169-hex map inside the suite. Wrap the instance in `autofree`.
+  - **Size it: ≤ ~300 LOC.** Picking is one task and it closes M1.
   - **Write the source scans fresh for any new file.** They are per-file and inherit nothing. For a
     **sim/core** file copy `tests/unit/test_rng.gd`/`test_map_generator.gd`; for a **renderer** file
-    the newest examples are `tests/unit/test_hex_layout.gd` (a pure `RefCounted` renderer helper) and
-    `tests/unit/test_map_renderer.gd` (an actual `Node` — **copy this one for M1-T8**, it is the scan
-    written for engine-bound code). Both **strip comment lines FIRST** (load-bearing — doc blocks
-    contain `§4.1`, which naive regexes hit). **`RulesError` is explicitly ALLOWED in renderer files**
-    (M1-T6 (Y)); the **no-float** scan is deliberately **NOT** applied to renderer files (geometry is
-    not a §11.1 rule surface). Always keep: no map-size literal `24|32|40|1801|3169|4921`; a
-    `## §<section>` doc comment on every public function (section list in a `DOC_SECTIONS` const);
-    **an explicit expected public-member list** so a missing **or extra** member fails; and class-kind
-    via `get_class()`, **never** `is Node` (a statically-decidable construct parse-errors and silently
-    un-collects the whole file; decisions.md M0-T2 item 11 / M0-T5 item (a)) — for a Node file
-    `get_class()` **names** the expected class instead of forbidding Node-ness.
-  - Continue the decisions.md lettering at **(AI)** — M1-T7 ended at (AH).
+    the examples are `tests/unit/test_hex_layout.gd` (a pure `RefCounted` renderer helper),
+    `tests/unit/test_map_renderer.gd` (an actual `Node`) and now `tests/unit/test_camera_rig.gd` (a
+    `Node3D` **with an allowed-token list** — `Input.`, `get_viewport(`, `RulesError` are required
+    **present**) and `tests/unit/test_greybox_scene.gd` (a scene + `project.godot` structural scan
+    whose allowances — `Engine.get_frames_per_second(`, `get_tree()` — are **stripped before** the
+    forbidden pass). All **strip comment lines FIRST** (load-bearing — doc blocks contain `§4.1`/`§9.1`
+    and naive regexes hit them). **`RulesError` is explicitly ALLOWED in renderer files** (M1-T6 (Y));
+    the **no-float** scan is deliberately **NOT** applied to renderer files (geometry is not a §11.1
+    rule surface). Always keep: no map-size literal `24|32|40|1801|3169|4921`; a `## §<section>` doc
+    comment on every public function (section list in a `DOC_SECTIONS` const); **an explicit expected
+    public-member list** so a missing **or extra** member fails; and class-kind via `get_class()`,
+    **never** `is Node` (a statically-decidable construct parse-errors and silently un-collects the
+    whole file; decisions.md M0-T2 item 11 / M0-T5 item (a)) — for a Node file `get_class()` **names**
+    the expected class instead of forbidding Node-ness.
+  - Continue the decisions.md lettering at **(AQ)** — M1-T8 ended at (AP).
   `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd` + `sim/hex_map.gd` +
   `sim/map_generator.gd`, `core/event.gd` + `core/event_bus.gd`, `core/hex_math.gd`, `core/los.gd`,
-  `core/rng.gd`, `render/hex_layout.gd` and `render/map_renderer.gd`, and nothing else, deliberately
-  (§13.4: invent nothing ahead of its milestone). **`MapRenderer` is the project's only `Node`; there
-  is still no `.tscn`, no `scenes/` directory, no `Camera3D`, no `WorldEnvironment` and no shader**,
-  and no GameState, Command, vein **node**, cave feature, river, lair or spawn code exists — nor any
-  concrete `Event` subclass. Those belong to the milestones that emit them.
+  `core/rng.gd`, `render/hex_layout.gd`, `render/map_renderer.gd`, `render/camera_rig.gd` and
+  `render/greybox_boot.gd`, and nothing else, deliberately (§13.4: invent nothing ahead of its
+  milestone). `scenes/` holds exactly one file, `Main.tscn`. **There is still no shader** (§10 line
+  679's Lit/Dark tint is M3), **no picking**, **no `GameState`, `Command`, vein node, cave feature,
+  river, lair or spawn code**, and no concrete `Event` subclass. Those belong to the milestones that
+  emit them.
+- **`CameraRig` + the greybox scene contract (`scripts/render/camera_rig.gd`,
+  `scripts/render/greybox_boot.gd`, `data/render/camera.json`, `scenes/Main.tscn`, NEW at M1-T8 — read
+  decisions.md M1-T8 (AI)–(AP) before touching any of them).**
+  - **Public surface is EXACTLY `var errors: Array[RulesError]` + 19 functions** —
+    `load_params_text`, `load_params_file`, `pitch_limits_deg`, `zoom_limits_m`, `pan_speed_mps`,
+    `orbit_speed_dps`, `zoom_speed_mps`, `edge_pan_margin_px`, `yaw_deg`, `pitch_deg`, `zoom_m`,
+    `focus_point`, `set_focus`, `orbit`, `tilt`, `dolly`, `pan`, `camera_transform`, `apply_to_camera`
+    — and the scan fails on a **missing OR extra** member. **If M1-T9 puts picking here, update
+    `tests/unit/test_camera_rig.gd`'s expected list in the SAME commit.** The accessor is `zoom_m()`
+    and the mutator `dolly()` deliberately: anything shadowing a `Node3D` method trips
+    `native_method_override` (level 2 = hard error).
+  - **(AJ) YAW WRAPS, PITCH AND ZOOM CLAMP.** §9.1's *"rotate 360°"* is unbounded → `orbit()` wraps
+    into **[0, 360)**; *"tilt 15–80°"* / *"zoom 8–60 m"* are bands → clamped **inclusively**. A
+    successful load frames the rig at the **widest legal view** (yaw 0, pitch = max, zoom = max, focus
+    origin) and there is **no absolute setter** — only the three relative mutators. `DEGREES_PER_TURN`
+    (360.0) is a named **mathematical** const; **15/80/8/60 may not appear as literals** and the scan
+    forbids `\b15\b`/`\b80\b`/`\b8\b`/`\b60\b` on comment-stripped code (it does not fire inside
+    `360.0`, but it **would** fire on e.g. `0.8`).
+  - **(AI) the derived transform:** `origin = focus + zoom * Vector3(cos P * sin Y, sin P, cos P *
+    cos Y)` then `.looking_at(focus, Vector3.UP)`; **(AK) `pan(right_m, forward_m)` moves the FOCUS
+    only**, `right(yaw) = (cos, 0, −sin)`, `forward(yaw) = (−sin, 0, −cos)`, `focus.y` invariant.
+    **Probe P1 is the one to remember: a sin/cos swap is INVISIBLE to the 540-case distance sweep**
+    (it preserves `|camera − focus|`) and is caught only by the hand offset table and the
+    pan-axes/basis agreement — the two pins are complementary, never redundant.
+  - **(AL) the loader mirrors (P)/(Y)/(AF) and REUSES `RulesError`** — declared key-spec order,
+    line 0 reserved for missing files, integral-float accepted / fractional rejected for the single
+    INT leaf `edge_pan_margin_px` (0 is legal), **semantic attribution pinned per key**, no cascading
+    band error after a leaf's own failure, and **any** error leaves the rig UNCONFIGURED (accessors
+    0 / `Vector2.ZERO` / `Vector3.ZERO` / `Transform3D.IDENTITY`, every mutator a silent no-op),
+    including a failed load after a successful one.
+  - **`data/render/camera.json` is CONTENT and its formatting is load-bearing** (line 1 a lone `{`,
+    one top-level key per line): `id greybox_camera`, the four §9.1 limits **verbatim** (15/80/8/60)
+    and four new tunables (`pan_speed_mps` 45, `orbit_speed_dps` 35, `zoom_speed_mps` 25,
+    `edge_pan_margin_px` 16). It is a **separate file** from `greybox.json` because
+    `test_hex_layout.gd` asserts that one **byte-for-byte**. Data-drivenness is proven **by mutation**.
+  - **Input (§9.1 WASD + edge-pan) is thin, delegating and UNTESTED HEADLESS** — the suite `autofree`s
+    every rig and **never adds one to the tree**, so `_process`/`_unhandled_input` never run there.
+    `Input.` and `get_viewport(` are **explicitly allowed and asserted present**. R/F tilt reuses
+    `orbit_speed_dps()` because §9.1 prints no tilt speed (decisions.md M1-T8 item 11); it becomes a
+    fifth `camera.json` key the moment it needs to differ. **Nobody has yet assessed how any of it
+    FEELS** — worth an eyes-on pass whenever a human next opens the scene.
+  - **`scenes/Main.tscn` is a FIXED FOUR-CHILD scene** (`MapRenderer` with **zero** children,
+    `CameraRig` with exactly one `Camera3D`, `WorldEnvironment`, `DirectionalLight3D`) and the child
+    **set** is asserted, so an **extra** child fails. **SDFGI is pinned twice** — as a resource
+    property and as literal `.tscn` text — so an engine default flip cannot silently turn it on.
+    `project.godot` now has `run/main_scene="res://scenes/Main.tscn"`; its `[debug]` §11.3 gate
+    section is untouched. **The `DirectionalLight3D` needs a real orientation**: as first written it
+    had none, shone horizontally and the greybox rendered **black** — and a hand-written 12-float
+    `Transform3D` in a `.tscn` is applied **TRANSPOSED** (it pointed the light *upward*), so use
+    `rotation_degrees`.
+  - **`GreyboxBoot` is the measurement instrument, and `Engine.get_frames_per_second()` is a
+    ONE-SECOND-WINDOW AVERAGE** whose first two windows are always start-up transients (the engine's
+    initial sentinel **1**, then the window containing `_ready()`'s generate + build); steady state
+    arrives ~frame 180 at 144 Hz. `warmup_frames` 1500 / `auto_quit_frames` 3300 are **calibrated to
+    this machine**, not principled — a much faster machine could need more. A too-short warm-up
+    produces a **false LOW min**, which errs conservative and can never flatter the criterion.
+  - **THE FLAT-TOP CORRECTION YAW — (AP), and the M1-T7 open item now CLOSED by measurement.** Godot
+    4.7's `CylinderMesh(radial_segments 6)` puts its radial vertices at **{0, ±60, ±120, 180}° from +Z
+    toward +X** — a vertex on **+Z**, **none on +X** — exactly **half a segment off** what
+    `HexLayout`'s **(V)** flat-top placement needs, so identity-basis instances tile with visible
+    triangular gaps and overlapping slivers. `MapRenderer` now writes
+    `Basis(Vector3.UP, PI / RADIAL_SEGMENTS)` into every instance transform. **(Z) makes that basis
+    unreadable headless — probe P7 confirmed reverting it breaks ZERO tests** — so
+    `test_map_renderer.gd`'s `REQUIRED_TOKENS` entry `"Basis(Vector3.UP"` is the **only** automated
+    guard; the tiling itself is verifiable only in a windowed run. **Never drop that token.**
 - **`MapRenderer` contract (`scripts/render/map_renderer.gd`, `data/render/terrain_palette.json`, NEW
   at M1-T7 — read decisions.md M1-T7 (AA)–(AH) before touching it). THE PROJECT'S FIRST `Node`**
   (`class_name MapRenderer extends Node3D`), and the boundary it opens is the standing risk: §11.1 is
@@ -204,11 +282,14 @@ not-yet-committed.
     pinned **by test**, plus a **cross-file coverage property** that reds if a future
     `concentric_bowl.json` composition type has no palette entry. Data-drivenness is proven **by
     mutation**, not by a token scan.
-  - **(AC)** per-instance transform (`hex_to_world`, identity basis, MapRenderer-local space) and
-    custom data (`tint_for(terrain_type)`, **alpha 1.0 reserved for M3's §10 line 679 Lit/Dark
-    shader**) are **written, never read back** — (Z) makes a read-back vacuous, so the scan requires the
-    literal `set_instance_transform(`/`set_instance_custom_data(` tokens instead. **(AH)** at M1 every
-    in-bounds hex is drawn as solid rock; **cave culling arrives with M2's dig**.
+  - **(AC)** per-instance transform (`hex_to_world`, MapRenderer-local space) and custom data
+    (`tint_for(terrain_type)`, **alpha 1.0 reserved for M3's §10 line 679 Lit/Dark shader**) are
+    **written, never read back** — (Z) makes a read-back vacuous, so the scan requires the literal
+    `set_instance_transform(`/`set_instance_custom_data(` tokens instead. **(AH)** at M1 every
+    in-bounds hex is drawn as solid rock; **cave culling arrives with M2's dig**. **The instance basis
+    is NO LONGER identity as of M1-T8 (AP)** — it is `Basis(Vector3.UP, PI / RADIAL_SEGMENTS)`, the
+    measured flat-top correction yaw, guarded only by `test_map_renderer.gd`'s `"Basis(Vector3.UP"`
+    required token (see the CameraRig/scene bullet above).
   - **Two known, deliberately unfixed observations** (decisions.md M1-T7 item 13): `const SPEC_KEYS` is
     declared but unreferenced (documentation only — the order comes from the fixed
     `_validate_fallback` → `_validate_tints` call sequence), and `_ensure_resources()` allocates the
@@ -513,18 +594,18 @@ not-yet-committed.
   Errors surface as `RulesError` (`line` 1-based, `path` dotted, `message`,
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
-- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 15 /
-  Tests 321 / Passing 321 / Failing 0 / Asserts 3380** (re-measured at Land, 2026-08-04, M1-T7).
-  `Scripts 15` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
-  `bash tools/typecheck.sh` exits **0** over 26 files; `bash tools/ci.sh` exits 0 (PASS with the
+- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 17 /
+  Tests 388 / Passing 388 / Failing 0 / Asserts 4959** (re-measured at Land, 2026-08-04, M1-T8).
+  `Scripts 17` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
+  `bash tools/typecheck.sh` exits **0** over 30 files; `bash tools/ci.sh` exits 0 (PASS with the
   three documented M7/E4/E5 skips) and `bash tools/verify_harness.sh` exits 0. Prior green baselines,
-  for reference: M1-T6's 14 / 278 / 278 / 2760, M1-T5's 13 / 234 / 234 / 2268, M1-T4's
-  11 / 183 / 183 / 1879, M1-T3's
+  for reference: M1-T7's 15 / 321 / 321 / 3380, M1-T6's 14 / 278 / 278 / 2760, M1-T5's
+  13 / 234 / 234 / 2268, M1-T4's 11 / 183 / 183 / 1879, M1-T3's
   9 / 129 / 129 / 1308, M1-T2's 8 / 106 / 106 / 1023, M1-T1's 8 / 86 / 86 / 835, and
   7 / 62 / 62 / 473 at the close of M0 (the M0 tracker row above deliberately keeps that historical
   figure). **Expect these totals to RISE as you add tests — they are enumerated, not hard-coded.**
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 on a healthy tree, and
-  `bash tools/typecheck.sh` → exit 0 over **26** project `.gd` files, and
+  `bash tools/typecheck.sh` → exit 0 over **30** project `.gd` files, and
   `bash tools/verify_harness.sh` → exit 0
   with **four** phases (A green · B failing canary · C syntactic parse error · D
   statically-impossible construct), each red phase non-zero *and naming its probe*, self-cleaning
@@ -565,8 +646,9 @@ not-yet-committed.
   part of the task that creates the file**, not a later cleanup.
 - Godot is repo-local: `godot/Godot_v4.7-stable_win64_console.exe` — the ONLY binary any agent
   may use (decisions.md SETUP-3). Never the `godot` PATH shim.
-- `project.godot` deliberately has **no** `run/main_scene` (no scene exists; a dangling path
-  breaks `--import`). Its `[debug]` section is the §11.3 gate (M0-T4, above) and is **hand-written
+- `project.godot` carries `run/main_scene="res://scenes/Main.tscn"` **as of M1-T8** — the scene
+  exists, so the path is not dangling (a dangling one breaks `--import`, which every `tools/` script
+  runs first). Its `[debug]` section is the §11.3 gate (M0-T4, above) and is **hand-written
   and `--import`-stable**: Godot re-saves it byte-identically, *including* lines whose value equals
   its own default — which is what makes the "explicitly off" exclusion assertions possible. Do not
   "tidy" those lines away.
@@ -657,3 +739,18 @@ not-yet-committed.
   idempotence test; and **assigning `instance_count` before the MultiMesh format makes the engine
   silently REFUSE the format toggles** (*"Instance count must be 0 to change the transform format"*),
   after which every per-instance write errors too.
+  **M1-T8's yield is the sharpest lesson yet, and it is about the LIMITS of a test suite: the three
+  real defects this iteration found were all found by RUNNING THE THING, not by any assertion.**
+  (i) a **sin/cos swap** in the camera offset is **invisible** to the 540-case distance sweep (a swap
+  preserves `|camera − focus|`) and is caught only by the hand offset table and the pan-axes/basis
+  agreement — complementary pins, never redundant ones; (ii) probe **P7 — reverting the flat-top
+  correction yaw — went ZERO RED**, because (Z) makes the instance basis unreadable headless, so the
+  greybox could tile with visible gaps while 388 tests stayed green (now guarded by a single required
+  token); (iii) the scene's `DirectionalLight3D` shipped with **no rotation**, so the greybox rendered
+  **black** and every fps number measured on it would have been meaningless — no structural test could
+  see it, and a hand-written 12-float `Transform3D` in a `.tscn` is applied **TRANSPOSED**, which the
+  first fix attempt discovered by pointing the light upward; and (iv) `Engine.get_frames_per_second()`
+  is a **one-second-window average** whose first two windows are start-up transients, so the first
+  measurement printed a bogus `fps_min=1.00` — an **instrument** artefact, not a performance dip.
+  **When a milestone criterion is only measurable outside the suite, budget time to LOOK at the
+  output, and probe the instrument before trusting its number.**

@@ -221,8 +221,17 @@ const FORBIDDEN_TOKENS: Array[String] = [
 	"queue_free(",
 ]
 
-## The other direction: what the file MUST contain. The last two are the only headless-available
+## The other direction: what the file MUST contain. The last three are the only headless-available
 ## evidence that per-instance data is written at all — (Z) makes reading it back impossible.
+##
+## `Basis(Vector3.UP` is the FLAT-TOP CORRECTION YAW added at M1-T8 (resolving M1-T7 item 16):
+## Godot 4.7's [CylinderMesh] lays its radial vertices at {0, +/-60, +/-120, 180} degrees measured
+## from +Z toward +X — a vertex on +Z and NONE on +X — so an identity-basis instance is exactly
+## half a segment away from the flat-top orientation HexLayout's (V) placement needs, and the field
+## tiles with visible triangular gaps and overlapping slivers. (Z) makes the resulting instance
+## basis unreadable headless (M1-T8 probe P7: reverting the yaw broke ZERO tests), so this token is
+## the ONLY automated guard against that regression silently returning; the tiling itself is
+## verifiable only in the windowed run.
 const REQUIRED_TOKENS: Array[String] = [
 	"extends Node3D",
 	"HexLayout",
@@ -236,6 +245,7 @@ const REQUIRED_TOKENS: Array[String] = [
 	"get_terrain_type(",
 	"set_instance_transform(",
 	"set_instance_custom_data(",
+	"Basis(Vector3.UP",
 ]
 
 ## §4.1 line 174 — radii and hex counts are content, never engine code.

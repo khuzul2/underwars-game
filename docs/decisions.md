@@ -1957,3 +1957,293 @@ continues at (AI)**.
   started, so **M1 is NOT done**.** Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md`
   edit accompanies this entry, because no numeric table value changed: §10 prints FACTION palettes and
   never terrain tints, so the ten shipped colour triples have no printed counterpart at all.**
+
+## 2026-08-04 — M1-T8 — Greybox `scenes/Main.tscn`, `CameraRig` and **THE MEDIUM-MAP 60-FPS MEASUREMENT**; resolutions (AI)–(AP); landed GREEN; §14 M1's last acceptance criterion **MET**
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 17 / Tests 388 /
+Passing 388 / Failing 0 / Asserts 4959** (the M1-T7 baseline was 15 / 321 / 321 / 0 / 3380 — all four
+totals rose); `bash tools/typecheck.sh` exits 0 over **30** files (was 26); `bash tools/ci.sh` exits 0
+(PASS) with the three documented not-yet-built skips. All ran headless through the `tools/` scripts on
+the repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3).
+`sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5) were correctly **SKIPped, not failed**, per
+CLAUDE.md's applicability rule. `Scripts 17` equals the number of `test_*.gd` on disk, so the M0-T5
+enumeration guard is satisfied and nothing was silently un-collected. **No golden was re-recorded**
+(`goldens_rerecorded: false`); `tests/golden/mapgen_concentric_bowl_small_seed1337.json`
+(`content_hash 0xcad24923`) and `data/render/greybox.json` are **byte-untouched**.
+
+**THE MEASUREMENT — §14 M1's *"60 fps on Medium map greybox"* is now MET.** This was the point of the
+task, not a postscript, and per M1-T6 **(Z)** it is **not headless-measurable at all**, so it was run
+**windowed** and **unattended** twice (plus uncapped headroom runs), from the repo root, on the
+repo-local pinned binary:
+`./godot/Godot_v4.7-stable_win64_console.exe --path . --resolution 1600x900`.
+
+- **Machine:** Intel Core i7-14700HX (20C/28T) · NVIDIA GeForce RTX 4070 Laptop GPU (driver
+  32.0.15.9282) · 64 GB RAM · Windows 11 · Vulkan 1.4.325, Forward+.
+- **Subject:** `scenes/Main.tscn` at the boot defaults — `size_id "medium"` ⇒ radius **32** ⇒
+  **hexes=3169** (§4.1 line 174) · **chunks=65** · SDFGI **off** (§10 line 680) · windowed **1600×900**
+  · auto-orbiting at `orbit_speed_dps()` so the sample is never a degenerate static frame.
+- **Numbers (default, vsync on, 144 Hz panel), two consecutive runs:**
+  `fps_min=144.00 fps_avg=144.00 fps_max=144.00` in **both** — i.e. the greybox sustains the panel's
+  full refresh rate with no dropped counter window.
+- **Numbers (uncapped, `--disable-vsync`):** **236 / 357 / 395 / 608** fps across runs (laptop
+  power/thermal variance); **every** uncapped run ≥ **236** fps, ≥ 3.9× the printed 60-fps target.
+- **Verdict: MET.** The criterion was **not** weakened, reinterpreted or re-scoped, and §9.1's 60 m
+  zoom ceiling was **not** widened to flatter the number.
+- **Caveat recorded verbatim with the number (the honest scope of the claim):** at §9.1's widest legal
+  framing (zoom 60 m, pitch 80°) only **8–9 of the 65 chunks** are inside the frustum (measured via
+  `RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME`). With `hex_width_m` 18 the Medium map is ≈ **1150 m**
+  across, so the **whole** map cannot be framed within §9.1's printed 60 m zoom ceiling at all. The
+  figure is honest for the view §9.1 permits, **not** for all 65 chunks drawn at once. If a later
+  milestone ever needs a whole-map view (§9.1's minimap is **M8**), that is a §9.1 question to raise
+  then — not a licence to widen the ceiling now.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §9.1
+line 666 (*"Orbiting tactical camera (rotate 360°, tilt 15–80°, zoom 8–60 m); edge-pan + WASD;
+tap-select, drag-box multi-select (mobile-friendly hit targets)."*), §10 lines 678–680 (*"Greybox
+first … Readability > fidelity"*; the Lit/Dark **shader** — **M3**; *"Rock rendered as chunked
+MultiMeshInstance3D … Target: Medium map at 60 fps on mid-range hardware; SDFGI off"*), §4.1 lines
+173–174 (elevation 0–3; Small 24 / 1,801, **Medium 32 / 3,169**, Large 40 / 4,921), §11.1–§11.3,
+§13.2, §13.4, §13.6, §14 line 1097. `docs/decisions.md` was re-scanned end to end at Tests **and** at
+Verify: **no logged override touches §9.1, §4.1 or §10**, so the printed text governs unamended; the
+lettering genuinely ended at **(AH)** in the M1-T7 entry, so this entry continues at **(AI)**.
+
+The resolutions below are §13.4 decisions closing §9.1's and §10's silences, **not** deviations from a
+printed value. Their lettering continues M1-T1's (A)/(B), M1-T2's (C)–(G), M1-T3's (H)–(L), M1-T4's
+(M)–(Q), M1-T5's (R)–(U), M1-T6's (V)–(Z) and M1-T7's (AA)–(AH), and is cross-referenced by the header
+doc blocks of `scripts/render/camera_rig.gd` and `scripts/render/greybox_boot.gd` and by
+`tests/unit/test_camera_rig.gd` / `tests/unit/test_greybox_scene.gd` — **keep it stable; M1-T9
+continues at (AQ)**.
+
+- **What changed / was decided:**
+  1. **(AI) CAMERA FRAME AND THE DERIVED TRANSFORM.** World **+Y up**, ground = **XZ** (matching
+     `HexLayout`'s **(W)**), north = **−Z**; yaw rotates about **+Y** and yaw 0 puts the camera on the
+     **+Z** side of the focus looking toward −Z. `camera_transform()` is **derived, never stored**:
+     `origin = focus + zoom * Vector3(cos(P)*sin(Y), sin(P), cos(P)*cos(Y))`, then
+     `.looking_at(focus, Vector3.UP)`. Pitch 80° is near top-down, pitch 15° near horizontal — matching
+     §9.1's *"tilt 15–80°"* read the simplest way. Pinned by hand offsets at pitch 80 / zoom 60, by an
+     orthonormal-basis + no-roll assertion, and by a **540-case distance sweep**
+     (`origin.distance_to(focus) ≈ zoom` over 36 yaws × 5 pitches × 3 zooms). Tolerance 1e-4 for
+     `Vector3` components (32-bit floats in Godot 4), 1e-9 for scalar returns.
+  2. **(AJ) YAW WRAPS; PITCH AND ZOOM CLAMP, INCLUSIVELY.** §9.1's *"rotate 360°"* is **unbounded**
+     rotation, so `orbit()` **wraps** into the canonical half-open turn **[0, 360)** (`fmod`, then
+     `+360` if negative) and **never clamps**; *"tilt 15–80°"* and *"zoom 8–60 m"* are **bands**, so
+     `tilt()`/`dolly()` clamp to the data limits with **both ends inclusive** (an angle landing exactly
+     on 15.0 or 80.0, or a distance on 8.0 or 60.0, is accepted unchanged). **A successful load frames
+     the rig at the widest legal view** — yaw 0, pitch = `max_pitch_deg`, zoom = `max_zoom_m`,
+     focus `Vector3.ZERO` — and there is deliberately **no absolute setter** for yaw/pitch/zoom, only
+     the three relative mutators (§13.4: the smallest surface that satisfies §9.1). `360.0` lives as
+     the named const `DEGREES_PER_TURN` in the `.gd` — a **mathematical** constant on the `SQRT_3`
+     (M1-T6 (W)) / `RADIAL_SEGMENTS` (M1-T7 (AD)) / FNV (M1-T5 item 7) precedent, **not** a §13.6
+     violation. The four §9.1 limits are **not**: they are content, and the source scan forbids
+     `\b15\b`, `\b80\b`, `\b8\b` and `\b60\b` in comment-stripped code (the `\b60\b` alternative
+     deliberately does **not** fire inside `360.0`).
+  3. **(AK) PAN IS CAMERA-RELATIVE AND NEVER LEAVES THE GROUND PLANE.** `pan(right_m, forward_m)`
+     translates the **focus only**, in XZ: `right(yaw) = (cos yaw, 0, −sin yaw)`,
+     `forward(yaw) = (−sin yaw, 0, −cos yaw)`. `focus.y` is invariant under any sequence of pans
+     (pinned over 20 mixed pans at 8 yaws), and `pan(a, b)` then `pan(−a, −b)` at the same yaw returns
+     exactly to the start. The two axes are unit, mutually orthogonal, and agree with the camera basis
+     — which is what makes probe **P1** (a sin/cos swap) red.
+  4. **(AL) THE LOAD CONTRACT MIRRORS `MapGenerator`'s (P), `HexLayout`'s (Y) AND `MapRenderer`'s (AF)
+     EXACTLY AND REUSES `RulesError`.** No second error type was invented (§13.4). **All** errors are
+     collected, never stopping at the first; **line 0 stays reserved for missing/unreadable files** and
+     is never emitted for a schema error; schema errors carry the offending **top-level** key's own
+     1-based line, falling back to 1; error **ORDER** comes from the loader's own **declared** key-spec
+     order — `min_pitch_deg` → `max_pitch_deg` → `min_zoom_m` → `max_zoom_m` → `pan_speed_mps` →
+     `orbit_speed_dps` → `zoom_speed_mps` → `edge_pan_margin_px` — and **never** the parsed
+     `Dictionary`'s (a fixture presents the keys **reversed** *and* breaks two of them); unknown extra
+     top-level keys load clean (the shipped `"id"` is one). `edge_pan_margin_px` is the **only INT
+     leaf**: an integral float is accepted, a fractional one **rejected and never truncated** (Godot
+     4.7 parses every JSON number as `TYPE_FLOAT` — M0-T2 item 8). **Semantic attribution is pinned,
+     not incidental:** `min_pitch_deg >= max_pitch_deg` → path `max_pitch_deg`; `min_zoom_m <= 0` →
+     `min_zoom_m`; `min_zoom_m >= max_zoom_m` → `max_zoom_m`; a speed `<= 0` → that speed's own key;
+     `edge_pan_margin_px < 0` → `edge_pan_margin_px` (**0 is legal**). **A leaf that already failed its
+     own schema/positivity check does NOT also raise a cascading band error** (the ordering fixture
+     expects exactly two). **Any error leaves the rig UNCONFIGURED**, including a failed load after a
+     successful one (the (Y)/(AB) probe-P6 property).
+  5. **(AM) THE THREE SPEEDS AND THE EDGE MARGIN ARE ENTIRELY NEW TUNABLE CONTENT — §9.1 prints
+     *limits* and never speeds, so NO GDD cell moves.** `data/render/camera.json` (md5
+     `af27b5ce410741b00aa7b34dc860a234`) ships `"id": "greybox_camera"`, the four §9.1 limits
+     **transcribed verbatim** (`min_pitch_deg` 15, `max_pitch_deg` 80, `min_zoom_m` 8, `max_zoom_m`
+     60) and four new tunables (`pan_speed_mps` 45, `orbit_speed_dps` 35, `zoom_speed_mps` 25,
+     `edge_pan_margin_px` 16 — deliberately avoiding 24/32/40 so no map-size literal appears anywhere).
+     Its formatting is **load-bearing** (line 1 a lone `{`, one top-level key per line) exactly like
+     `ruleset.json`, `greybox.json` and `terrain_palette.json` — **do not re-pretty-print it nested**,
+     the line-attribution tests derive expected lines from the fixture. It is a **separate file**
+     rather than four more keys in `greybox.json` precisely because `tests/unit/test_hex_layout.gd`
+     asserts `greybox.json` **byte-for-byte**. Data-drivenness is proven **by mutation**, not by a
+     token scan: mutating `max_pitch_deg` 80 → 70 in the params **text** moves the clamp, and the same
+     probe is run for `min_zoom_m` and each of the three speeds.
+  6. **(AN) THE GREYBOX SCENE IS A FIXED FOUR-CHILD `Node3D` — the project's FIRST `.tscn`.**
+     `scenes/Main.tscn` (md5 `b0026eb4fa855f70a06075c156c4f57f`): root `GreyboxBoot` (`Node3D`,
+     `scripts/render/greybox_boot.gd`) with **exactly** `MapRenderer` (script `map_renderer.gd`,
+     **ZERO children** — M1-T7 item 13(c): `_clear_chunks()` frees **all** children, so any non-chunk
+     child would be destroyed on the first `build()`), `CameraRig` (script `camera_rig.gd`, **exactly
+     one** `Camera3D` child), `WorldEnvironment` (an `Environment` sub-resource with **`sdfgi_enabled =
+     false` written EXPLICITLY** in the `.tscn` text per §10 line 680, plus a dark ambient in keeping
+     with §10's darkness art direction) and `DirectionalLight3D`. The child **set** is asserted, so an
+     **extra** child fails too. SDFGI is pinned **twice** — as a resource property on the instantiated
+     scene **and** as literal text in the `.tscn` (the "explicitly off" precedent from `project.godot`'s
+     `[debug]` section, M0-T4 item (c)) — so a future engine default flip cannot silently turn it on.
+     **No shader and no `.gdshader`**: §10 line 679's Lit/Dark tint is **M3**, which is why M1's map
+     renders in one uniform material colour with the per-instance tints **written but not displayed** —
+     expected, not a bug. `project.godot` now carries `run/main_scene="res://scenes/Main.tscn"` under
+     `[application]` (the scene exists, so the path is not dangling and `--import` is unaffected); its
+     `[debug]` §11.3 gate section was **not touched** and `tests/unit/test_typing_gate.gd`'s 49 pinned
+     warning levels are unmoved.
+  7. **(AO) THE MEASUREMENT RUN IS UNATTENDED AND REPEATABLE.** `GreyboxBoot` exports `size_id`
+     (default `"medium"` — the map §14 M1 names), `map_seed`, `warmup_frames` and `auto_quit_frames`;
+     `_ready()` loads `greybox.json` → `concentric_bowl.json` → `terrain_palette.json` →
+     `camera.json`, resolves `radius_for_size(size_id)`, generates with a seeded `Rng`, calls
+     `set_layout()` **exactly once** (M1-T7 item 13(b): the shared prism mesh is sized on the first
+     `build()` and is **not** resized by a later layout) then `build()`, and frames the rig at the
+     world origin (hex (0,0) is there — M1-T6 **(W)**). On **any** load failure it prints every
+     `RulesError.format_for(source)` and draws nothing — a failed boot is **loud**, never a silent
+     black screen ((AB) totality spirit). `_process` auto-orbits, samples
+     `Engine.get_frames_per_second()` after the warm-up window, and at `auto_quit_frames` prints
+     `hexes=<n> chunks=<n> fps_min=… fps_avg=… fps_max=…` then `get_tree().quit()`. **`Engine.` and
+     `get_tree()` are EXPLICITLY ALLOWED in this one file** (the fps readout and the auto-quit) and are
+     stripped by its source scan before the forbidden-token pass; `Time.`, `OS.`, `randi(`, `randf(`,
+     `randomize(`, `RandomNumberGenerator`, `queue_free(`, `set_elevation(`, `set_terrain_type(`,
+     `EventBus` and the map-size literals `24|32|40|1801|3169|4921` all stay **forbidden**. The boot
+     **reads** the sim and mutates nothing (§11.1): no `Command`, no `EventBus` subscription — the
+     dirty-chunk seam is M2's to wire.
+  8. **(AP) THE FLAT-TOP CORRECTION YAW — M1-T7 item 16 RESOLVED BY MEASUREMENT, AND A YAW *WAS*
+     GENUINELY NEEDED.** M1-T7 left open, deliberately unguessed, whether Godot's `CylinderMesh` starts
+     its first radial vertex at **+X** (flat-top, matching **(V)**) or 30° off, because it is not
+     verifiable headless. Measured in the windowed run this task owed: Godot 4.7's
+     `CylinderMesh(radial_segments = 6)` lays its radial vertices at **{0, ±60, ±120, 180}° measured
+     from +Z toward +X** — a vertex on **+Z** and **none on +X** — i.e. **exactly half a segment (30°)
+     off** the orientation `HexLayout`'s **(V)** placement requires. `MapRenderer` therefore now writes
+     `Basis(Vector3.UP, PI / RADIAL_SEGMENTS)` into every instance transform instead of
+     `Basis.IDENTITY`. **Derived from the existing `RADIAL_SEGMENTS` const — no new literal**, and the
+     map-size and §9.1-limit scans still pass. Evidence: windowed screenshots **before** (the field
+     tiled with visible triangular gaps and overlapping slivers where prisms met at their vertices)
+     and **after** (seamless), plus a numeric dump of the mesh's vertex angles. **(Z) makes the
+     resulting instance basis unreadable headless** — probe **P7** confirmed that reverting the yaw
+     broke **ZERO** tests — so `tests/unit/test_map_renderer.gd`'s `REQUIRED_TOKENS` gained
+     `"Basis(Vector3.UP"` as the **only** automated guard against that regression silently returning.
+     That is a **strengthening** edit to an M1-T7 test file (purely additive; the const carries no size
+     assertion), logged here because it touches a landed suite.
+  9. **DEVIATION — `warmup_frames` / `auto_quit_frames` RETUNED AT VERIFY (120/900 → 1500/3300),
+     because the first measurement printed an INSTRUMENT ARTEFACT.** Run 1 reported `fps_min=1.00`. A
+     probe printing the counter every 20 frames showed `Engine.get_frames_per_second()` is a
+     **one-second-window average**: it reports the engine's initial sentinel **1** until its first
+     tick, then **21** (the window containing `_ready()`'s generate + build), and only reaches steady
+     state around frame **180** at 144 Hz. The 120-frame (~0.8 s) warm-up never cleared it. The budget
+     must be expressed in **frames** (`Time.`/`OS.` are forbidden by the scan), so it is **calibrated,
+     not principled**: 1500 frames outlasts ~2 s even at an uncapped 613 fps. Recorded honestly — a
+     machine far faster than this one could in principle need more. A too-short warm-up produces a
+     **false LOW min**, which errs conservative and can never flatter the criterion.
+  10. **DEVIATION — THE SCENE'S `DirectionalLight3D` WAS GIVEN AN ACTUAL ORIENTATION AT VERIFY
+     (`rotation_degrees = Vector3(-55, -35, 0)`, `light_energy = 0.5`).** As implemented it had **no
+     rotation at all**, so it shone horizontally, lit no prism top, and the greybox rendered
+     essentially **black** — a self-captured screenshot probe confirmed a near-black field. That
+     defeats the stated **(AN)** reason the light is in the scene at all (`MapRenderer`'s shared
+     `StandardMaterial3D` is a **lit** material), and an fps number measured on a black field is
+     meaningless. **The first fix attempt is worth recording:** a hand-written 12-float `Transform3D`
+     in the `.tscn` was applied **TRANSPOSED** by the scene parser and pointed the light **upward**
+     (caught only by probing the light's runtime forward vector), so the committed form uses the
+     unambiguous `rotation_degrees`. Both values are **new tunable scene content with no printed GDD
+     counterpart** — §10 prints art direction, never a light angle or energy — so **no cell moves**.
+  11. **DEVIATION — R/F TILT REUSES `orbit_speed_dps()` AS THE PITCH ANGULAR RATE.** §9.1 prints tilt
+     *limits* and never a tilt *speed*, and `data/render/camera.json` therefore declares none; rather
+     than invent a fifth tunable (§13.4, simplest interpretation) the input layer drives pitch at the
+     orbit rate. It is **untestable headless** — the unit suite `autofree`s every `CameraRig` and
+     **never adds one to the tree**, so `_process` never runs there — and is called out in the file's
+     doc header. If it ever needs to differ, it becomes a fifth key in `camera.json`, not a literal.
+  12. **INPUT IS THIN AND DELIBERATELY UNTESTED (§9.1 *"edge-pan + WASD"*).** `_process(delta)` reads
+     raw keys via `Input.is_physical_key_pressed(KEY_W/A/S/D)` and `Input.is_key_pressed(KEY_Q/E/R/F)`
+     and `_unhandled_input` handles wheel zoom, so **no `InputMap` action had to be added to
+     `project.godot`**; edge-pan compares `get_viewport()`'s mouse position against the visible rect
+     using `edge_pan_margin_px`. Every one of them **delegates to the tested mutators** (`orbit`,
+     `tilt`, `dolly`, `pan`) and computes nothing itself. **`Input.` and `get_viewport(` are EXPLICITLY
+     ALLOWED in `camera_rig.gd`** (and asserted **present**, so §9.1's input half must actually exist),
+     alongside `RulesError` (M1-T6 **(Y)**); everything else in the standard forbidden set stays
+     forbidden. The **no-float** scan is deliberately **not** applied to renderer files (geometry is not
+     a §11.1 rule surface — M1-T6 item 8).
+  13. **PUBLIC SURFACE — `CameraRig` IS EXACTLY `errors` + 19 FUNCTIONS**, and a missing **or extra**
+     member fails the scan: `load_params_text`, `load_params_file`, `pitch_limits_deg`, `zoom_limits_m`,
+     `pan_speed_mps`, `orbit_speed_dps`, `zoom_speed_mps`, `edge_pan_margin_px`, `yaw_deg`, `pitch_deg`,
+     `zoom_m`, `focus_point`, `set_focus`, `orbit`, `tilt`, `dolly`, `pan`, `camera_transform`,
+     `apply_to_camera`. Deliberately **absent** (§13.4 — invent nothing ahead of its milestone): hex
+     picking / raycasting (**M1-T9**), tap-select and drag-box multi-select (§9.1, but selection is
+     M4/M8), overlays, the north compass and the minimap (§9.1, **M8**), any `EventBus` subscription,
+     any shader. The accessor is `zoom_m()` and the mutator `dolly()` specifically to avoid
+     `native_method_override` (level 2 = hard error) against what `Node3D` already defines.
+     `MapRenderer`'s and `HexLayout`'s public surfaces needed **no** additions and are unchanged.
+  14. **UNCONFIGURED SENTINEL (the (Y)/(AB) totality spirit, third file running).** A rig whose load
+     failed or was never attempted reads `pitch_limits_deg() == Vector2.ZERO`,
+     `zoom_limits_m() == Vector2.ZERO`, all three speeds 0.0, `edge_pan_margin_px() == 0`,
+     `focus_point() == Vector3.ZERO`, `camera_transform() == Transform3D.IDENTITY`, and
+     `orbit`/`tilt`/`dolly`/`pan`/`set_focus`/`apply_to_camera` are **silent no-ops** — no engine error,
+     no crash (M1-T1 **(B)**).
+  15. **SEVEN ADVERSARIAL MUTATION PROBES RUN LIVE AT VERIFY** (the M1-T1 item 8 → M1-T7 item 12
+     standard, eight iterations running), each with the file md5 captured before and re-verified
+     **byte-identical** after restore. **(P1)** sin/cos swapped in the camera offset → RED on the hand
+     offset table and the pan-axes/basis agreement — **note the 540-case distance sweep does NOT catch
+     it**, because a swap preserves `|camera − focus|`; the two pins are complementary, not redundant.
+     **(P2)** yaw clamped instead of wrapped → 3 RED. **(P3)** exclusive pitch clamp → 4 RED.
+     **(P4)** the unconfigured-sentinel clear dropped from `load_params_text` → 9 RED. **(P5)** a child
+     parked under the `MapRenderer` node in the `.tscn` → 1 RED. **(P6)** `sdfgi_enabled = true` →
+     2 RED, and the property **deleted entirely** → 1 RED (the `.tscn` **text** pin holds even where
+     the engine default would pass). **(P7, added at Verify)** the flat-top yaw reverted → **ZERO
+     RED** — a real coverage gap, now closed by item 8's `REQUIRED_TOKENS` entry. Verify adding its own
+     probes beyond the spec's list remains the expectation, not a bonus.
+  16. **STAGE-SCOPE NOTE (not a rule deviation).** The Implement stage deliberately did **not** run the
+     measurement and did **not** edit `docs/decisions.md` / `docs/PROGRESS.md`, per CLAUDE.md's loop
+     division (Verify runs every applicable §13.1 command and fixes; Land persists the outcome). The
+     measurement, the three fixes above and the probes were therefore done at **Verify**, and this entry
+     is the Land record of them. `scripts/core/` and `scripts/sim/` are **byte-untouched**; no source
+     scan in those trees was weakened to make a scene compile; both new test files are md5-identical to
+     what the Tests stage wrote — **nothing was weakened to reach green**.
+  17. **OPEN ITEMS HANDED FORWARD (small, non-blocking).** (a) The windowed run exercises WASD / Q-E /
+     R-F / wheel-zoom / edge-pan only by **token scan** — `get_viewport().get_visible_rect()` in
+     `_edge_pan_input()` clears the typing gate but is exercised by no test, and feel is unassessed;
+     worth an eyes-on pass whenever a human next opens the scene. (b) The `orbit_speed_dps` reuse for
+     tilt (item 11) becomes a fifth `camera.json` key the moment it needs to differ. (c) The frame
+     budgets (item 9) are calibrated to **this** machine's counter behaviour.
+
+- **Why:** §14 M1's fifth deliverable is *"camera rig"* and its third acceptance criterion is *"60 fps
+  on Medium map greybox"* — and the criterion cannot be evaluated without a scene and a camera pointed
+  at the map, which is exactly why M1-T7's re-slice bundled scene + rig + measurement into this one
+  task. §9.1's four printed limits are the **only** printed numeric source for a camera in the GDD;
+  everything else a usable rig needs (speeds, an edge margin, the frame convention, the pan basis) is a
+  §13.4 silence, resolved here at (AI)–(AM) rather than stalled. The measurement itself was run
+  windowed because **(Z)** makes it impossible headless, twice for repeatability, and its number is
+  recorded above **as measured** — the loop's rule is to log it *even if it is bad*, and the discipline
+  that would have applied to a bad number is what makes a good one trustworthy.
+
+- **GDD sections affected:** §9.1 (*"Orbiting tactical camera (rotate 360°, tilt 15–80°, zoom 8–60 m);
+  edge-pan + WASD"*) — the **four printed limits transcribed VERBATIM into `data/render/camera.json`**
+  and pinned by test in both directions; the orbit/tilt/zoom/pan/edge-pan half **implemented**; its
+  tap-select, drag-box multi-select, overlay, compass and minimap clauses deliberately **NOT** built
+  (M1-T9 / M4 / M8); **no cell edited**. §10 (line 678 *"Greybox first … flat-shaded prisms"* — the
+  greybox now actually **renders**, lit, and its tiling is **correct** for the first time (item 8);
+  line 679's Lit/Dark **shader** still **NOT** built — M3; line 680's *"Medium map at 60 fps on
+  mid-range hardware; SDFGI off"* **MEASURED AND MET**, SDFGI pinned off twice; **no cell edited**).
+  §4.1 (line 174's **Medium 32 / 3,169** used as the measurement's subject, re-derived in the test from
+  `HexMath.hex_count_for_radius(32)` and from the radius read out of `concentric_bowl.json`, never from
+  an engine literal; **no cell edited**). §11.1 (the layered boundary held: the boot **reads** the sim
+  and constructs no `Command`, mutates no map and subscribes to no `EventBus`; `scripts/core/` and
+  `scripts/sim/` byte-untouched). §11.2 (`scripts/render/camera_rig.gd` created exactly where §11.2
+  names *"CameraRig"*, `scripts/render/greybox_boot.gd` alongside it, and `scenes/Main.tscn` exactly
+  where §11.2 says *"scenes/ # Main.tscn, minimal base scenes"* — the `scenes/` directory is new).
+  §11.3 (typing gate green over **30** files; every public function carries its `## §` doc comment;
+  `CameraRig`'s surface is **exactly** `errors` + 19 functions). §13.2 (two new tier-1 unit suites: 51
+  tests on the rig and 16 structural pins on the scene, the latter **STRUCTURAL ONLY** per **(Z)** and
+  instantiating `Main.tscn` **without adding it to the tree** so no 3,169-hex map is generated inside
+  the unit suite). §13.4 (procedure exercised: eight silences resolved (AI)–(AP), nothing stalled,
+  nothing invented ahead of its milestone). §13.6 (definition of done **MET**: tests green headless ·
+  typing gate clean · **all four §9.1 limits read from data, never code** (proven by mutation, enforced
+  by a literal scan) · **no golden re-recorded** · no GDD number moved). **§14 M1 row — ALL THREE
+  acceptance criteria are now MET: *"Golden mapgen test (seed ⇒ terrain hash)"* (M1-T5, green
+  headless), *"LOS property tests"* (M1-T3, green headless) and *"60 fps on Medium map greybox"*
+  (THIS TASK, measured windowed at 144/144/144 vsync-capped and ≥ 236 fps uncapped on 3,169 hexes /
+  65 chunks with SDFGI off). Of the five §14 M1 deliverables, HexMath, the concentric-bowl generator,
+  the chunked MultiMesh renderer **and now the camera rig** are COMPLETE; **hex picking (M1-T9) is
+  not started, so M1 is NOT done** — the acceptance criteria all pass, but the deliverable list does
+  not, and the milestone closes only when both do.** Acceptance criterion text unchanged. **NO
+  `docs/GAME_DESIGN.md` edit accompanies this entry, because no numeric table value changed:** the
+  four §9.1 limits were transcribed **verbatim** into content with nothing rounded or reinterpreted,
+  and the three speeds, the edge margin, the light angle/energy and the frame budgets have **no
+  printed GDD counterpart at all**.

@@ -1,0 +1,11 @@
+{
+  "id": "greybox_camera",
+  "min_pitch_deg": 15,
+  "max_pitch_deg": 80,
+  "min_zoom_m": 8,
+  "max_zoom_m": 60,
+  "pan_speed_mps": 45,
+  "orbit_speed_dps": 35,
+  "zoom_speed_mps": 25,
+  "edge_pan_margin_px": 16
+}

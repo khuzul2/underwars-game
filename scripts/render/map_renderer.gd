@@ -68,6 +68,15 @@ var _tints: Dictionary = {}
 var _shared_mesh: CylinderMesh = null
 var _shared_material: StandardMaterial3D = null
 
+## §10/(V) — the FLAT-TOP correction yaw, measured not assumed (M1-T7 item 16, resolved by the
+## M1-T8 windowed run): Godot 4.7's [CylinderMesh] lays its radial vertices at {0, +/-60, +/-120,
+## 180} degrees measured from +Z toward +X, so it has a vertex at +Z and NONE at +X — exactly HALF
+## a segment away from the flat-top orientation HexLayout's (V) placement needs. Rotating each
+## instance by half a segment about +Y puts a vertex back on +X; without it the prisms meet at
+## their vertices instead of their edges and the field tiles with visible triangular gaps and
+## overlapping slivers. Half of one segment, derived from [constant RADIAL_SEGMENTS] — no literal.
+var _prism_basis: Basis = Basis(Vector3.UP, PI / float(RADIAL_SEGMENTS))
+
 ## Cached from the last successful build(): the chunk keys in canonical order, the hex-index
 ## bucket parallel to each key, the flat hex list they index into, and a lookup of which chunks
 ## exist (so mark_hex_dirty can no-op on an unbuilt chunk without scanning an array).
@@ -287,14 +296,15 @@ func _ensure_resources() -> void:
 
 
 ## Writes every instance in `bucket` (indices into `hexes`) into `mm`: transform from
-## HexLayout.hex_to_world() with an identity basis, custom data from [method tint_for] with alpha
-## reserved at 1.0 (resolution (AC)). Written, never read back (M1-T6 (Z)).
+## HexLayout.hex_to_world() with the flat-top correction basis [member _prism_basis], custom data
+## from [method tint_for] with alpha reserved at 1.0 (resolution (AC)). Written, never read back
+## (M1-T6 (Z)).
 func _fill_chunk(mm: MultiMesh, bucket: PackedInt32Array, hexes: Array[Vector2i], map: HexMap) -> void:
 	for j: int in range(bucket.size()):
 		var hex: Vector2i = hexes[bucket[j]]
 		var elevation: int = map.get_elevation(hex)
 		var origin: Vector3 = _layout.hex_to_world(hex, elevation)
-		mm.set_instance_transform(j, Transform3D(Basis.IDENTITY, origin))
+		mm.set_instance_transform(j, Transform3D(_prism_basis, origin))
 		mm.set_instance_custom_data(j, tint_for(map.get_terrain_type(hex)))
 
 
