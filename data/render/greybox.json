@@ -1,0 +1,6 @@
+{
+  "id": "greybox",
+  "hex_width_m": 18,
+  "elevation_step_m": 3,
+  "chunk_hexes": 8
+}

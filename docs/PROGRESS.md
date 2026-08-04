@@ -16,32 +16,40 @@ not-yet-committed.
   headless, and the signal that reports clause (a) is itself proven against the false-green mode
   M0-T4 measured. **M1 is NOT done:** its §14 row lists five deliverables (HexMath, concentric-bowl
   generator, chunked MultiMesh renderer, camera rig, hex picking); M1-T1/M1-T2/M1-T3 delivered
-  **HexMath (both slices) and `Los`**, and M1-T4 + M1-T5 delivered the **concentric-bowl generator
+  **HexMath (both slices) and `Los`**, M1-T4 + M1-T5 delivered the **concentric-bowl generator
   COMPLETE** (`HexMap` + the §4.4 band/elevation bowl, then the seeded `Rng`, the §4.4 terrain-type
-  composition, `content_hash` and the first golden) — the **renderer, camera rig and hex picking are
-  still missing**. **TWO of the three §14 M1 acceptance criteria now pass — re-checked against the
-  §14 row (line 1097) this iteration** — *"Golden mapgen test (seed ⇒ terrain hash)"* (M1-T5, green
-  headless) and *"LOS property tests"* (M1-T3, green headless). *"60 fps on Medium map greybox"*
-  remains unmet: no renderer, camera rig or greybox scene exists.
-- **Next task:** **M1-T6 — the renderer slice: chunked MultiMesh greybox of a generated `HexMap`**
-  (§14 M1's remaining deliverables + criterion *"60 fps on Medium map greybox"*; read §11.1's
-  renderer/UI boundary — the sim never calls the renderer, the renderer observes). The sim side of M1
-  is finished and fully pinned; everything left is `scenes/` + `scripts/render/` work, which is the
-  **first engine-bound (Node) code in the project** — keep it strictly out of `scripts/core|sim`, and
-  keep the §11.3 typing gate green over it. Camera rig and hex picking follow; size each slice to
-  ≤ ~300 LOC. Continue the decisions.md lettering at **(V)** — M1-T5 ended at (U).
-- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 13 / Tests 234 /
-  **Passing 234** / Failing 0 / Asserts 2268; `bash tools/typecheck.sh` exits 0 over 22 files;
-  `bash tools/ci.sh` exits 0 (both re-measured at Land, 2026-08-04, M1-T5); `bash
-  tools/verify_harness.sh` exits 0 across all four phases with the tree left clean (M1-T4 baseline,
-  unchanged by this task).
+  composition, `content_hash` and the first golden), and M1-T6 delivered **renderer slice 1**
+  (`HexLayout` — flat-top hex→world placement + the deterministic chunk partition, the pure
+  headless-testable half of the chunked MultiMesh renderer). Still missing: the **Node half of the
+  renderer (MapRenderer + greybox scene), the camera rig and hex picking**. **TWO of the three §14 M1
+  acceptance criteria pass — re-checked against the §14 row (line 1097) this iteration** — *"Golden
+  mapgen test (seed ⇒ terrain hash)"* (M1-T5, green headless) and *"LOS property tests"* (M1-T3,
+  green headless). *"60 fps on Medium map greybox"* remains unmet: no greybox scene exists yet, and
+  per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all** (the `--headless` dummy
+  renderer has no renderer) — it will be a **manual windowed measurement logged at M1-T7**.
+- **Next task:** **M1-T7 — renderer slice 2: `MapRenderer`, the Node half** — one
+  `MultiMeshInstance3D` per chunk driven by `HexLayout` (§10 line 680: per-instance custom data =
+  type/tint, dirty-chunk rebuilds on dig), plus the first `scenes/Main.tscn` greybox scene and the
+  **manual windowed 60-fps measurement on the Medium map** (radius 32 / 3,169 hexes, SDFGI off),
+  logged in decisions.md at that task. **This is the FIRST `Node` code in the project** — keep it
+  strictly out of `scripts/core|sim`, keep the §11.3 typing gate green over it, and read decisions.md
+  M1-T6 **(Z) before writing a single assertion**: the headless dummy renderer does **not** store
+  MultiMesh instance data, so M1-T7's tests must be **STRUCTURAL only** (chunk node count,
+  `instance_count`, resources assigned, parenting) and must never read an instance transform or
+  custom-data back. Camera rig (M1-T8) and hex picking (M1-T9) follow; size each slice to ≤ ~300 LOC.
+  Continue the decisions.md lettering at **(AA)** — M1-T6 ended at (Z).
+- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 14 / Tests 278 /
+  **Passing 278** / Failing 0 / Asserts 2760; `bash tools/typecheck.sh` exits 0 over 24 files;
+  `bash tools/ci.sh` exits 0 (all three re-measured at Land, 2026-08-04, M1-T6); `bash
+  tools/verify_harness.sh` exits 0 across all four phases with the tree left clean (re-run at
+  M1-T6 Verify).
 
 ## Milestone tracker
 
 | Milestone | Status | Acceptance criteria met |
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
-| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 … M1-T5 landed 2026-08-04) | **2 of 3 §14 M1 criteria met, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand); (b) *60 fps on Medium map greybox*: **NOT met**, no renderer, camera rig or greybox scene exists; (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is therefore NOT marked done — criterion (b) and three deliverables remain.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)). Still to build: **chunked MultiMesh renderer, camera rig, hex picking** — all three are renderer-side and none exists yet. |
+| M1 World | **in progress** (opened 2026-08-04, M1-T1; M1-T2 … M1-T6 landed 2026-08-04) | **2 of 3 §14 M1 criteria met, re-checked against the §14 row (line 1097) this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand); (b) *60 fps on Medium map greybox*: **NOT met** — renderer slice 1 (`HexLayout`) landed at M1-T6 but no `Node`, `.tscn`, mesh or MultiMesh exists yet, and per decisions.md M1-T6 **(Z)** this criterion is **not headless-measurable at all** (the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), so it is scheduled as a **manual windowed measurement on the Medium map (radius 32 / 3,169 hexes, SDFGI off) logged in decisions.md at M1-T7**; (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is therefore NOT marked done — criterion (b), half of the renderer deliverable, the camera rig and hex picking remain.** **Deliverables built so far: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer HALF delivered** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests). Still to build: **the renderer's Node half (MapRenderer + `scenes/Main.tscn` greybox, M1-T7), the camera rig (M1-T8) and hex picking (M1-T9)** — no `Node`, `.tscn`, mesh, material or MultiMesh exists yet. |
 | M2 Dig & Economy | not started | — |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
@@ -72,48 +80,117 @@ not-yet-committed.
 | 2026-08-04 | M1-T3 | Los: hex line-of-sight blocking predicate over injected terrain (**meets the §14 M1 "LOS property tests" criterion**) | landed | M1-T3: Los: hex line-of-sight blocking predicate over injected terrain |
 | 2026-08-04 | M1-T4 | HexMap plus the concentric-bowl band and elevation pass (generator slice 1) | landed | M1-T4: HexMap plus the concentric-bowl band and elevation pass (generator slice 1) |
 | 2026-08-04 | M1-T5 | Seeded Rng core, terrain-type composition (generator slice 2) and the project's first golden (**meets the §14 M1 "golden mapgen test" criterion; completes the generator deliverable**) | landed | M1-T5: Seeded Rng core, terrain-type composition (generator slice 2) and the project's first golden |
+| 2026-08-04 | M1-T6 | HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) (**opens `scripts/render/`; half of the chunked-MultiMesh-renderer deliverable**) | landed | M1-T6: HexLayout: flat-top hex-to-world placement and the deterministic chunk partition (renderer slice 1) |
 
 ## Notes for the next iteration
 
-- **Pick up: M1-T6 = the RENDERER slice — chunked MultiMesh greybox of a generated `HexMap`.**
-  M1-T5 is finished and the tree is green; nothing is carried over. **The whole SIM side of M1 is
-  now done and pinned** (HexMath, Los, HexMap, MapGenerator, Rng, the golden); the three remaining
-  §14 M1 deliverables — **chunked MultiMesh renderer, camera rig, hex picking** — and the remaining
-  criterion *"60 fps on Medium map greybox"* are all renderer-side. Read §11.1's renderer/UI boundary
-  and §11.2's directory layout before speccing.
+- **Pick up: M1-T7 = renderer slice 2 — `MapRenderer`, the NODE half, plus the first greybox scene.**
+  M1-T6 is finished and the tree is green; nothing is carried over. The whole **sim** side of M1 is
+  done and pinned (HexMath, Los, HexMap, MapGenerator, Rng, the golden) and **renderer slice 1** is
+  done (`HexLayout` — placement + chunk partition, pure `RefCounted`, see its contract bullet below).
+  What is left: one `MultiMeshInstance3D` **per chunk** driven by `HexLayout.partition()`,
+  per-instance transforms from `HexLayout.hex_to_world()` and per-instance custom data = type/tint
+  (§10 line 680), **dirty-chunk rebuilds on dig**, `scenes/Main.tscn`, then the camera rig (M1-T8)
+  and hex picking (M1-T9). Read §11.1's renderer/UI boundary and §11.2's directory layout before
+  speccing, and read decisions.md **M1-T6 (V)–(Z)** in full.
+  - **READ (Z) BEFORE WRITING A SINGLE ASSERTION.** Measured live on the pinned binary: under
+    `--headless` the dummy renderer **does not store MultiMesh instance data** —
+    `set_instance_transform` → `get_instance_transform` returns the **identity**,
+    `set_instance_custom_data` reads back `(0,0,0,1)`, and `MultiMesh.buffer` is **size 0** even with
+    `instance_count = 3`. **What IS readable headless:** `instance_count`, `transform_format`,
+    `use_custom_data`, `mesh != null`, `get_class()`, node parenting, a valid `VisualInstance` RID.
+    So **M1-T7's tests must be STRUCTURAL only** (chunk node count, `instance_count` per chunk,
+    resources assigned, parenting) — an instance read-back assertion can only ever pass **vacuously**.
+    The *placement* math is already covered by `test_hex_layout.gd`, which is exactly why slice 1
+    exists; do not re-test it through a MultiMesh.
   - **This is the FIRST engine-bound (`Node`) code in the project, and that boundary is the whole
     risk.** §11.1 is binding: `data → Sim Core (engine-free) → EventBus → Renderer/UI`, and **the sim
-    never calls the renderer**. Renderer code lives in its own directory (§11.2) and **must not**
+    never calls the renderer**. Renderer code lives in `scripts/render/` (§11.2) and **must not**
     appear in `scripts/core/` or `scripts/sim/` — every existing source scan in those two trees
     forbids `extends Node`/`SceneTree`/`get_tree`/`Engine.`/`Time.`/`OS.`, and **none of them may be
-    weakened to make a renderer compile**. The UI/renderer may read `HexMap` and construct Commands;
-    it may not import sim internals.
-  - **Size it: ≤ ~300 LOC per slice.** Renderer + camera rig + hex picking is plainly more than one
-    task — do the chunked MultiMesh greybox first and leave the camera and picking to M1-T7/T8.
+    weakened to make a renderer compile**. The UI/renderer may read `HexMap` (`hexes()`,
+    `get_elevation()`, `get_terrain_type()` — read-only, §11.3-legal) and construct Commands; it may
+    not import sim internals or mutate sim state. `MapRenderer` is the one allowed to call the map;
+    `HexLayout` deliberately never does.
+  - **Size it: ≤ ~300 LOC per slice.** MapRenderer + scene is one task; camera rig and picking are
+    M1-T8/M1-T9.
   - *"60 fps on Medium map greybox"* is a **3,169-hex** target (§4.1 Medium radius 32) and is the one
-    M1 criterion that is **not** headless-testable — plan how it will be measured and *recorded*
-    (a `--headless`-safe frame-time harness, or an explicitly manual measurement logged in
-    decisions.md) before writing the renderer, not after.
-  - **Write the five source scans fresh for any new file.** They are per-file and inherit nothing
-    (`test_hex_map.gd` covers `hex_map.gd` only, and so on). Copy the shape from
-    `tests/unit/test_map_generator.gd` or the newest example, `tests/unit/test_rng.gd`: read raw
-    source, **strip comment lines first** (load-bearing — doc blocks contain `§4.1`, which the
-    no-float regex `\.[0-9]` would otherwise hit), then scan for: no float literal; no
-    `randi(`/`randf(`/`RandomNumberGenerator`/`extends Node`/`SceneTree`/`get_tree`/`Engine.`/
-    `Time.`/`OS.`; no map-size literal `24|32|40|1801|3169|4921`; a `## §<section>` doc comment on
-    every public function (the section list is a `DOC_SECTIONS` const now, not a hard-coded pair)
-    **plus an explicit expected public-member list** (so a missing **or extra** member fails rather
-    than passing vacuously); purity via `get_class()`, **never** `is Node` (statically impossible —
-    parse-errors and silently un-collects the whole file; decisions.md M0-T2 item 11 / M0-T5 item
-    (a)). A renderer file is engine-bound **by design**, so its scan is the mirror image: assert the
-    boundary in the other direction (no `scripts/sim` mutation, no Command bypass) rather than
-    copying the purity assertions verbatim.
-  - Continue the decisions.md lettering at **(V)** — M1-T5 ended at (U).
+    M1 criterion that is **not headless-testable at all** — `--headless` has no renderer. Per (Z) it
+    is a **MANUAL WINDOWED measurement**, run against the greybox scene with **SDFGI off** (§10 line
+    680) and **logged in decisions.md at M1-T7**. Plan the measurement before writing the renderer,
+    not after, and record the number even if it is bad.
+  - **Write the source scans fresh for any new file.** They are per-file and inherit nothing
+    (`test_hex_map.gd` covers `hex_map.gd` only, and so on). For a **sim/core** file copy
+    `tests/unit/test_rng.gd`/`test_map_generator.gd`; for a **renderer** file copy the newest example,
+    `tests/unit/test_hex_layout.gd`, which is the mirror image: **strip comment lines first**
+    (load-bearing — doc blocks contain `§4.1`, which the no-float regex `\.[0-9]` would otherwise
+    hit), then assert the boundary in the *other* direction — no sim class named, no
+    `set_elevation(`/`set_terrain_type(`, no Command bypass — instead of copying the purity
+    assertions. **`RulesError` is explicitly ALLOWED in renderer files** (M1-T6 (Y)); the **no-float**
+    scan is deliberately **NOT** copied to renderer files (geometry is not a §11.1 rule surface).
+    Always keep: no map-size literal `24|32|40|1801|3169|4921`; a `## §<section>` doc comment on every
+    public function (section list in a `DOC_SECTIONS` const); **an explicit expected public-member
+    list** so a missing **or extra** member fails; and class-kind via `get_class()`, **never**
+    `is Node` (statically impossible against a `RefCounted` — parse-errors and silently un-collects
+    the whole file; decisions.md M0-T2 item 11 / M0-T5 item (a)). **An M1-T7 `MapRenderer` IS a Node
+    by design**, so its scan asserts `get_class()` names the expected Node class rather than
+    forbidding `extends Node` — write that scan deliberately, do not paste `test_hex_layout.gd`'s
+    engine-bound token list into it unchanged.
+  - Continue the decisions.md lettering at **(AA)** — M1-T6 ended at (Z).
   `scripts/` currently holds `sim/rules_loader.gd` + `sim/rules_error.gd` + `sim/hex_map.gd` +
-  `sim/map_generator.gd`, `core/event.gd` + `core/event_bus.gd`, `core/hex_math.gd`, `core/los.gd`
-  and `core/rng.gd`, and nothing else, deliberately (§13.4: invent nothing ahead of its milestone).
-  No GameState, Command, renderer, vein **node**, cave feature, river, lair or spawn code exists yet,
-  and **no concrete `Event` subclass exists** — those belong to the milestones that emit them.
+  `sim/map_generator.gd`, `core/event.gd` + `core/event_bus.gd`, `core/hex_math.gd`, `core/los.gd`,
+  `core/rng.gd` and `render/hex_layout.gd`, and nothing else, deliberately (§13.4: invent nothing
+  ahead of its milestone). **No `Node`, no `.tscn`, no `scenes/` directory, no mesh, material or
+  MultiMesh exists anywhere in the repo yet**, and no GameState, Command, vein **node**, cave feature,
+  river, lair or spawn code exists — nor any concrete `Event` subclass. Those belong to the milestones
+  that emit them.
+- **`HexLayout` contract (`scripts/render/hex_layout.gd`, `data/render/greybox.json`, NEW at M1-T6 —
+  read decisions.md M1-T6 (V)–(Z) before touching it). The FIRST file in `scripts/render/`, and still
+  a pure `RefCounted`** (`class_name HexLayout extends RefCounted`) — it holds no Node, builds no
+  mesh, creates no MultiMesh, and names **no** sim class (`HexMap`/`MapGenerator`/`Rng` are all
+  forbidden tokens in its scan). It operates on an `Array[Vector2i]` handed to it by its caller; that
+  decoupling is what makes it fully unit-testable headless, which matters because of (Z).
+  - Public surface is **EXACTLY** `var errors: Array[RulesError]` + nine functions —
+    `load_params_text`, `load_params_file`, `hex_width_m`, `elevation_step_m`, `chunk_hexes`,
+    `hex_to_world`, `chunk_of`, `chunk_keys`, `partition` — and a source scan fails on a **missing OR
+    extra** member. Privates: `_floor_div`, `_is_integral`, `_as_float`, `_add_error`, `_line_for_key`,
+    `_clear_configuration`, `_chunk_less`. **If M1-T7 needs a new public member, the scan's expected
+    list must be updated in the same commit.**
+  - **(W) the formula:** XZ ground plane, **+Y up**, hex `(0,0)` at the **world origin**,
+    `R = hex_width_m / 2`; `world.x = 1.5*R*q`, `world.z = SQRT_3*R*(r + 0.5*q)`,
+    `world.y = elevation * elevation_step_m`. `SQRT_3 = 1.7320508075688772` is a **named const in the
+    `.gd`** — a mathematical constant, the M1-T5 item 7 precedent, **not** a §13.6 violation.
+  - **(V) FLAT-TOP, and the thing that looks like a bug and is not:** §4.1 index 0 is named **"E"**
+    but under flat-top it points **30° off +X toward +Z**; index 2 `(0,-1)` and index 5 `(0,+1)` are
+    the ones running straight along −Z/+Z. The six names are **INDEX LABELS ONLY** (M1-T1 (A)) —
+    **never reorder or rename the direction table** to "fix" this; every sim value keys off it.
+    **Probe P1 is the one to remember: swapping to pointy-top leaves the all-six-neighbours-equidistant
+    property GREEN** — only the per-direction discriminator (dir 2/dir 5 have `world.x` **exactly
+    0.0**; dir 0 has both components non-zero) catches it. Never fold that test into the equidistance
+    sweep.
+  - **(X) chunks are axial squares of `chunk_hexes` edge** with a **TRUE floor division** — GDScript's
+    `int/int` truncates toward zero and would merge the four chunks around the origin into one 15×15
+    super-chunk (probe P2). `chunk_keys()` is **distinct and sorted chunk-r (y) then chunk-q (x)**,
+    matching `HexMap`'s (O) canonical order (probe P4 pins that specific order, not merely "sorted");
+    `partition()` returns `Array[PackedInt32Array]` **parallel to `chunk_keys()`**, buckets holding
+    **indices into the input array, in input order**. A `Dictionary` is used **only** as a local dedup
+    set — no `Dictionary` iteration ever reaches an output (§11.1). Probe P3: only the **shuffled-input
+    oracle** catches an order slip.
+  - **(Y) load contract mirrors `MapGenerator`'s (P) exactly and REUSES `RulesError`** — do not invent
+    a second error type. Line 0 stays reserved for missing/unreadable files; schema errors carry the
+    key's own 1-based line (fallback 1); error order is the loader's **declared key-spec order**
+    (`hex_width_m` → `elevation_step_m` → `chunk_hexes`), never the parsed Dictionary's; unknown keys
+    load clean (the shipped `"id"` is one); **any error leaves the layout UNCONFIGURED**, including a
+    failed load after a successful one (probe P6). `chunk_hexes` is an **INT** leaf (integral float
+    `8.0` accepted, `8.5` rejected, never truncated); the other two are **FLOAT** leaves; all three
+    must be **strictly positive**.
+  - **The three tunables are CONTENT, and the `.gd` may not contain them as literals:**
+    `data/render/greybox.json` = `{"id": "greybox", "hex_width_m": 18, "elevation_step_m": 3,
+    "chunk_hexes": 8}`. **`hex_width_m` 18 sits inside §1.2's printed "≈ 15–20 m" range** (asserted
+    both ways); `elevation_step_m` 3 and `chunk_hexes` 8 have **no printed GDD counterpart** and are
+    entirely new tunable content. Its formatting is **load-bearing** (line 1 a lone `{`, one key per
+    line) exactly like `ruleset.json` — re-pretty-printing it nested breaks the line-attribution
+    tests. Mutate-the-params-in-text tests prove all three are genuinely read from data.
 - **`Rng` contract (`scripts/core/rng.gd`, NEW at M1-T5 — read decisions.md M1-T5 (R) before
   touching it).** `class_name Rng extends RefCounted`. **This file is the SINGLE place in the entire
   project allowed to name `RandomNumberGenerator`**, and that is enforced *negatively* by a token
@@ -366,17 +443,17 @@ not-yet-committed.
   Errors surface as `RulesError` (`line` 1-based, `path` dotted, `message`,
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
-- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 13 /
-  Tests 234 / Passing 234 / Failing 0 / Asserts 2268** (re-measured at Land, 2026-08-04, M1-T5).
-  `Scripts 13` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
-  `bash tools/typecheck.sh` exits **0** over 22 files; `bash tools/ci.sh` exits 0 (PASS with the
+- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 14 /
+  Tests 278 / Passing 278 / Failing 0 / Asserts 2760** (re-measured at Land, 2026-08-04, M1-T6).
+  `Scripts 14` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
+  `bash tools/typecheck.sh` exits **0** over 24 files; `bash tools/ci.sh` exits 0 (PASS with the
   three documented M7/E4/E5 skips) and `bash tools/verify_harness.sh` exits 0. Prior green baselines,
-  for reference: M1-T4's 11 / 183 / 183 / 1879, M1-T3's 9 / 129 / 129 / 1308, M1-T2's
-  8 / 106 / 106 / 1023, M1-T1's 8 / 86 / 86 / 835, and 7 / 62 / 62 / 473 at the close of M0 (the M0
-  tracker row above deliberately keeps that historical figure). **Expect these totals to RISE as you
-  add tests — they are enumerated, not hard-coded.**
+  for reference: M1-T5's 13 / 234 / 234 / 2268, M1-T4's 11 / 183 / 183 / 1879, M1-T3's
+  9 / 129 / 129 / 1308, M1-T2's 8 / 106 / 106 / 1023, M1-T1's 8 / 86 / 86 / 835, and
+  7 / 62 / 62 / 473 at the close of M0 (the M0 tracker row above deliberately keeps that historical
+  figure). **Expect these totals to RISE as you add tests — they are enumerated, not hard-coded.**
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 on a healthy tree, and
-  `bash tools/typecheck.sh` → exit 0 over **22** project `.gd` files, and
+  `bash tools/typecheck.sh` → exit 0 over **24** project `.gd` files, and
   `bash tools/verify_harness.sh` → exit 0
   with **four** phases (A green · B failing canary · C syntactic parse error · D
   statically-impossible construct), each red phase non-zero *and naming its probe*, self-cleaning
@@ -483,8 +560,8 @@ not-yet-committed.
   the harness phrase trap — is in the **GOLDEN contract** bullet above; read it before you touch
   `HexMap`'s storage, its canonical order, `content_hash`, the composition table or the shipped
   `data/mapgen/concentric_bowl.json`, because **any** of those changes the hash.
-- **Adversarial mutation probes are now standing practice at Verify** (M1-T1 item 8 → M1-T5 item 11,
-  five iterations running). Before declaring green, break the implementation on purpose — capture the
+- **Adversarial mutation probes are now standing practice at Verify** (M1-T1 item 8 → M1-T6 item 9,
+  six iterations running). Before declaring green, break the implementation on purpose — capture the
   file md5, mutate, run, restore, re-verify byte-identical — and **record what went red**. A property
   test that has never been observed failing is indistinguishable from one that cannot fail. M1-T4's
   yield: the terrace `>` vs `>=` slip is invisible except at exact-multiple radii, and a q/r-swapped
@@ -492,4 +569,11 @@ not-yet-committed.
   sharper still:** a **reversed RNG stream** leaves confinement, distribution, determinism *and* the
   roll count green — only the canonical-order oracle and the golden catch it; and deleting the golden
   file proved the golden test fails loudly rather than silently re-recording itself. Neither would
-  have been trusted on inspection alone.
+  have been trusted on inspection alone. **M1-T6's yield (six probes, three of them added at Verify
+  rather than inherited from the spec): swapping the renderer to POINTY-TOP leaves the
+  all-six-neighbours-equidistant property GREEN** — equidistance cannot distinguish the two
+  orientations, so only a per-direction discriminator pins flat-top; a chunk-key sort of
+  chunk-q-then-chunk-r instead of chunk-r-then-chunk-q reds only 2 tests, so "sorted somehow" is a
+  strictly weaker property than what is implemented; and **Verify adding its own probes beyond the
+  spec's list is now the expectation, not a bonus** — P4/P5/P6 each found a pin that no inherited
+  probe exercised.

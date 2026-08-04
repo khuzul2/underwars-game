@@ -1436,3 +1436,240 @@ M1-T6 continues at (V)**.
   Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit accompanies this entry,
   because no numeric table value changed: the four printed percentages are transcribed verbatim and
   every residual weight is new tunable content, not an edit to a printed value.**
+
+## 2026-08-04 — M1-T6 — `HexLayout`: flat-top hex-to-world placement + the deterministic chunk partition (renderer slice 1); resolutions (V)–(Z); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 14 / Tests 278 /
+Passing 278 / Failing 0 / Asserts 2760** (the M1-T5 baseline was 13 / 234 / 234 / 0 / 2268);
+`bash tools/typecheck.sh` exits 0 over **24** files (was 22); `bash tools/ci.sh` exits 0 (PASS) with
+the three documented not-yet-built skips; `bash tools/verify_harness.sh` exits 0 across all four
+phases with the tree left clean. All ran headless through the `tools/` scripts on the repo-local
+pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3). `sim_smoke` (M7),
+`content_cli` (E4) and `balance_lab` (E5) were correctly **SKIPped, not failed**, per CLAUDE.md's
+applicability rule. `Scripts 14` equals the number of `test_*.gd` on disk, so the M0-T5 enumeration
+guard is satisfied and nothing was silently un-collected.
+
+**This is the FIRST file in `scripts/render/`** and the first renderer-side code in the project. It
+is nevertheless a pure `RefCounted`: the Node half arrives at M1-T7 (see (Z)).
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §4.1
+line 171 (*"**Flat-top hexes, axial coordinates (q, r)**; cube coordinates for algorithms … Neighbor
+order (fixed, index 0–5): E, NE, NW, W, SW, SE"*), §4.1 line 173 (*"**Elevation:** integer 0–3 per
+hex"*), §4.1 line 174 (map sizes — Small 24 / 1,801, Medium 32 / 3,169, Large 40 / 4,921; used as
+**test fixtures only**), §1.2 line 41 (*"Hex scale ≈ 15–20 m (cosmetic only)"*), §10 line 680
+(*"Rock rendered as chunked MultiMeshInstance3D (per-instance custom data = type/tint);
+dirty-chunk rebuilds on dig. Target: Medium map at 60 fps on mid-range hardware; SDFGI off"*),
+§11.1–§11.3, §13.2, §13.6, §14 line 1097. `docs/decisions.md` was re-scanned end to end: **no logged
+override touches §4.1, §1.2 or §10**, so the printed text governs unamended; the lettering genuinely
+ended at **(U)** in the M1-T5 entry, so this entry continues at **(V)**.
+
+**Line-citation correction (applies to the Orient task spec for this task, not to the GDD).** The
+task spec cited §4.1 flat-top at line **172**, elevation at **174** and map sizes at **175**; measured
+against the file they are **171 / 173 / 174**. The sibling suites `tests/unit/test_hex_map.gd` and
+`tests/golden/test_mapgen_golden.gd` already cite 173/174 correctly. Verify corrected the three
+off-by-one citations inside `tests/unit/test_hex_layout.gd` (comments and assertion-message strings
+only — the assert total stayed at **2760** across the re-run, proving no assertion semantics moved).
+§1.2 line 41 and §10 line 680 were already correct. **No GDD line was edited**; only citations *of*
+those lines.
+
+The resolutions below are §13.4 decisions closing §4.1's, §1.2's and §10's silences, **not**
+deviations from a printed value. Their lettering continues M1-T1's (A)/(B), M1-T2's (C)–(G),
+M1-T3's (H)–(L), M1-T4's (M)–(Q) and M1-T5's (R)–(U), and is cross-referenced by the header doc
+block of `scripts/render/hex_layout.gd` and by `tests/unit/test_hex_layout.gd` — **keep it stable;
+M1-T7 continues at (AA)**.
+
+- **What changed / was decided:**
+  1. **(V) FLAT-TOP is the renderer's screen orientation, and §4.1's neighbour NAMES stay pure index
+     labels.** §4.1 line 171 bolds *"Flat-top hexes"* and that is the **only** orientation the GDD
+     states anywhere, so the renderer draws flat-top. The consequence, recorded explicitly because it
+     looks like a contradiction and is not: §4.1's index 0 is named **"E"** with delta `(+1, 0)`, and
+     under flat-top that lands at world `(13.5, 0, 7.794228634059948)` — i.e. **30° off +X toward +Z,
+     not due screen-east**; index 2 `(0,-1)` and index 5 `(0,+1)` are the ones that run **straight**
+     along −Z / +Z. Decisions.md **M1-T1 resolution (A)** already settled that the six names are
+     **INDEX LABELS ONLY** and explicitly deferred screen orientation to *"the later M1
+     renderer/camera task, which changes no sim value"* — **this task is that task, and no sim value
+     changed**: `scripts/core/` and `scripts/sim/` are byte-untouched, the direction table is neither
+     reordered nor renamed, and the golden hash is unmoved. A renaming of the six labels to match
+     flat-top screen compass points is **explicitly declined** (it would churn `HexMath`,
+     `test_hex_math.gd`, `Los` and every future pathfinding call site for a cosmetic gain, against
+     (A)).
+  2. **(W) LAYOUT FORMULA, UNITS AND ORIGIN.** The world is the **XZ ground plane with +Y up**, hex
+     `(0,0)` sits at the **world origin**, and the circumradius is `R = hex_width_m / 2`. Then
+     `world.x = 1.5 * R * q`, `world.z = SQRT_3 * R * (r + 0.5 * q)`,
+     `world.y = elevation * elevation_step_m` — the standard flat-top axial layout, re-derived
+     independently at Verify. Centre-to-centre spacing is exactly `SQRT_3 * R = 15.588457268119896`
+     in **all six** directions and the flat-top corner-to-corner width is `2R = 18` m. `elevation` is
+     a **linear** function of §4.1 line 173's integer 0–3, all four levels pinned.
+     `SQRT_3 = 1.7320508075688772` is a **MATHEMATICAL** constant and correctly lives as a `const` in
+     the `.gd`, **not** in `data/` — the same precedent as `HexMap`'s FNV constants (M1-T5 item 7);
+     it is **not** a §13.6 violation and must not be "fixed" into data.
+  3. **(X) THE CHUNK PARTITION.** §10 line 680 mandates *chunked* MultiMeshInstance3D but prints
+     **no chunk size**, so the partition definition is this resolution. Chunks are **axial squares**
+     of `chunk_hexes` edge in `(q, r)` space:
+     `chunk_of(h) == Vector2i(floor_div(h.x, chunk_hexes), floor_div(h.y, chunk_hexes))` with a
+     **TRUE floor**, never GDScript's truncating `int/int` (M1-T2 trap 2) — truncation would merge the
+     four chunks around the origin into one 15×15 super-chunk, and that is exactly what probe P2
+     turned red. `chunk_keys(hexes)` returns the **distinct** chunk coords sorted **ascending by
+     chunk-r (y) then chunk-q (x)** — the same `(r, then q)` ordering as `HexMap`'s canonical order
+     (M1-T4 **(O)**), so a chunk walk and a hex walk agree. `partition(hexes)` returns
+     `Array[PackedInt32Array]` **parallel to `chunk_keys(hexes)`**, bucket *i* holding the **indices
+     into `hexes`** whose `chunk_of` equals `chunk_keys[i]`, **in input order**. Determinism of order
+     (§11.1) is preserved by never iterating a `Dictionary`'s `keys()`/`values()` into output: a
+     `Dictionary` is used **only** as a local de-duplication set and output is emitted through an
+     explicit `sort_custom(_chunk_less)` giving a unique total order.
+  4. **(Y) LOAD CONTRACT — mirrors M1-T4/M1-T5 resolution (P) exactly, and REUSES `RulesError` from a
+     RENDER-side file.** `scripts/sim/rules_error.gd` is a plain line-numbered value holder carrying
+     no game state and is already shared by `RulesLoader` and `MapGenerator`; a second error type
+     would be pure duplication (§13.4, simplest interpretation), so `HexLayout` reuses it — and the
+     source scan therefore lists `RulesError` as **explicitly allowed**, not forbidden. The contract:
+     **all** errors are collected; **line 0 stays reserved for missing/unreadable files** and is never
+     emitted for a schema error; schema errors carry `path == <key>` and the **1-based** line of the
+     first line bearing that key's JSON token, falling back to line 1 when the key is absent; error
+     **ORDER** follows the loader's own **declared key-spec order** (`hex_width_m` →
+     `elevation_step_m` → `chunk_hexes`), never the parsed `Dictionary`'s order (a fixture presents
+     them reversed); unknown extra keys load clean (M0-T2 item 5 — the shipped `"id"` is one); all
+     three values must be **strictly positive**; `hex_width_m`/`elevation_step_m` are **FLOAT** leaves
+     (18.5 accepted) while `chunk_hexes` is an **INT** leaf where an integral float `8.0` is
+     **ACCEPTED** and a fractional `8.5` **REJECTED, never truncated** (every Godot 4.7 JSON number
+     arrives as `TYPE_FLOAT` — M0-T2 item 8). **ANY error leaves the layout UNCONFIGURED** — accessors
+     `0`/`0.0`, `hex_to_world` → `Vector3.ZERO`, `chunk_of` → `Vector2i.ZERO`, `chunk_keys`/`partition`
+     → empty — **including a failed load after a successful one** (pinned by more than one fixture:
+     probe P6 removed `_clear_configuration` and 5 tests went red). `data/render/greybox.json` follows
+     `ruleset.json`'s **load-bearing** layout (line 1 is a lone `{`; each top-level key on exactly one
+     line) so line attribution is meaningful and the tests derive expected line numbers from the
+     fixture instead of magic constants — **do not re-pretty-print it nested.**
+  5. **THE SHIPPED TUNABLES, and which of them the GDD actually prints.**
+     `data/render/greybox.json` = `{"id": "greybox", "hex_width_m": 18, "elevation_step_m": 3,
+     "chunk_hexes": 8}` (md5 `8fbf9dc3a8047bf5b42471d630bc21cc`).
+     **`hex_width_m` 18 sits INSIDE §1.2 line 41's printed range** *"Hex scale ≈ 15–20 m (cosmetic
+     only)"* — verified `15.0 ≤ 18.0 ≤ 20.0`, and the test asserts **both** the range and the shipped
+     value, so a drift out of the printed range goes red. **`elevation_step_m` 3 and `chunk_hexes` 8
+     have NO printed counterpart at all** — §4.1 prints only the 0–3 elevation *range* and §10 prints
+     no chunk size — so both are **entirely new tunable CONTENT**, not edits to any printed value.
+     All three are **read from data and proven so by mutation**, not merely forbidden as literals:
+     mutate-the-params-in-text tests move `chunk_hexes` to 4 (chunk count strictly rises, bucket sizes
+     cap at 16), `hex_width_m` to 18.5 (pitch moves) and `elevation_step_m` to 2.5 (`world.y` moves).
+     The source scan additionally forbids the bare literals `18` / `3` / `8` in the `.gd`, which is why
+     the loader walks a `SPEC_KEYS`/`SPEC_IS_INT` pair and indexes `values[0..2]`.
+  6. **(Z) MEASURED HEADLESS FINDING — the single most useful fact this task produced — and the slice
+     split it FORCES.** Measured live on the pinned repo-local `Godot_v4.7-stable_win64_console.exe`
+     (4.7.stable.official.5b4e0cb0f): under `--headless` the **dummy renderer DOES NOT STORE
+     MultiMesh instance data**. `MultiMesh.set_instance_transform(0, T)` followed by
+     `get_instance_transform(0)` returns the **identity**; `set_instance_custom_data(0, Color(...))`
+     reads back `(0,0,0,1)`; `MultiMesh.buffer` is **size 0** even with `instance_count = 3`. What IS
+     readable headless: `instance_count`, `transform_format`, `use_custom_data`, `mesh != null`,
+     `MultiMeshInstance3D.get_class()`, node parenting and a valid `VisualInstance` RID.
+     **Consequences, all binding on M1-T7:** (a) no headless test can **ever** verify per-instance
+     placement by reading a MultiMesh back, so the placement math **must** live in a pure `RefCounted`
+     returning plain values — that is this task; (b) **M1-T7's assertions must be STRUCTURAL only**
+     (chunk node count, `instance_count` per chunk, resources assigned, parenting) and must **not**
+     attempt to read instance transforms or custom data; (c) §14 M1's *"60 fps on Medium map greybox"*
+     (radius 32, **3,169 hexes**) is **not headless-measurable at all** — `--headless` has no renderer
+     — so it will be a **MANUAL WINDOWED measurement, logged in `docs/decisions.md` at the task that
+     lands the greybox scene (M1-T7)**, with **SDFGI off** per §10 line 680. **That criterion remains
+     NOT met after this commit.**
+  7. **SCOPE HELD (§13.4) — the slice boundary was respected exactly.** Deliberately **not** created,
+     and none of it appears in the diff: any `Node`, any `.tscn` (no `scenes/` directory), any `Mesh`,
+     `Material`, `MultiMesh` or `MultiMeshInstance3D` (all M1-T7); the camera rig (M1-T8); hex picking
+     (M1-T9); any `GameState`, `Command` or concrete `Event` subclass; any edit to
+     `data/ruleset.json`, `data/mapgen/`, `scripts/core/*` or `scripts/sim/*`; any `addons/` change;
+     any change to `project.godot` or to the `tools/` scripts.
+  8. **§11.1 BOUNDARY HELD IN THE MIRROR-IMAGE DIRECTION, and enforced mechanically.** The sim never
+     calls the renderer, and here the renderer never touches the sim: the comment-stripped source of
+     `hex_layout.gd` contains **none** of `HexMap`, `MapGenerator`, `Rng`, `set_elevation(`,
+     `set_terrain_type(` — it operates purely on an `Array[Vector2i]` handed to it by its caller,
+     which is what makes it fully unit-testable without a map. The **engine-bound** scan is kept from
+     the sim suites (`randi(`, `randf(`, `randomize(`, `RandomNumberGenerator`, `extends Node`,
+     `SceneTree`, `get_tree`, `Engine.`, `Time.`, `OS.` all forbidden), because slice 1 is a pure
+     `RefCounted` — the `Node` arrives in M1-T7's own file, under its own (different) scan. Non-Node
+     -ness is asserted via `get_class() == "RefCounted"`, **never** `is Node` (statically impossible;
+     parse-errors and silently un-collects the whole file — M0-T2 item 11 / M0-T5 item (a)).
+     **The no-float scan is deliberately NOT copied**: renderer geometry is not a §11.1 rule surface,
+     so floats are expected here; in its place the scan requires `SQRT_3` to be a **named const** and
+     forbids the three data-driven numbers as literals. The map-size literals `24|32|40|1801|3169|4921`
+     stay forbidden (M1-T1 item 4) — the radius-24 and radius-32 fixtures live in the **test** file.
+  9. **SIX ADVERSARIAL MUTATION PROBES RUN LIVE at Verify** (the M1-T1 item 8 → M1-T5 item 11
+     standard, six iterations running), each with the file md5 captured before and re-verified
+     **byte-identical** after restore (`13499bd90f6a9f43442e6f6a77e32021` before and after every one),
+     and **none** of the probe logs contained any of `run_tests.sh`'s five refusal phrases, so every
+     red was a genuine assertion failure rather than a harness refusal.
+     **(P1) — THE ONE TO REMEMBER — swap the layout to POINTY-TOP** (`x = SQRT_3*R*(q + 0.5*r)`,
+     `z = 1.5*R*r`) → RED in exactly **5** (the pinned placement table, `world_x_depends_only_on_q`,
+     the per-direction offsets, the flat-top/pointy-top discriminator, and the hex-width-from-data
+     mutation test) **while `test_all_six_neighbours_are_equidistant_at_one_row_step` STAYED GREEN.**
+     **Equidistance alone cannot tell the two orientations apart** — the per-direction discriminator
+     (dir 2 and dir 5 have `world.x` **exactly 0.0**; dir 0 has **both** components non-zero) is the
+     only load-bearing pin on (V). Never "simplify" it into the equidistance sweep.
+     **(P2)** truncating `int/int` in `_floor_div` → RED in **6**, including
+     `chunk_of_never_merges_the_four_chunks_around_the_origin`.
+     **(P3)** `chunk_keys` emitting first-seen (Dictionary) order instead of the sorted order → RED in
+     exactly **3**, including the shuffled-input oracle — every other partition property
+     (permutation, membership, bucket bounds, plain determinism) stayed green, so the **shuffled-input
+     oracle is the only pin that catches an order slip**.
+     **(P4, added at Verify)** sort by chunk-q then chunk-r instead of chunk-r then chunk-q → RED in
+     **2**, so (X)'s specific (O)-matching ordering is genuinely pinned, not merely "sorted somehow".
+     **(P5, added at Verify)** drop `elevation` from `world.y` → RED in **2**.
+     **(P6, added at Verify)** remove `_clear_configuration` from `load_params_text` → RED in **5**,
+     so the unconfigured-after-a-failed-load half of (Y) is pinned by more than one fixture.
+     P1/P2/P3 reproduced the Tests stage's predicted names and counts **exactly**.
+  10. **§13.6 CLAUSES RE-CHECKED RATHER THAN ASSUMED.** *Tests green headless*: MET (14 / 278 / 278 /
+     0 / 2760, exit 0). *Static typing clean*: MET mechanically — `typecheck.sh` exit 0 over **24**
+     files, with the measured traps honoured (`unused_parameter` is level 2 so the unused arg is
+     `_source`; `integer_division` is level 2 so `_floor_div` carries an explicit
+     `@warning_ignore("integer_division")` at the division site; `PackedInt32Array` is a **value**
+     type so bucket appends read into a typed local and assign back; no `Variant` reaches a typed
+     parameter). *Constants read from data, not code*: MET **and proven by mutation** (item 5).
+     *Events emitted for every state change*: **VACUOUS and stated explicitly** — this slice mutates
+     no `GameState`, constructs no `Command` and touches no `EventBus`; there is no state change to
+     emit for. *Goldens re-recorded only with a logged reason*: **NONE re-recorded** — the M1-T5
+     golden `mapgen_concentric_bowl_small_seed1337.json` (`content_hash 0xcad24923`) is byte-identical
+     and still green; this task hashes nothing. *Relevant GDD table cell updated if numbers moved*:
+     **no number moved** — see the GDD-section line below.
+  11. **STAGE-BOUNDARY NOTE**, the same call M0-T5 item (i) / M1-T2 item 9 / M1-T3 item 17 / M1-T4
+     item 14 / M1-T5 item 14 record: `docs/PROGRESS.md` and `docs/decisions.md` are **Land**-stage
+     artefacts, and the Tests/Implement/Verify stages correctly left both untouched. Verify made
+     **one** fix this iteration and it was documentation-only — the three off-by-one GDD line
+     citations described above, in comments and message strings, with the assert total unchanged.
+- **Why:** §4.1 states an orientation in three bolded words and never mentions world units, an origin,
+  a Y axis or a chunk size; §1.2 gives a **range** rather than a value; §10 mandates chunking and
+  prints no chunk size. Nothing could be *drawn* without closing all four silences, so they are closed
+  here, once, with the numbers as **content** in `data/render/greybox.json` and only the mathematical
+  constant in code. (V) is recorded at length because "flat-top" and the label "E" pointing 30° south
+  of screen-east genuinely look contradictory, and the next person to notice it must find the
+  resolution rather than "fix" the direction table and silently move every sim value that keys off it.
+  (X)'s chunk-r-then-chunk-q ordering is recorded because matching (O) is what lets a chunk walk and a
+  hex walk be reasoned about together, and because probe P4 shows "sorted somehow" is a strictly
+  weaker property than what is implemented. (Z) is the entry with the longest half-life: the headless
+  dummy renderer's refusal to store instance data is not documented anywhere, it was measured, and it
+  dictates both the shape of M1-T7's test suite and the fact that one §14 M1 acceptance criterion can
+  **never** be satisfied headless — recording it now is what stops a future iteration from burning a
+  task writing MultiMesh read-back assertions that can only ever pass vacuously.
+- **GDD section affected:** §4.1 (its bolded *"Flat-top hexes"* **implemented** as the renderer's
+  screen orientation (V), its *"Elevation: integer 0–3 per hex"* realised as a linear Y axis over all
+  four levels, and its fixed neighbour order re-confirmed **unchanged** — no reorder, no rename, no
+  sim value moved; **no cell edited**); §1.2 (its *"Hex scale ≈ 15–20 m (cosmetic only)"* **range**
+  realised as the shipped `hex_width_m` **18**, inside the printed range and test-pinned to stay
+  there; **no printed value changed**); §10 (its *"Rock rendered as chunked MultiMeshInstance3D …
+  dirty-chunk rebuilds on dig"* **partially implemented** — the chunk *partition* lands here, the
+  MultiMesh nodes and dirty-chunk rebuild at M1-T7; its *"Medium map at 60 fps … SDFGI off"* target
+  recorded as a **manual windowed** measurement owed at M1-T7 per (Z); **no cell edited**); §11.1 (the
+  layered boundary held in the **mirror-image** direction — the renderer names no sim class and
+  mutates no sim state; deterministic output order preserved with no `Dictionary` iteration reaching
+  an output); §11.2 (`scripts/render/` opened exactly where §11.2 lists the renderer classes);
+  §11.3 (typing gate green over **24** files; every public function carries its `## §` doc comment;
+  the public surface is **exactly** the enumerated members — `errors` + nine functions, a missing *or
+  extra* member fails); §13.2 (tier-1 unit suite: the placement table, the flat-top discriminator,
+  the floor-division chunk assignment, permutation/determinism sweeps over the real radius-24
+  (1,801-hex) and radius-32 (3,169-hex) maps, the full load contract with 11 rejection fixtures, and
+  the mirror-image source scan); §13.4 (procedure exercised: five silences resolved (V)–(Z), nothing
+  stalled); §13.6 (definition of done **MET**, every clause re-checked in item 10; **no golden
+  re-recorded**); **§14 M1 row — still TWO of three acceptance criteria MET, unchanged by this
+  commit: *"Golden mapgen test (seed ⇒ terrain hash)"* MET (M1-T5) and *"LOS property tests"* MET
+  (M1-T3). *"60 fps on Medium map greybox"* remains **NOT met** and is now explicitly scheduled as a
+  manual windowed measurement at M1-T7 per (Z). Of the five §14 M1 deliverables, HexMath and the
+  concentric-bowl generator are COMPLETE and the **chunked MultiMesh renderer is HALF delivered**
+  (slice 1, the pure placement/partition half); the camera rig and hex picking are not started, so
+  **M1 is NOT done**.** Acceptance criterion text unchanged. **NO `docs/GAME_DESIGN.md` edit
+  accompanies this entry, because no numeric table value changed: `hex_width_m` 18 falls inside a
+  printed range rather than replacing a printed number, and `elevation_step_m` 3 / `chunk_hexes` 8
+  have no printed counterpart at all.**
