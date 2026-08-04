@@ -24,6 +24,7 @@ extends GutTest
 
 const RULESET_PATH: String = "res://data/ruleset.json"
 const MISSING_PATH: String = "res://data/__no_such_ruleset__.json"
+const MAPGEN_PATH: String = "res://data/mapgen/concentric_bowl.json"
 const SOURCE: String = "ruleset.json"
 const EPS: float = 1e-9
 
@@ -48,6 +49,78 @@ const DIG_YIELD_KEYS: Array[String] = [
 ## unchanged line count — the fixture for the missing-key rejection below. The `: {"stone": 2}`
 ## suffix is what makes it unambiguous: `dig_turns` also carries an `"artificial_granite"` key.
 const ARTIFICIAL_GRANITE_YIELD: String = "\"artificial_granite\": {\"stone\": 2}, "
+
+## M0-T2 item 7 layout, extended by M2-T3: the WHOLE new `dig` group sits on ONE line inserted
+## immediately AFTER `dig_yields`, so `dig_yields` stays line 4 and `dig` is line 5. Every `dig`
+## schema error is therefore attributed to this line by M0-T2 item 3's forward scan.
+const DIG_LINE: int = 5
+
+## §4.2 line 197 "max 2 simultaneous diggers per hex".
+const MAX_DIGGERS_PER_HEX: int = 2
+
+## §4.2's nine Solid terrain ids in TABLE ROW ORDER — the order `dig.profiles` is AUTHORED in.
+const DIG_PROFILE_IDS_ROW_ORDER: Array[String] = [
+	"soft_dirt",
+	"hard_rock",
+	"dense_granite",
+	"artificial_granite",
+	"rubble",
+	"gold_vein",
+	"iron_vein",
+	"magestone_crust",
+	"mithril_seam",
+]
+
+## The same nine ids ASCENDING — the canonical order `get_keys` must answer in, and deliberately
+## NOT the authored order above (which is what makes the map-kind ordering test meaningful).
+const DIG_PROFILE_IDS_ASCENDING: Array[String] = [
+	"artificial_granite",
+	"dense_granite",
+	"gold_vein",
+	"hard_rock",
+	"iron_vein",
+	"magestone_crust",
+	"mithril_seam",
+	"rubble",
+	"soft_dirt",
+]
+
+## The four string leaves every `dig.profiles.<id>` entry carries. "" means not-applicable.
+const PROFILE_LEAVES: Array[String] = [
+	"turns_key",
+	"owner_turns_key",
+	"yield_key",
+	"vein_key",
+]
+
+## THE BINDING M2-T3 PUTS IN DATA: §4.2's terrain ids -> the §12.1 constant keys that govern them.
+## Authored as [turns_key, owner_turns_key, yield_key, vein_key]. §4.2's ids (`soft_dirt`, ...) and
+## §12.1's dig keys (`soft`, `hard`, `vein`, `mithril`, ...) are two DIFFERENT vocabularies with no
+## binding anywhere in the repo before this task; keeping it in DATA is what keeps terrain ids out
+## of engine code (the (T)/(AH)/(AU)(iv) no-whitelist rule) and what lets §13.5's M6
+## zero-engine-change canary hold. The four vein rows read their lump from `vein_nodes.<vein_key>`,
+## and `vein_key` doubles as the §5.1 resource id (gold/iron/magestone/mithril coincide in both).
+const DIG_PROFILES: Dictionary = {
+	"soft_dirt": ["soft", "", "soft", ""],
+	"hard_rock": ["hard", "", "hard", ""],
+	"dense_granite": ["granite", "", "granite", ""],
+	"artificial_granite":
+		["artificial_granite", "artificial_granite_owner", "artificial_granite", ""],
+	"rubble": ["rubble", "", "rubble", ""],
+	"gold_vein": ["vein", "", "", "gold"],
+	"iron_vein": ["vein", "", "", "iron"],
+	"magestone_crust": ["vein", "", "", "magestone"],
+	"mithril_seam": ["mithril", "", "", "mithril"],
+}
+
+## The §12.1 group each profile leaf points into, in PROFILE_LEAVES order — used to prove every
+## authored binding actually RESOLVES, so no §4.2 row can point at a key that does not exist.
+const PROFILE_LEAF_GROUPS: Array[String] = [
+	"dig_turns",
+	"dig_turns",
+	"dig_yields",
+	"vein_nodes",
+]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -108,12 +181,20 @@ func test_dig_yields() -> void:
 	assert_eq(loader.get_int("dig_yields.rubble.stone"), 1, "§12.1/§5.1 dig_yields.rubble.stone")
 
 
-## §12.1 + §4.2 — the new key is REQUIRED by the schema, not merely present in the shipped file:
-## deleting it must be rejected with a line-numbered error (§14 M0's still-binding acceptance
-## clause), the ruleset must stay unpublished, and the error must be attributed to the
-## `dig_yields` group line. That attribution is M0-T2 item 3's forward-scan fallback in action:
-## with the pair gone, no `"artificial_granite"` token exists at or after the `"dig_yields"` line
-## (`dig_turns` sits ABOVE it), so the walk falls back to the last segment it did find.
+## §12.1 + §4.2 — the (AU)(i) key is REQUIRED by the schema, not merely present in the shipped
+## file: deleting it must be rejected with a line-numbered error (§14 M0's still-binding
+## acceptance clause) and the ruleset must stay unpublished.
+##
+## THE EXPECTED LINE MOVED FROM 4 TO 5 AT M2-T3, and the reason is a VOCABULARY COLLISION, not a
+## loader bug — flagged here because it is the one landed assertion this task changes. Until M2-T3
+## the deletion left NO `"artificial_granite"` token at or after the `"dig_yields"` line
+## (`dig_turns` sits ABOVE it), so M0-T2 item 3's forward-scan FALLBACK fired and attributed the
+## error to the group line, 4. M2-T3's `dig` group sits on line 5 and its profile map is keyed by
+## §4.2's TERRAIN ids — one of which is literally `artificial_granite` — so the forward scan now
+## finds a real token on line 5 and the fallback no longer fires. The layout is the one the task
+## mandates (`dig_yields` stays line 4; the whole `dig` group is line 5), the loader's documented
+## algorithm is unchanged, and every OTHER attribution is unaffected because `dig` sits BELOW
+## `dig_yields` and ABOVE nothing that shares a key name.
 func test_reject_missing_dig_yields_artificial_granite() -> void:
 	var text: String = _ruleset_text()
 	var present: bool = text.contains(ARTIFICIAL_GRANITE_YIELD)
@@ -143,10 +224,17 @@ func test_reject_missing_dig_yields_artificial_granite() -> void:
 		or err.path == "dig_yields.artificial_granite.stone",
 		"§12.1: the error names the missing dotted path (got \"%s\")" % err.path
 	)
+	var patched_lines: PackedStringArray = patched.split("\n")
+	assert_gte(patched_lines.size(), DIG_LINE, "fixture: the document still reaches the dig line")
+	if patched_lines.size() >= DIG_LINE:
+		assert_true(
+			patched_lines[DIG_LINE - 1].contains("\"artificial_granite\""),
+			"§4.2/§12.1: dig.profiles is keyed by TERRAIN ids, so line %d re-uses the name" % DIG_LINE
+		)
 	assert_eq(
 		err.line,
-		DIG_YIELDS_LINE,
-		"§14/M0-T2 item 3: the missing child is attributed to the dig_yields group line"
+		DIG_LINE,
+		"§14/M0-T2 item 3: the forward scan finds the terrain-id token on the `dig` group line"
 	)
 	assert_true(
 		err.message.contains("artificial_granite"), "§12.1: the message names the missing key"
@@ -654,6 +742,303 @@ func test_unknown_top_level_key_is_accepted() -> void:
 
 
 # ---------------------------------------------------------------------------------------------
+# F. THE M2-T3 `dig` GROUP — §12.1's newest group and the loader's new "map" spec kind.
+#
+# §4.2's Solid table names TERRAIN types (soft_dirt, hard_rock, ...); §12.1's `dig_turns` /
+# `dig_yields` / `vein_nodes` name CONSTANT KEYS (soft, hard, granite, vein, mithril, gold, ...).
+# Nothing in the repo bound the two vocabularies together before M2-T3. `dig` is that binding, and
+# it lives in DATA precisely so terrain ids never enter engine code ((T)/(AH)/(AU)(iv)) — which is
+# also why `dig.profiles` cannot be a fixed spec node: its KEYS are content. Hence the new "map"
+# spec kind (an object with author-chosen keys, every value validated against ONE shared entry
+# spec) and the new `get_keys` accessor.
+# ---------------------------------------------------------------------------------------------
+
+## §4.2 line 197 + §12.1 — the shipped ruleset carries the digger cap, and it is exactly 2.
+func test_dig_group_carries_the_max_diggers_per_hex_cap() -> void:
+	var loader: RulesLoader = _loaded()
+	assert_true(loader.has("dig.max_diggers_per_hex"), "§12.1: the `dig` group is REQUIRED")
+	assert_eq(
+		loader.get_int("dig.max_diggers_per_hex"),
+		MAX_DIGGERS_PER_HEX,
+		"§4.2 line 197: max 2 simultaneous diggers per hex"
+	)
+
+
+## §11.1 "iterate collections in stable ID order" — `get_keys` answers ASCENDING, never the parse
+## result's key order (which is §4.2's row order, deliberately different).
+func test_get_keys_answers_the_nine_dig_profiles_ascending() -> void:
+	var loader: RulesLoader = _loaded()
+	assert_eq(
+		loader.get_keys("dig.profiles"),
+		DIG_PROFILE_IDS_ASCENDING,
+		"§11.1/§12.1: dig.profiles' keys come back ascending"
+	)
+	assert_eq(
+		loader.get_keys("dig"),
+		["max_diggers_per_hex", "profiles"] as Array[String],
+		"§11.1: get_keys is ascending at every level"
+	)
+	assert_eq(
+		DIG_PROFILE_IDS_ASCENDING.size(),
+		DIG_PROFILE_IDS_ROW_ORDER.size(),
+		"§4.2: the same nine Solid rows, in two different orders"
+	)
+	assert_ne(
+		DIG_PROFILE_IDS_ASCENDING,
+		DIG_PROFILE_IDS_ROW_ORDER,
+		"fixture: sorted order really does differ from §4.2's row order — otherwise this test is"
+		+ " vacuous"
+	)
+
+
+## §12.1 — `get_keys` is TOTAL: a missing path and a non-object leaf both answer an EMPTY array,
+## never null and never a crash (the (B)/(L)/(AU) totality spirit).
+func test_get_keys_is_empty_for_a_missing_path_or_a_non_object_leaf() -> void:
+	var loader: RulesLoader = _loaded()
+	for dotted_path: String in [
+		"",
+		"not_a_group",
+		"dig.not_a_key",
+		"dig.profiles.not_a_terrain",
+		"version",
+		"dig.max_diggers_per_hex",
+		"train_turns_by_tier",
+		"dig.profiles.soft_dirt.turns_key",
+	]:
+		assert_eq(
+			loader.get_keys(dotted_path),
+			[] as Array[String],
+			"§12.1: get_keys(\"%s\") has no keys to answer" % dotted_path
+		)
+
+
+## §11.1 — `get_keys` hands back a FRESH array every call. The `is_same()` IDENTITY assertion is
+## the load-bearing half (M1-T9 item 6: a self-clearing member cache passes the weaker
+## "pollution does not survive" shape while aliasing every caller).
+func test_get_keys_returns_a_fresh_array_every_call() -> void:
+	var loader: RulesLoader = _loaded()
+	var first: Array[String] = loader.get_keys("dig.profiles")
+	var twin: Array[String] = loader.get_keys("dig.profiles")
+	assert_false(is_same(first, twin), "§11.1: get_keys never hands out a shared array")
+	assert_eq(first, twin, "§11.1: two calls agree on the contents")
+	first.append("polluted")
+	first.clear()
+	assert_eq(
+		loader.get_keys("dig.profiles"),
+		DIG_PROFILE_IDS_ASCENDING,
+		"§11.1: a caller's mutation cannot corrupt the next call"
+	)
+
+
+## §12.1/§4.2 — every one of the 36 authored profile leaves reads back verbatim. This is THE
+## binding: `soft_dirt -> soft`, `artificial_granite -> artificial_granite` plus the owner key
+## `artificial_granite_owner`, the three "vein" rows -> `dig_turns.vein` with the lump coming from
+## `vein_nodes.<vein_key>`, and `mithril_seam -> mithril` for BOTH its turns and its vein.
+func test_every_dig_profile_binds_the_section_twelve_one_keys_as_authored() -> void:
+	var loader: RulesLoader = _loaded()
+	for terrain_id: String in DIG_PROFILE_IDS_ROW_ORDER:
+		assert_true(
+			DIG_PROFILES.has(terrain_id), "fixture: %s is transcribed above" % terrain_id
+		)
+		var authored: Array = DIG_PROFILES[terrain_id]
+		for i: int in range(PROFILE_LEAVES.size()):
+			var leaf: String = PROFILE_LEAVES[i]
+			var expected: String = authored[i]
+			assert_eq(
+				loader.get_string("dig.profiles.%s.%s" % [terrain_id, leaf]),
+				expected,
+				"§12.1: dig.profiles.%s.%s == \"%s\"" % [terrain_id, leaf, expected]
+			)
+
+
+## §12.1/§4.2 INTEGRITY — every non-empty binding must RESOLVE, so no §4.2 row can point at a
+## §12.1 key that does not exist; and every row must yield something (a `yield_key` OR a
+## `vein_key`), because §4.2's "Yield on dig" column has no blank cell.
+func test_every_dig_profile_binding_resolves_in_the_ruleset() -> void:
+	var loader: RulesLoader = _loaded()
+	for terrain_id: String in DIG_PROFILE_IDS_ROW_ORDER:
+		var yields_something: bool = false
+		for i: int in range(PROFILE_LEAVES.size()):
+			var leaf: String = PROFILE_LEAVES[i]
+			var group: String = PROFILE_LEAF_GROUPS[i]
+			var key: String = loader.get_string("dig.profiles.%s.%s" % [terrain_id, leaf])
+			if key.is_empty():
+				continue
+			assert_true(
+				loader.has("%s.%s" % [group, key]),
+				"§12.1: dig.profiles.%s.%s points at %s.%s, which must exist" % [
+					terrain_id, leaf, group, key
+				]
+			)
+			if leaf == "yield_key" or leaf == "vein_key":
+				yields_something = true
+		assert_true(
+			yields_something,
+			"§4.2: every Solid row yields something — %s binds neither a yield nor a vein" % [
+				terrain_id
+			]
+		)
+		var turns_key: String = loader.get_string("dig.profiles.%s.turns_key" % terrain_id)
+		assert_false(
+			turns_key.is_empty(), "§4.2: every Solid row has a dig time — %s" % terrain_id
+		)
+
+
+## §14 M0 + §12.1 — `dig.max_diggers_per_hex` is REQUIRED, not merely present: deleting it is one
+## line-numbered error, attributed to the `dig` group line, and the ruleset stays unpublished.
+func test_reject_missing_max_diggers_per_hex() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_dig_line(lines):
+		return
+	lines[DIG_LINE - 1] = _delete_member(lines[DIG_LINE - 1], "max_diggers_per_hex")
+	_assert_dig_rejection(lines, "dig.max_diggers_per_hex", "a missing digger cap")
+
+
+## §14 M0 + §12.1 — the "map" kind validates EVERY entry against one shared spec, so a profile
+## leaf of the wrong type is caught and named by its full dotted path (terrain id included).
+func test_reject_non_string_profile_leaf() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_dig_line(lines):
+		return
+	# `_replace_value` rewrites the FIRST match on the line, which is §4.2's first row, soft_dirt.
+	# ("owner_turns_key" cannot be hit by accident: the pattern is anchored on the opening quote.)
+	lines[DIG_LINE - 1] = _replace_value(lines[DIG_LINE - 1], "turns_key", "1")
+	_assert_dig_rejection(lines, "dig.profiles.soft_dirt.turns_key", "a non-string profile leaf")
+
+
+## §14 M0 + §12.1 — the map itself is shape-checked: a scalar where the profile map belongs is
+## rejected, and the loader does NOT descend into it.
+func test_reject_non_object_dig_profiles() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_dig_line(lines):
+		return
+	lines[DIG_LINE - 1] = _replace_value(lines[DIG_LINE - 1], "profiles", "3")
+	_assert_dig_rejection(lines, "dig.profiles", "a scalar where the profile map belongs")
+
+
+## §14 M0 + §12.1 — AN EMPTY MAP IS REJECTED, deliberately and not by accident: a ruleset with no
+## profiles would silently make EVERY hex undiggable, which is a content bug that must fail loud
+## at load rather than quietly at turn 20 (§13.4 — pick the interpretation that cannot fail
+## silently).
+func test_reject_empty_dig_profiles() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_dig_line(lines):
+		return
+	lines[DIG_LINE - 1] = _replace_value(lines[DIG_LINE - 1], "profiles", "{}")
+	_assert_dig_rejection(lines, "dig.profiles", "an empty profile map")
+
+
+## §11.1 — THE MAP KIND'S ORDERING CONTRACT: its errors come back sorted by ASCENDING KEY, never
+## in the parse result's key order. The class header has promised exactly this since M0-T2
+## ("never the parse result's key order"), and for a fixed spec it is free; for an author-keyed
+## map it has to be DONE. The two defects below are planted in entries whose document order
+## (soft_dirt first, artificial_granite fourth) is the REVERSE of their sorted order, so an
+## implementation that simply iterated the parsed Dictionary answers them the other way round.
+func test_map_kind_errors_are_ordered_by_ascending_key() -> void:
+	var probe: JSON = JSON.new()
+	var text: String = _ruleset_text()
+	assert_eq(probe.parse(text), OK, "fixture: the shipped ruleset must parse")
+	var data: Variant = probe.data
+	if not (data is Dictionary):
+		assert_false(true, "fixture: the ruleset root is an object")
+		return
+	var root: Dictionary = data as Dictionary
+	var profiles: Dictionary = _profiles_of(root)
+	if profiles.is_empty():
+		return
+	for terrain_id: String in ["soft_dirt", "artificial_granite"]:
+		if not profiles.has(terrain_id):
+			assert_false(true, "§12.1: dig.profiles must carry \"%s\"" % terrain_id)
+			return
+		var entry: Dictionary = profiles[terrain_id]
+		entry["turns_key"] = 1
+
+	# `sort_keys` DEFAULTS TO TRUE on JSON.stringify (measured live this iteration on the pinned
+	# 4.7 build): the default would alphabetize the document and destroy this fixture's whole
+	# premise, since the point is that DOCUMENT order differs from SORTED order.
+	var patched: String = JSON.stringify(root, "", false)
+	var profiles_at: int = patched.find("\"profiles\"")
+	assert_gt(profiles_at, 0, "fixture: the re-serialized document keeps the profile map")
+	assert_lt(
+		patched.find("\"soft_dirt\"", profiles_at),
+		patched.find("\"artificial_granite\"", profiles_at),
+		"fixture: document order must be soft_dirt BEFORE artificial_granite — the REVERSE of"
+		+ " sorted order, or this test proves nothing"
+	)
+
+	var loader: RulesLoader = RulesLoader.new()
+	var ok: bool = loader.load_text(patched, SOURCE)
+	assert_false(ok, "§12.1: two non-string profile leaves must be rejected")
+	assert_true(loader.rules.is_empty(), "§14: a rejected ruleset must not be published")
+	assert_eq(
+		_error_paths(loader),
+		[
+			"dig.profiles.artificial_granite.turns_key",
+			"dig.profiles.soft_dirt.turns_key",
+		] as Array[String],
+		"§11.1: map-kind errors are ordered by ASCENDING KEY, never by parse order"
+	)
+
+
+## M0-T2 item 7 (still load-bearing) — `data/ruleset.json`'s layout: line 1 is a lone `{`,
+## `dig_yields` is still line 4, and the WHOLE `dig` group sits on ONE line, line 5. That is what
+## makes the four rejections above plantable and their expected line number derivable.
+func test_ruleset_layout_keeps_the_whole_dig_group_on_one_line() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_fixture(lines):
+		return
+	assert_eq(lines[0].strip_edges(), "{", "M0-T2 item 7: line 1 of the ruleset is a lone `{`")
+	assert_gte(lines.size(), DIG_LINE, "fixture: the document reaches the dig line")
+	if lines.size() < DIG_LINE:
+		return
+	assert_true(
+		lines[DIG_YIELDS_LINE - 1].contains("\"dig_yields\""),
+		"M0-T2 item 7: dig_yields stays on line %d — `dig` is inserted AFTER it" % DIG_YIELDS_LINE
+	)
+	var group: String = lines[DIG_LINE - 1]
+	assert_true(
+		group.contains("\"dig\""),
+		"M0-T2 item 7: the whole `dig` group must sit on line %d" % DIG_LINE
+	)
+	assert_true(
+		group.contains("\"max_diggers_per_hex\""),
+		"§4.2 line 197: dig.max_diggers_per_hex sits on the group line"
+	)
+	assert_true(group.contains("\"profiles\""), "§12.1: dig.profiles sits on the group line")
+	for terrain_id: String in DIG_PROFILE_IDS_ROW_ORDER:
+		assert_true(
+			group.contains("\"%s\"" % terrain_id),
+			"§4.2/§12.1: dig.profiles.%s must sit on the same line as its group" % terrain_id
+		)
+	for i: int in range(DIG_PROFILE_IDS_ROW_ORDER.size() - 1):
+		assert_lt(
+			group.find("\"%s\"" % DIG_PROFILE_IDS_ROW_ORDER[i]),
+			group.find("\"%s\"" % DIG_PROFILE_IDS_ROW_ORDER[i + 1]),
+			"§4.2 row order: %s precedes %s" % [
+				DIG_PROFILE_IDS_ROW_ORDER[i], DIG_PROFILE_IDS_ROW_ORDER[i + 1]
+			]
+		)
+
+
+## §4.4/§13.6 CROSS-DATA INTEGRITY — every terrain type `data/mapgen/concentric_bowl.json` can
+## place must have a `dig.profiles` entry, or a generated map would contain hexes no worker could
+## ever remove. That file is READ here and NEVER edited (the M1-T5 golden 0xcad24923 hashes what
+## it produces).
+func test_every_generated_terrain_type_has_a_dig_profile() -> void:
+	var loader: RulesLoader = _loaded()
+	var profile_ids: Array[String] = loader.get_keys("dig.profiles")
+	var generated: Array[String] = _generated_terrain_types()
+	assert_gt(generated.size(), 0, "fixture: %s must declare composition weights" % MAPGEN_PATH)
+	for terrain_id: String in generated:
+		assert_true(
+			profile_ids.has(terrain_id),
+			"§4.4/§13.6: %s can place \"%s\" — dig.profiles must bind it" % [
+				MAPGEN_PATH, terrain_id
+			]
+		)
+
+
+# ---------------------------------------------------------------------------------------------
 # Helpers (not tests — GUT only collects `test_`-prefixed methods).
 # ---------------------------------------------------------------------------------------------
 
@@ -767,3 +1152,121 @@ func _find_line(lines: PackedStringArray, token: String, from_index: int) -> int
 		if lines[i].contains(token):
 			return i
 	return -1
+
+
+## Every error's dotted path, in the loader's own order — the comparable form for the map kind's
+## ordering contract.
+func _error_paths(loader: RulesLoader) -> Array[String]:
+	var out: Array[String] = []
+	for err: RulesError in loader.errors:
+		out.append(err.path)
+	return out
+
+
+## Precondition for the four `dig` rejection fixtures: the M2-T3 group must be on its line. The
+## `dig` group IS the deliverable, so its absence must report as itself, not as a helper crash.
+func _require_dig_line(lines: PackedStringArray) -> bool:
+	if not _require_fixture(lines):
+		return false
+	var ok: bool = (
+		lines.size() >= DIG_LINE
+		and lines[DIG_LINE - 1].contains("\"dig\"")
+		and lines[DIG_LINE - 1].contains("\"profiles\"")
+	)
+	assert_true(
+		ok,
+		"§12.1/M2-T3: %s must carry the whole `dig` group on line %d" % [RULESET_PATH, DIG_LINE]
+	)
+	return ok
+
+
+## Shared body for the four `dig` rejection cases: the patched document must still PARSE, must be
+## rejected with EXACTLY ONE error naming `expected_path` at the `dig` group line, and must leave
+## `rules` EMPTY (§14: a rejected ruleset is never published).
+func _assert_dig_rejection(
+	lines: PackedStringArray, expected_path: String, what: String
+) -> void:
+	var text: String = "\n".join(lines)
+	if not _require_parses(text):
+		return
+	var loader: RulesLoader = RulesLoader.new()
+	var ok: bool = loader.load_text(text, SOURCE)
+	assert_false(ok, "§12.1: %s must be rejected" % what)
+	assert_true(loader.rules.is_empty(), "§14: a rejected ruleset must not be published")
+	assert_eq(loader.errors.size(), 1, "§12.1: %s is exactly one error" % what)
+	if loader.errors.size() != 1:
+		return
+	assert_eq(loader.errors[0].path, expected_path, "§12.1: the error names the dotted path")
+	assert_eq(
+		loader.errors[0].line,
+		DIG_LINE,
+		"§14/M0-T2 item 3: a `dig` defect is attributed to the group line (%d)" % DIG_LINE
+	)
+	assert_false(loader.errors[0].message.is_empty(), "§14: the error must say what is wrong")
+
+
+## Deletes `key` and its JSON value (plus a following comma, if any) from a single line, leaving
+## the line count untouched so planted line numbers stay computable.
+func _delete_member(line: String, key: String) -> String:
+	var re: RegEx = RegEx.new()
+	var pattern: String = (
+		"\"%s\"\\s*:\\s*(\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}|\\[[^\\]]*\\]|\"[^\"]*\"|-?[0-9]+(?:\\.[0-9]+)?)\\s*,?\\s*"
+		% key
+	)
+	var compiled: int = re.compile(pattern)
+	assert_eq(compiled, OK, "fixture helper: the deletion pattern for %s must compile" % key)
+	if compiled != OK:
+		return line
+	var patched: String = re.sub(line, "", false)
+	assert_ne(patched, line, "fixture: %s must appear on the anchored line" % key)
+	return patched
+
+
+## `dig.profiles` out of an already-parsed ruleset Dictionary, or an empty Dictionary (having
+## reported why) when the M2-T3 group is absent.
+func _profiles_of(root: Dictionary) -> Dictionary:
+	if not root.has("dig"):
+		assert_false(true, "§12.1/M2-T3: %s must carry the `dig` group" % RULESET_PATH)
+		return {}
+	var dig_group: Variant = root["dig"]
+	if not (dig_group is Dictionary):
+		assert_false(true, "§12.1: `dig` is a group")
+		return {}
+	var profiles: Variant = (dig_group as Dictionary).get("profiles", null)
+	if not (profiles is Dictionary):
+		assert_false(true, "§12.1: `dig.profiles` is a map of terrain id -> constant keys")
+		return {}
+	return profiles as Dictionary
+
+
+## Every terrain type `data/mapgen/concentric_bowl.json` can place, in document order (READ ONLY).
+func _generated_terrain_types() -> Array[String]:
+	var out: Array[String] = []
+	if not FileAccess.file_exists(MAPGEN_PATH):
+		assert_false(true, "fixture: %s must exist" % MAPGEN_PATH)
+		return out
+	var parsed: JSON = JSON.new()
+	assert_eq(
+		parsed.parse(FileAccess.get_file_as_string(MAPGEN_PATH)),
+		OK,
+		"fixture: %s must be valid JSON" % MAPGEN_PATH
+	)
+	var data: Variant = parsed.data
+	if not (data is Dictionary):
+		return out
+	var composition: Variant = (data as Dictionary).get("composition", [])
+	if not (composition is Array):
+		return out
+	for band: Variant in (composition as Array):
+		if not (band is Dictionary):
+			continue
+		var weights: Variant = (band as Dictionary).get("weights", [])
+		if not (weights is Array):
+			continue
+		for weight: Variant in (weights as Array):
+			if not (weight is Dictionary):
+				continue
+			var terrain_id: Variant = (weight as Dictionary).get("type", "")
+			if terrain_id is String and not out.has(terrain_id):
+				out.append(terrain_id)
+	return out

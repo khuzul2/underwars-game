@@ -3083,3 +3083,289 @@ at (AW).**
   golden re-recorded). **§14 M2 row — the milestone is STILL OPEN, NOT met. Acceptance criterion
   text unchanged**; none of *"Scripted 20-turn dig scenario matches expected stockpiles exactly"*,
   *"deficit-bleed test"* or *"zone assigns nearest idle worker"* is satisfied yet.
+
+## 2026-08-04 — M2-T3 — `DigRules`: §4.2's whole dig table read from data; the §12.1 `dig` AMENDMENT (one GDD line added); the `RulesLoader` `map` kind + `get_keys`; resolution (AW); landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 27 / Tests 643 /
+Passing 643 / Failing 0 / Asserts 7452** (the M2-T2 baseline was 26 / 598 / 598 / 0 / 6435 — all
+four totals rose and **no previously-landed test regressed**; the one landed *assertion* that moved
+is item 6, and it moved for a recorded reason); `bash tools/typecheck.sh` exits 0 over **49** files
+(was 47 — `scripts/sim/systems/dig_rules.gd` plus the new suite `tests/unit/test_dig_rules.gd`,
+which the gate also walks); `bash tools/ci.sh` PASSes; `bash tools/verify_harness.sh` PASSes across
+all four phases (A green · B failing canary · C syntactic parse error · D statically-impossible
+construct) with the tree left clean. All ran headless through the `tools/` scripts on the
+repo-local pinned `godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3) and
+never through WSL bash ((AU) item 10). `sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5)
+were correctly **SKIPped, not failed**, per CLAUDE.md's applicability rule. `Scripts 27` equals the
+27 `test_*.gd` on disk, so the M0-T5 enumeration guard is satisfied and nothing was silently
+un-collected. **No golden was re-recorded and none was created** (`goldens_rerecorded: false`) —
+see item 5, which re-states that §13.2 tier 3's golden is **still owed, still not forgotten**;
+`tests/golden/mapgen_concentric_bowl_small_seed1337.json` (`content_hash 0xcad24923`) is
+**byte-untouched and still green**, as are `scenes/`, `project.godot`, `tools/`, `addons/`,
+`data/mapgen/concentric_bowl.json` (read by the cross-data test, never edited) and every file under
+`scripts/sim/commands/`, `scripts/sim/events/` and `scripts/render/`.
+
+**THIS IS THE FIRST SLICE OF §14 M2's "(a) workers + dig progress", AND IT IS THE TABLE, NOT THE
+COMMAND.** `DigRules` (`scripts/sim/systems/dig_rules.gd` — a **new directory**, `scripts/sim/systems/`,
+which §11.2 line 724 prints verbatim) answers §4.2's entire Solid-hex dig paragraph from loaded
+§12.1 data: dig time per terrain type with the §7.1 Artificial-Granite owner variant, dig yield per
+terrain type including the four vein lumps, the vein-node resource id left behind, the max
+simultaneous diggers per hex, and §4.2 line 197's *"Dig 2× halves remaining time (round up)"*. **M2
+is still NOT done**: none of its three §14 acceptance criteria (*"Scripted 20-turn dig scenario
+matches expected stockpiles exactly; deficit-bleed test; zone assigns nearest idle worker"*) is met.
+The follow-on slices, in order, are (2) the worker/unit roster on `GameState`, (3) `DigHexCommand` +
+`CancelDigCommand` + dig-site progress state, (4) §3.4 step 4's dig tick + yield application +
+hex-becomes-cave + events + the owed tier-3 golden.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §4.2
+(the nine-row Solid table, lines 184–193, and its line-197 prose), §5.1 (lines 277–284, the seven
+resource ids and *"No storage caps"*), §5.2 (line 292, vein nodes + Extractors), §7.1 (line 367,
+*"Enemies dig it in 3 turns; Dwarves clear their own in 1"*), §12.1 (lines 780 `dig_turns`, 784
+`dig_yields`, 788 `vein_nodes`), §11.1, §11.2, §11.3, §13.2, §13.4, §13.6 and §14's M2 row.
+`docs/decisions.md` was re-scanned **end to end** at Tests and again at Verify: the **only** logged
+§12.1/§4.2 override in the entire project is **(AU)(i)** (`dig_yields.artificial_granite.stone = 2`,
+which merely transcribes §4.2's own *"\+2 Stone"*), and **no logged override touches §4.2's dig
+times, §4.2 line 197, §5.1 or §5.2** — so the printed tables governed unamended and **no constant
+needed correcting in either direction**. The binding prior resolutions are **(T)/(AH)/(AU)(iv)/(f)**
+(no vocabulary whitelist in engine code), **(AL)** (an unconfigured object answers zero/empty
+everywhere), **(B)/(L)/(AS)** (totality), **(AJ)** (a mathematical constant may be a *named* const
+without violating §13.6), **(AT)/(f)** (§11.2's printed file list is illustrative) and **(AV)** (the
+command spine, which this slice deliberately does not touch). The lettering genuinely ended at
+**(AV)**, so this entry is **(AW)** — and **neither (AU) nor (AV) is renumbered**: (AU) is
+cross-referenced by four files and (AV) by five. **M2-T4 continues at (AX).**
+
+- **What changed / was decided:**
+  1. **(AW)(i) — THE §12.1 AMENDMENT: ONE NEW TOP-LEVEL `dig` GROUP, AND WHY THE BINDING *MUST* BE
+     DATA.** §4.2's terrain ids (`soft_dirt`, `hard_rock`, `dense_granite`, `artificial_granite`,
+     `rubble`, `gold_vein`, `iron_vein`, `magestone_crust`, `mithril_seam`) and §12.1's dig keys
+     (`soft`, `hard`, `granite`, `artificial_granite`, `artificial_granite_owner`, `rubble`, `vein`,
+     `mithril`) are **two different vocabularies**, and until this commit **nothing anywhere in the
+     repo bound them**. Putting that binding in engine code would have meant a hard-coded
+     terrain-id → key table — precisely the whitelist that **(T)/(AH)/(AU)(iv)** forbid, and
+     precisely what would break §13.5's M6 *"adding content requires zero engine-code changes"*
+     canary. So `data/ruleset.json` gains **ONE** new top-level group, on **one line, line 5**,
+     immediately after `dig_yields` (which stays line 4 — M0-T2 item 7's layout contract is
+     load-bearing and tested):
+     `"dig": {"max_diggers_per_hex": 2, "profiles": {<nine §4.2 rows>}}`, where each profile carries
+     **four string leaves** — `turns_key` / `owner_turns_key` / `yield_key` / `vein_key`, `""`
+     meaning *not applicable*. Authored values: `soft_dirt {soft, "", soft, ""}` · `hard_rock {hard,
+     "", hard, ""}` · `dense_granite {granite, "", granite, ""}` · `artificial_granite
+     {artificial_granite, artificial_granite_owner, artificial_granite, ""}` · `rubble {rubble, "",
+     rubble, ""}` · `gold_vein {vein, "", "", gold}` · `iron_vein {vein, "", "", iron}` ·
+     `magestone_crust {vein, "", "", magestone}` · `mithril_seam {mithril, "", "", mithril}`. The
+     four vein rows read their lump from `vein_nodes.<vein_key>.lump`, and **`vein_key` doubles as
+     the §5.1 resource id** — verified by hand that `gold`/`iron`/`magestone`/`mithril` coincide in
+     both tables. **NO NUMERIC VALUE MOVED**: `max_diggers_per_hex` **2** is §4.2 line 197 verbatim,
+     and every profile leaf is a **key name**, not a number. **§4.2's table is the AUTHORITY and is
+     byte-unchanged in this commit.** Following the (AU)(i) procedure exactly: Tests, Implement and
+     Verify treated `docs/GAME_DESIGN.md` as read-only, and **Land — only Land — added the single
+     new `dig` line to the printed §12.1 excerpt** (after the `dig_yields` line), in **this same
+     commit** as this entry. The excerpt prints the group in full, so the §12.1 cell and
+     `data/ruleset.json` line 5 remain checkable against each other character by character (modulo
+     the GDD's markdown `\_` escaping).
+  2. **(AW)(ii) — A NEW `map` SPEC KIND IN `RulesLoader`, AND ITS ERROR ORDER IS BY *ASCENDING KEY*,
+     NEVER PARSE ORDER.** Every existing spec kind names its children literally; `dig.profiles` is
+     the project's first group whose **keys are authored content**, so the loader gained a `"map"`
+     kind: a node carrying `"entry": Array[Dictionary]` (**one shared child spec**) that (a) rejects
+     a non-Dictionary, (b) rejects an **EMPTY** object — a ruleset with no profiles would silently
+     make *every* hex undiggable, which is exactly the failure a validator exists to prevent — and
+     (c) otherwise validates **every observed key** against `entry`, iterating
+     `entries.keys()` **sorted ascending**. The sort is not cosmetic: `RulesLoader`'s class header
+     has promised since M0-T2 that `errors` is deterministic and *never* the parse result's key
+     order, and §11.1 forbids any Dictionary key order reaching an output. It is pinned by a fixture
+     whose **document order is the reverse of its sorted order** — planted defects in two entries
+     come back sorted. The companion accessor `get_keys(dotted_path) -> Array[String]` is
+     **ascending, FRESH per call** (`is_same()` identity plus mutate-then-recall, the M1-T9 item 6
+     lesson) and **total**: empty for a missing path and for a non-object leaf. `_attribute_line`
+     needed **no change** — it searches the quoted token `"dig"`, which does not match inside
+     `"dig_turns"`/`"dig_yields"`, and `noise`'s own `"dig": 8` sits below line 5 and is still
+     attributed to its own group line (verified by hand and by test). The change to
+     `scripts/sim/rules_loader.gd` is **purely additive** (+47 lines): no existing kind, message,
+     spec entry or line-attribution path was touched or weakened.
+  3. **(AW)(iii) — `by_owner` SEMANTICS: THE FLAG MEANS "THE DIGGING PLAYER OWNS THIS ARTIFICIAL
+     GRANITE", AND `DigRules` NEVER DECIDES OWNERSHIP.** §4.2 line 188 prints *"3 (owner: 1)"* and
+     §7.1 line 367 explains it — *"Enemies dig it in 3 turns; Dwarves clear their own in 1"*.
+     `dig_turns_for(terrain_id, by_owner)` therefore takes a **bool the caller supplies**; the
+     ownership *determination* (whose Artificial Granite is this, and is the digger its owner?)
+     needs a unit, a hex owner and a player, none of which exist yet, and lands with the dig
+     **Command** in the next slice. **Exactly one row has an owner variant**, and the suite asserts
+     `by_owner = true` changes **nothing** for the other eight — the flag is inert everywhere else,
+     so a later caller cannot accidentally give itself a discount on granite. Mechanically the
+     variant is data too: the owner value is reached only when the row's `owner_turns_key` is
+     non-empty, i.e. §12.1's `dig_turns.artificial_granite_owner`.
+  4. **(AW)(iv) — THE VEIN *NODE* IS DELIBERATELY NOT BUILT: THIS SLICE ANSWERS ONLY THE RESOURCE
+     ID.** §4.2's *"+ node"* appears on exactly four rows, and `vein_resource_id(terrain_id)` answers
+     `gold`/`iron`/`magestone`/`mithril` for those and `""` for the other five. **Vein-node STATE
+     (§12.1 `vein_nodes.<id>.stock`/`rate` — gold 250/10, iron 120/6, magestone 150/6, mithril 60/3,
+     already shipped and already pinned by `test_rules_loader.gd`) and §5.2's Extractors are a LATER
+     M2 slice**, and the suite pins that **negatively**: no stock/rate/Extractor member exists on
+     `DigRules`, whose public surface is exact. Equally deferred, and named here so no later slice
+     can claim they were forgotten: the worker/unit roster, `DigHexCommand`/`CancelDigCommand`,
+     dig-site progress state, yield **application** to a stockpile, the hex-becomes-Cave transition,
+     the `EventBus` → `MapRenderer.mark_hex_dirty` wiring, **all nine of §3.4's per-player steps and
+     all three World-phase steps**, income/upkeep/housing/Mining Zones, and §3.1's starting kit
+     (which still needs its **own** new §12.1 key and therefore its **own** amendment).
+  5. **(AW)(v) — §13.2 TIER 3's GOLDEN IS *STILL* OWED, AND THIS IS THE REQUIRED RE-STATEMENT
+     ((AV) item 7 asked for it to be SAID, not silently skipped).** §13.2's tier 3 is *"fixed seed +
+     recorded command log ⇒ recorded `GameState.hash()` after N turns"*. **This slice adds no
+     economy tick at all** — it mutates no `GameState`, so freezing the fold now would still force a
+     re-record on the very next slice, and §13.6 permits a re-record only *with a logged reason*.
+     The obligation is unchanged and inherited: **the slice that lands §3.4 step 4's dig tick — the
+     first real state change with yields flowing into a stockpile — should record it.**
+  6. **(AW)(vi) — THE ONE LANDED ASSERTION THAT MOVED, AND WHY IT IS A VOCABULARY COLLISION RATHER
+     THAN A LOADER REGRESSION.** `tests/unit/test_rules_loader.gd::test_reject_missing_dig_yields_artificial_granite`
+     previously expected the error at line **4** and now expects line **5**. Mechanism, measured
+     live: M0-T2 item 3's line attribution scans **forward from the parent group's line** for the
+     child's quoted token and **falls back to the group line** when it finds none. Before this task,
+     deleting `dig_yields.artificial_granite` left **no `"artificial_granite"` token at or after line
+     4**, so the fallback fired and reported the group line; `dig.profiles` is keyed by §4.2
+     **terrain** ids, one of which is literally `artificial_granite`, and it now sits on **line 5**,
+     so the scan finds a real token and the fallback no longer fires. The assertion is
+     **re-pinned, not weakened** — it still requires **exactly one** error, an **exact** line, the
+     exact dotted path and `rules` left **empty** — and the test's doc comment carries the full
+     explanation. Layout alternatives were considered and rejected: placing `dig` *before*
+     `dig_turns` would have preserved the fallback but shifted `DIG_YIELDS_LINE` 4 → 5 and
+     contradicted the layout mandate, so the spec-conformant layout was kept. **No other attribution
+     is affected** — independently re-verified at Verify that the only other `"dig"` token in the
+     file is `noise.dig` on line 11 and it still attributes to 11.
+  7. **(AW)(vii) — TWO ENGINE/ARITHMETIC FACTS MEASURED LIVE THIS ITERATION, worth keeping.**
+     (a) **`JSON.stringify`'s `sort_keys` parameter DEFAULTS TO `true`** on the pinned 4.7 build —
+     any fixture that depends on **document** order must pass `JSON.stringify(data, "", false)`, and
+     the map-ordering fixture of item 2 silently lost its whole premise until this was found.
+     (b) **§4.2 line 197's round-up halving has a FIXED POINT AT 1**: `ceil(1/2) = 1`, so *"Dig 2×"*
+     can speed a dig up but **can never finish it**. That is a consequence of the printed rule, not
+     a choice, and it is now pinned by test — an implementation using **floor** would drive 1 → 0
+     and let stacked Dig 2× complete digs for free. `halve_remaining_turns` is
+     `(n + 1) / _HALVE_DIVISOR` guarded by `n <= 0 → 0` (totality). Note that **ceil and §11.1's
+     round-half-up coincide here** because the fraction is only ever 0 or 0.5, so no new rounding
+     convention is introduced; and the divisor **2** is a **NAMED private const citing §4.2 line
+     197** (the (AJ) named-mathematical-const precedent), deliberately *not* a §12.1 key — §4.2's
+     line-197 numbers are **both 2**, and the suite proves the divisor is not accidentally read from
+     `dig.max_diggers_per_hex` by patching that constant to **3** and asserting the halving is
+     **unchanged** (3 → 2) while `max_diggers_per_hex()` answers **3**.
+  8. **THIS SLICE DELIBERATELY DOES NOT RIDE THE COMMAND SPINE, AND THAT IS CORRECT — so §13.6's
+     *events* clause is VACUOUS here** (stated explicitly, exactly as (AV) item 11 stated it for
+     §12.1). `DigRules` is a **pure lookup over loaded data**: it mutates no `GameState`, emits no
+     `Event`, constructs no `Command` and touches no `EventBus`. This is pinned **negatively** — a
+     comment-stripped source scan forbids the tokens `GameState`, `Command`, `Event` and `EventBus`
+     in `dig_rules.gd`, and `tests/sim/test_turn_replay.gd` is **untouched and still green**. The
+     spine ((AV)) remains the **only** mutation path; the next slice's `DigHexCommand` is its first
+     dig-side consumer.
+  9. **§13.6 DEFINITION OF DONE, clause by clause, stated rather than assumed.** *Tests green
+     headless*: yes — **643/643**, exit 0, `Scripts 27` == the 27 `test_*.gd` on disk. *Static typing
+     clean*: `bash tools/typecheck.sh` exit 0 over **49** files at the M0-T4 gate; every declaration
+     is `var x: T = …`; **no `float` token and no float literal** anywhere in `dig_rules.gd`; the one
+     integer division carries its own `@warning_ignore("integer_division")` at the statement that
+     needs it. *Constants read from data, not code*: **NON-VACUOUS AND STRICT — this is the clause
+     the whole slice is about.** Verify re-ran an independent comment-stripped scan: the **only**
+     standalone numerals in `dig_rules.gd` are `0`, `1` and the single `2` of
+     `const _HALVE_DIVISOR`; **every** §4.2/§12.1 table value (3, 4, 10, 15, 25, 60, 120, 150, 250)
+     is **absent**, as are all nine §4.2 terrain ids and all seven §5.1 resource ids (watching
+     incidental substrings — *"environment"* contains *"iron"*). What the file **does** name, and
+     must, is the §12.1 **schema paths** (`dig.profiles.`, `dig_turns.`, `dig_yields.`,
+     `vein_nodes.`, `dig.max_diggers_per_hex`) and the four profile leaf names — the same contract
+     `RulesLoader._spec()` already holds. *Events emitted for every state change*: **vacuous**, item
+     8. *Goldens re-recorded only with a logged reason*: **none re-recorded, none created** — item 5.
+     *Relevant GDD cell updated if numbers moved*: **no number moved**; the single GDD edit is the
+     new §12.1 `dig` key line of item 1, made by Land in this commit.
+  10. **THE EXPECTED-PUBLIC-MEMBER LIST IS EXACT AND WAS WRITTEN IN THIS SAME COMMIT** (the standing
+     PROGRESS rule). `DigRules` = **seven** public functions — `is_diggable`, `dig_turns_for`,
+     `yield_resource_ids`, `yield_amount`, `vein_resource_id`, `max_diggers_per_hex`,
+     `halve_remaining_turns` — plus `_init(p_rules: RulesLoader)`, and **ZERO public vars and ZERO
+     public consts** (a **missing OR extra** member fails; `_HALVE_DIVISOR` and `_profile_key` are
+     `_`-prefixed). There is deliberately **no `errors` var**: this file **loads no document**, so
+     the scan asserts `RulesError` is **ABSENT** (the M1-T9 "no second loader" rule), and class kind
+     is checked via `get_class()`, **never** `is Node` (a statically-decidable construct
+     parse-errors and silently un-collects the whole file). `RulesLoader` grew exactly **one** public
+     function, `get_keys`; it still has no exact-public-surface scan, and if one is ever added
+     `get_keys` belongs on the list.
+  11. **UNCONFIGURED AND TOTAL EVERYWHERE (the (AL) precedent, the (B)/(L)/(AS) spirit).** An
+     unknown or empty terrain id (`""`, `"cave"`, `"plain_floor"`, `"not_a_type"`) answers
+     `is_diggable` **false**, `dig_turns_for` **0** for *both* owner flags, `yield_resource_ids`
+     **empty**, `yield_amount` **0** and `vein_resource_id` **""**; `is_diggable` is true for
+     **exactly** the nine §4.2 Solid rows. A `DigRules` built on a **null** `RulesLoader`, or on one
+     whose **load failed** (rules left empty), answers those same unconfigured values *and*
+     `max_diggers_per_hex() == 0`. A bad argument can never tear down a headless run.
+     **Cross-data integrity is pinned too**: every terrain type id appearing in
+     `data/mapgen/concentric_bowl.json`'s `composition[].weights[].type` has a `dig.profiles` entry,
+     so **no generated hex can ever be undiggable by omission** — that file is read, never edited
+     (the M1-T5 golden `0xcad24923` hashes what it produces).
+  12. **NO NUMBERED MUTATION-PROBE BATTERY THIS ITERATION — and that is recorded honestly rather
+     than papered over.** The eleven-iteration probe practice (M1-T1 item 8 → (AV) item 10) was
+     replaced this time by a **stronger** satisfiability proof at the Tests stage: a **throwaway
+     reference implementation** of all three pieces (the `dig` data, the loader `map` kind, and
+     `DigRules`) was written, run to **27 / 643 / 643 / 0 / 7452 exit 0**, and then **fully reverted**
+     by md5-verified copy, leaving `data/ruleset.json` byte-identical to HEAD. That pass caught
+     **three real bugs in the tests themselves**: (i) an assertion that repeated halving reaches 0 —
+     it does not, item 7(b); (ii) the `JSON.stringify` sort-keys default that destroyed the ordering
+     fixture's premise, item 7(a); (iii) the line-4 → line-5 attribution move, item 6. At Verify the
+     tests were **not** taken on trust: every pinned constant was hand-traced back to §4.2/§5.1/§5.2/
+     §7.1/§12.1 and to this file, and the forbidden-token scan of item 9 was **re-run independently**
+     of the suite's own. **Verify made no fix** (`fixes_made` empty — the second iteration running).
+     The probe battery should return at the next slice, which *does* mutate state.
+  13. **THE TESTS-STAGE STUB CONVENTION WAS USED AGAIN AND WORKED — SEVENTH CONSECUTIVE TIME**
+     (M1-T2 item 10 → (AV) item 14). `scripts/sim/systems/dig_rules.gd` (full final public surface,
+     doc comments and `_HALVE_DIVISOR` correct; **seven wrong bodies**) and `RulesLoader.get_keys`
+     (a stub answering empty) were shipped to Implement under explicit **DO-NOT-SHIP banners** so the
+     suite would **parse** — a call to a missing method is a GDScript parse error that silently
+     un-collects the whole file (M0-T5 item (a)'s false green). RED was measured at **Scripts 27 /
+     Tests 643 / Passing 611 / Failing 32** with **zero** occurrences of `Parse Error` /
+     `SCRIPT ERROR` / `Ignoring script` / `Failed to load script` / `Invalid call` / `Nonexistent`,
+     so every failure was **behavioural**. The two standing parse traps were honoured and neither
+     fired: `log` is a GDScript built-in (a var *or parameter* named `log` is
+     `shadowed_global_identifier` = level 2 = hard error), and a literal `%` inside a String later
+     used with the format operator is *"unsupported format character in operator %"*.
+  14. **IMPLEMENTER AND VERIFIER DEVIATIONS, REVIEWED AND ACCEPTED — no rule change follows from any
+     of them.** (a) The Implement stage reported **no** deviation from the spec or the Tests-stage
+     notes: the provided shapes matched the tests exactly, so they were followed directly rather
+     than re-derived. (b) Implement correctly left `docs/GAME_DESIGN.md`, `docs/decisions.md` and
+     `docs/PROGRESS.md` **untouched** — those are **Land**-stage artefacts and the GDD is read-only
+     for Tests/Implement/Verify; that is the standing stage boundary (M0-T5 item (i) → (AV) item 15),
+     **not** a deviation. (c) `tests/unit/test_rules_loader.gd` was already modified by the Tests
+     stage before Implement started; the Implement stage edited **no** test file. (d) The
+     implementer flagged one line for review: `yield_amount`'s vein branch decides with
+     `not vein_key.is_empty() and vein_key == p_resource_id`. Verify checked it and it is **correct
+     and deliberate** — the non-empty guard is what prevents a query for the resource id `""` from
+     matching a row that leaves no vein, and it is covered by the *unknown resource id yields zero*
+     test. No change made. (e) Verify's `deviations` array is the source of items 1–7 above; it
+     reported **no failures remaining** and made **no fix**.
+
+- **Why:** §4.2's dig paragraph is the most **tabular** rule in M2 and therefore the textbook §13.3
+  *"write the failing tests first"* candidate — and it is a hard prerequisite of `DigHex`/`CancelDig`,
+  of §3.4 step 4's dig tick, and of §14 M2's *"Scripted 20-turn dig scenario matches expected
+  stockpiles exactly"*. Landing the **table** before the **command** means the next slice argues
+  about state and events, never about numbers. The one genuinely new decision is item 1: the
+  terrain-id → §12.1-key binding had to live **somewhere**, and every alternative to data was a
+  whitelist in engine code — the thing three prior resolutions forbid and the thing that would break
+  §13.5's M6 canary. Item 2 is its unavoidable consequence: a group whose **keys are content** needs
+  a spec kind that validates *observed* keys, and the moment the loader iterates a Dictionary it owes
+  §11.1 a deterministic order. Items 6 and 7 are recorded at length because both were **measured, not
+  reasoned**: a landed assertion moved for a reason that looks like a regression and is not, and a
+  round-up halving that any implementer would have written with `floor` has a fixed point that
+  changes what *"Dig 2×"* can do. Item 5 is the standing obligation being paid forward honestly
+  rather than quietly dropped for a second time.
+
+- **GDD sections affected:** **ONE CELL EDITED — the §12.1 excerpt gains the single new `dig` key
+  line** (item 1), added by **Land in this commit**, alongside this entry; **§4.2's table is the
+  authority and is byte-unchanged**, and no other GDD text moved. **§4.2** (the whole nine-row Solid
+  table now readable from data — dig times, the §7.1 owner variant, yields including the four vein
+  lumps, the *"+ node"* column reduced to its resource id, and line 197's **two** rules; the terrain
+  ids themselves stay **out** of engine code). **§7.1** (line 367 is the evidence for the owner
+  variant's meaning — item 3; Dwarf-built Artificial Granite itself is **M3**). **§5.1** (its seven
+  resource ids are the yield vocabulary and are **forbidden tokens** in `dig_rules.gd`; pinned by
+  test only). **§5.2** (`vein_resource_id` answers *which* node a vein row leaves; **stock/rate and
+  Extractors deliberately NOT built** — item 4). **§11.1** (pure sim core: engine-free,
+  integer-only, deterministic, every returned Array fresh and ascending; **no state mutated, so the
+  command spine is untouched** — item 8). **§11.2** (`scripts/sim/systems/` **created as printed** on
+  line 724). **§11.3** (typing gate green over **49** files; a `## §<section>` doc comment on every
+  public function; the public surface is **exact** — item 10). **§12.1** (**amended**: the new `dig`
+  group, item 1; `dig_turns`, `dig_yields` and `vein_nodes` are now genuinely **consumed**, not only
+  validated). **§13.2** (one new **tier-1** suite `tests/unit/test_dig_rules.gd` (32 tests) and 13
+  more tests in `tests/unit/test_rules_loader.gd`; **tier 3's golden is STILL OWED** — item 5).
+  **§13.4** (procedure exercised: seven silences resolved under (AW), nothing stalled, nothing
+  invented ahead of its milestone). **§13.5** (the M6 zero-engine-change canary is what item 1 is
+  protecting). **§13.6** (definition of done **MET**, every clause re-checked in item 9; the
+  *constants-from-data* clause is **non-vacuous and strict** here; no golden re-recorded).
+  **§14 M2 row — the milestone is STILL OPEN, NOT met. Acceptance criterion text unchanged**; none
+  of *"Scripted 20-turn dig scenario matches expected stockpiles exactly"*, *"deficit-bleed test"* or
+  *"zone assigns nearest idle worker"* is satisfied yet.

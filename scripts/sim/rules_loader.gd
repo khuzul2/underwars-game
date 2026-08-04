@@ -140,6 +140,21 @@ func get_int_array(dotted_path: String) -> Array[int]:
 	return out
 
 
+## §12.1 — the keys of the object at `dotted_path`, ASCENDING, a FRESH [Array] every call. Empty
+## for a missing path or a non-object leaf. This is the accessor the author-chosen "map" spec
+## kind exists to make readable (e.g. `dig.profiles`).
+func get_keys(dotted_path: String) -> Array[String]:
+	var out: Array[String] = []
+	var value: Variant = _resolve(dotted_path)
+	if not (value is Dictionary):
+		return out
+	for key: Variant in (value as Dictionary).keys():
+		if key is String:
+			out.append(key)
+	out.sort()
+	return out
+
+
 # -------------------------------------------------------------------------------------------
 # Internal: dotted-path resolution.
 # -------------------------------------------------------------------------------------------
@@ -199,6 +214,23 @@ func _spec() -> Array[Dictionary]:
 					"children": [{"path": "stone", "kind": "int"}],
 				},
 				{"path": "rubble", "kind": "object", "children": [{"path": "stone", "kind": "int"}]},
+			],
+		},
+		{
+			"path": "dig",
+			"kind": "object",
+			"children": [
+				{"path": "max_diggers_per_hex", "kind": "int"},
+				{
+					"path": "profiles",
+					"kind": "map",
+					"entry": [
+						{"path": "turns_key", "kind": "string"},
+						{"path": "owner_turns_key", "kind": "string"},
+						{"path": "yield_key", "kind": "string"},
+						{"path": "vein_key", "kind": "string"},
+					],
+				},
 			],
 		},
 		{
@@ -353,6 +385,21 @@ func _validate_node(
 						if not _is_integral(entry):
 							_add_error(dotted, "\"%s\" entries must be integers" % dotted, lines)
 							break
+		"map":
+			if not (value is Dictionary):
+				_add_error(dotted, "\"%s\" must be an object" % dotted, lines)
+			else:
+				var entries: Dictionary = value as Dictionary
+				if entries.is_empty():
+					_add_error(dotted, "\"%s\" must not be empty" % dotted, lines)
+				else:
+					var entry_spec: Array = node["entry"]
+					var observed: Array = entries.keys()
+					observed.sort()
+					for observed_key: Variant in observed:
+						var entry_dotted: String = "%s.%s" % [dotted, observed_key]
+						for child: Dictionary in entry_spec:
+							_validate_node(entries[observed_key], child, entry_dotted, lines)
 
 
 ## True for an [int] or a fractionless [float] — Godot's JSON parser hands every number back

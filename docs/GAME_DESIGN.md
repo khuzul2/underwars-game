@@ -785,6 +785,10 @@ All content is JSON validated by RulesLoader (also used by editors and the CLI â
 
   
 
+  "dig": {"max\_diggers\_per\_hex": 2, "profiles": {"soft\_dirt": {"turns\_key": "soft", "owner\_turns\_key": "", "yield\_key": "soft", "vein\_key": ""}, "hard\_rock": {"turns\_key": "hard", "owner\_turns\_key": "", "yield\_key": "hard", "vein\_key": ""}, "dense\_granite": {"turns\_key": "granite", "owner\_turns\_key": "", "yield\_key": "granite", "vein\_key": ""}, "artificial\_granite": {"turns\_key": "artificial\_granite", "owner\_turns\_key": "artificial\_granite\_owner", "yield\_key": "artificial\_granite", "vein\_key": ""}, "rubble": {"turns\_key": "rubble", "owner\_turns\_key": "", "yield\_key": "rubble", "vein\_key": ""}, "gold\_vein": {"turns\_key": "vein", "owner\_turns\_key": "", "yield\_key": "", "vein\_key": "gold"}, "iron\_vein": {"turns\_key": "vein", "owner\_turns\_key": "", "yield\_key": "", "vein\_key": "iron"}, "magestone\_crust": {"turns\_key": "vein", "owner\_turns\_key": "", "yield\_key": "", "vein\_key": "magestone"}, "mithril\_seam": {"turns\_key": "mithril", "owner\_turns\_key": "", "yield\_key": "", "vein\_key": "mithril"}}},
+
+  
+
   "vein\_nodes": {"gold": {"lump": 25, "stock": 250, "rate": 10}, "iron": {"lump": 10, "stock": 120, "rate": 6}, "magestone": {"lump": 15, "stock": 150, "rate": 6}, "mithril": {"lump": 10, "stock": 60, "rate": 3}},
 
   
