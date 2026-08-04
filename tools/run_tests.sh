@@ -12,10 +12,13 @@
 set -u -o pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GODOT="${GODOT_BIN:-/c/Users/aless/bin/godot47/Godot_v4.7-stable_win64_console.exe}"
+# Self-contained toolchain: ALWAYS the repo-local binary (godot/ is gitignored — 178 MB exceeds
+# GitHub's file limit; a fresh clone must drop the official 4.7-stable win64 build into godot/).
+GODOT="$ROOT/godot/Godot_v4.7-stable_win64_console.exe"
 
-if [ ! -x "$GODOT" ] && ! command -v "$GODOT" >/dev/null 2>&1; then
-  echo "run_tests.sh: Godot binary not found: $GODOT (set GODOT_BIN)" >&2
+if [ ! -x "$GODOT" ]; then
+  echo "run_tests.sh: repo-local Godot missing: $GODOT" >&2
+  echo "  Place Godot_v4.7-stable_win64_console.exe + Godot_v4.7-stable_win64.exe in godot/ (see README)." >&2
   exit 2
 fi
 

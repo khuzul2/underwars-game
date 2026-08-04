@@ -24,18 +24,20 @@ Turn-based 4X / base-builder / tactical warfare in a carved subterranean underwo
 
 ## Toolchain (this machine)
 
-- **Pinned Godot binary:** `C:\Users\aless\bin\godot47\Godot_v4.7-stable_win64_console.exe` (4.7.stable.official.5b4e0cb0f, headless verified). `tools/run_tests.sh` resolves it via `$GODOT_BIN` with this pinned default — prefer the script over the bare `godot` PATH shim, which is NOT pinned (it prefers a Google-Drive copy when `G:` is mounted; a re-mount would silently switch binaries mid-loop).
+- **Pinned Godot binary (self-contained):** `godot/Godot_v4.7-stable_win64_console.exe` in the repo root (4.7.stable.official.5b4e0cb0f, headless verified; the console exe is a wrapper that needs `Godot_v4.7-stable_win64.exe` next to it). `tools/run_tests.sh` uses it unconditionally, and every ad-hoc `godot` command in this repo means this binary — invoke it as `./godot/Godot_v4.7-stable_win64_console.exe` from the repo root. **Never** use the bare `godot` PATH shim or any machine-global install. `godot/` is gitignored (the 178 MB exe exceeds GitHub's limit); a fresh clone must restore the two exes into `godot/` (README).
 - **GUT 9.7.1** is vendored at `addons/gut/` (do not upgrade/modify it; it is not project code).
 - Shell scripts (`tools/run_tests.sh`) run under Git Bash (the Bash tool), not PowerShell.
 - Repo: `https://github.com/khuzul2/underwars-game` (branch `main`).
 
 ## Test commands (GDD §13.1, as amended — see decisions.md 2026-08-04)
 
+`godot` below = the repo-local binary: run from the repo root as `./godot/Godot_v4.7-stable_win64_console.exe`.
+
 ```bash
 bash tools/run_tests.sh          # from M0 — imports (.godot cache), then GUT with -ginclude_subdirs; hardened: exits non-zero if zero tests ran
-godot --headless -s tools/sim_smoke.gd -- seed=42 turns=60 map=small factions=dwarves,goblins   # fully meaningful from M7 (needs M6 factions + M7 AI)
-godot --headless -s tools/content_cli.gd -- validate data/    # delivered in E4 (Phase 2); Phase-1 substitute: GUT tests on RulesLoader (M0 acceptance)
-godot --headless -s tools/balance_lab.gd -- matches=100 out=reports/balance.csv   # delivered in E5 (Phase 2)
+./godot/Godot_v4.7-stable_win64_console.exe --headless -s tools/sim_smoke.gd -- seed=42 turns=60 map=small factions=dwarves,goblins   # fully meaningful from M7 (needs M6 factions + M7 AI)
+./godot/Godot_v4.7-stable_win64_console.exe --headless -s tools/content_cli.gd -- validate data/    # delivered in E4 (Phase 2); Phase-1 substitute: GUT tests on RulesLoader (M0 acceptance)
+./godot/Godot_v4.7-stable_win64_console.exe --headless -s tools/balance_lab.gd -- matches=100 out=reports/balance.csv   # delivered in E5 (Phase 2)
 ```
 
 **Applicability rule:** run every command that applies to the current milestone (`run_tests.sh` always, once M0 lands). A command whose tool is not yet due — or not yet built — is **not** a blocker and must not be reported as a failure. `tools/run_tests.sh` is pre-provided as the harness *contract*: make it pass, never weaken it (it deliberately fails when GUT collects zero tests — GUT itself exits 0 in that state; `reports/` contents are gitignored, so balance tooling must `mkdir -p` its output dir and evidence files are force-added deliberately).

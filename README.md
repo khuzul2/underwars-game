@@ -7,6 +7,17 @@ the dark — then meets the neighbors, and the things that live below.
 **Engine:** Godot 4.7 (GDScript, 3D) · **Tests:** GUT 9.7.1 (vendored at `addons/gut/`)
 **Development model:** autonomous AI agent loop with a headless test loop.
 
+## Self-contained toolchain
+
+The engine lives **inside the repo** at `godot/` and everything (tests, tools, agents) uses only
+that copy — no PATH shims, no machine-global installs. `godot/` is gitignored because the main
+exe (178 MB) exceeds GitHub's file limit, so after a fresh clone restore it once:
+
+1. Download **Godot 4.7-stable win64** (official build, `4.7.stable.official.5b4e0cb0f`).
+2. Put `Godot_v4.7-stable_win64.exe` and `Godot_v4.7-stable_win64_console.exe` in `godot/`.
+
+`tools/run_tests.sh` exits 2 with instructions if the binaries are missing.
+
 ## Key documents
 
 | File | Purpose |
@@ -39,15 +50,15 @@ Delivered by **M7** (needs M6 factions + M7 AI; the tool may exist earlier but t
 acceptance bar):
 
 ```bash
-godot --headless -s tools/sim_smoke.gd -- seed=42 turns=60 map=small factions=dwarves,goblins
+./godot/Godot_v4.7-stable_win64_console.exe --headless -s tools/sim_smoke.gd -- seed=42 turns=60 map=small factions=dwarves,goblins
 ```
 
 Delivered by **E4** and **E5** (Phase 2):
 
 ```bash
-godot --headless -s tools/content_cli.gd -- validate data/
+./godot/Godot_v4.7-stable_win64_console.exe --headless -s tools/content_cli.gd -- validate data/
 ```
 
 ```bash
-godot --headless -s tools/balance_lab.gd -- matches=100 out=reports/balance.csv
+./godot/Godot_v4.7-stable_win64_console.exe --headless -s tools/balance_lab.gd -- matches=100 out=reports/balance.csv
 ```

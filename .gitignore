@@ -1,5 +1,9 @@
 # Godot 4
 .godot/
+
+# Repo-local engine binaries (self-contained toolchain; 178 MB main exe exceeds
+# GitHub's 100 MB limit, so the binaries stay local — see README to restore)
+/godot/
 *.tmp
 export_presets.cfg
 

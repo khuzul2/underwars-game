@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(godot:*)",
+      "Bash(./godot/Godot_v4.7-stable_win64_console.exe:*)",
+      "Bash(godot/Godot_v4.7-stable_win64_console.exe:*)",
       "Bash(bash tools/run_tests.sh)",
       "Bash(bash tools/run_tests.sh:*)",
       "Bash(git status:*)",
@@ -14,8 +15,7 @@
       "Bash(git push)",
       "Bash(git push:*)",
       "Bash(git pull --rebase:*)",
-      "Bash(mkdir:*)",
-      "PowerShell(godot:*)"
+      "Bash(mkdir:*)"
     ]
   }
 }

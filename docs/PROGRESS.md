@@ -50,5 +50,6 @@ not-yet-committed.
   rewrite or weaken it. It exits 2 while `project.godot` is missing (harness unavailable, not a
   test failure), 1 if GUT collects zero tests, and it runs `--import` before GUT (GUT 9.7.1
   exits 0 without that cache — see decisions.md 2026-08-04).
-- Godot binary is pinned in the script via `$GODOT_BIN` default; don't rely on the PATH shim.
+- Godot is repo-local: `godot/Godot_v4.7-stable_win64_console.exe` — the ONLY binary any agent
+  may use (decisions.md SETUP-3). Never the `godot` PATH shim.
 - `.claude/settings.json` allowlists godot/git/test commands for unattended runs.
