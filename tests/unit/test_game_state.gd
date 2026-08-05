@@ -290,11 +290,13 @@ const FOLD_ORDER_TOKENS: Array[String] = [
 	"dig_site_hexes",
 ]
 
-## (AY)/G1 NEGATIVE PIN, RE-SCOPED BY M2-T6 (slice 3b) — the `.gd` files `scripts/sim/commands/`
-## and `scripts/sim/events/` hold after this slice. M2-T6 adds EXACTLY ONE of each:
-## `CancelDigCommand` (§11.1 line 705's FIFTH printed name, and the THIRD of the fourteen to be
-## built) and `DigCancelledEvent`. The dig TICK, its yield application and the hex-becomes-Cave
-## transition are SLICE 4 and add neither a Command nor an Event here.
+## (AY)/G1 NEGATIVE PIN, RE-SCOPED BY M2-T6 (slice 3b) AND AGAIN BY M2-T7 (slice 4) — the `.gd`
+## files `scripts/sim/commands/` and `scripts/sim/events/` hold after this slice. M2-T7 adds
+## **ZERO** Commands (§3.4 step 4 is a RULE reached from `EndTurnCommand.apply()`, not a fourth of
+## §11.1 line 705's fourteen printed names) and **EXACTLY TWO** Events — `DigProgressedEvent` and
+## `DigCompletedEvent`, the FOURTH and FIFTH concrete subclasses ((BA)(v): TWO events, not four,
+## with the completion's payload making each sub-change observable). The rule module itself lands
+## in `scripts/sim/systems/`, enumerated separately below.
 const COMMAND_FILES: Array[String] = [
 	"cancel_dig_command.gd",
 	"command.gd",
@@ -304,8 +306,17 @@ const COMMAND_FILES: Array[String] = [
 ]
 const EVENT_FILES: Array[String] = [
 	"dig_cancelled_event.gd",
+	"dig_completed_event.gd",
+	"dig_progressed_event.gd",
 	"dig_started_event.gd",
 	"turn_ended_event.gd",
+]
+
+## (BA) — §11.2 line 724 prints `systems/` verbatim ("systems/ (economy, breach, escalation,
+## victory)"). M2-T7 adds EXACTLY ONE file there: `dig_tick.gd`, §3.4 step 4's rule.
+const SYSTEM_FILES: Array[String] = [
+	"dig_rules.gd",
+	"dig_tick.gd",
 ]
 
 ## Doc-comment sections accepted by the S6 scan for this file (§11.3).
@@ -1487,30 +1498,37 @@ func test_content_hash_separates_states_differing_only_in_one_site() -> void:
 # C8. §13.4 NEGATIVE PINS — what M2-T5 deliberately does NOT add
 # =============================================================================================
 
-## (AY)/G1, RE-SCOPED BY M2-T6 — M2-T6 adds EXACTLY ONE Command file and EXACTLY ONE Event file:
-## `CancelDigCommand` and `DigCancelledEvent`. The dig TICK, yield application and the
-## hex-becomes-Cave transition are SLICE 4 and add neither. Pinned by enumerating the two spine
-## directories so a stray file cannot appear unremarked (§13.4).
-func test_exactly_one_command_and_one_event_file_was_added_in_this_slice() -> void:
+## (AY)/G1, RE-SCOPED BY M2-T6 AND AGAIN BY M2-T7 — slice 4 adds ZERO Command files, EXACTLY TWO
+## Event files (`DigProgressedEvent`, `DigCompletedEvent`) and EXACTLY ONE `systems/` file
+## (`DigTick`). Pinned by enumerating the three spine directories so a stray file cannot appear
+## unremarked (§13.4) — and so "(BA)(v): TWO events, not four" is enforced on disk, not only in
+## prose.
+func test_exactly_the_expected_spine_files_exist_after_this_slice() -> void:
 	assert_eq(
 		_gd_files("res://scripts/sim/commands"),
 		COMMAND_FILES,
-		"(AZ): M2-T6 adds exactly one Command (CancelDigCommand) — the dig tick is slice 4"
+		"(BA): M2-T7 adds NO Command — §3.4 step 4 is a rule reached from EndTurnCommand.apply()"
 	)
 	assert_eq(
 		_gd_files("res://scripts/sim/events"),
 		EVENT_FILES,
-		"(AZ): M2-T6 adds exactly one Event (DigCancelledEvent) — the dig tick is slice 4"
+		"(BA)(v): M2-T7 adds exactly TWO Events — dig_progressed and dig_completed, not four"
+	)
+	assert_eq(
+		_gd_files("res://scripts/sim/systems"),
+		SYSTEM_FILES,
+		"§11.2 line 724/(BA): M2-T7 adds exactly one systems/ file — the §3.4 step-4 rule"
 	)
 
 
-## §3.4 (lines 141–165) NEGATIVE PIN, EXTENDED BY (AX) AND AGAIN BY (AY) — the nine per-player
-## start-of-turn steps and the three World-phase steps are ALL still unimplemented. After any
-## number of accepted EndTurns NO unit is spawned, moved, paid, bled or killed, **§3.4 step 4's
-## dig progress does NOT tick**, and the one seeded stream has still drawn nothing.
-## (`tests/unit/test_end_turn_command.gd` owns the stockpile half of this pin and is untouched;
-## this is the roster + registry half.)
-func test_ending_turns_spawns_no_unit_ticks_no_dig_and_draws_no_roll() -> void:
+## §3.4 (lines 141–165) NEGATIVE PIN, EXTENDED BY (AX) AND (AY) AND RE-SCOPED BY M2-T7 — the other
+## eight per-player start-of-turn steps and the three World-phase steps are ALL still
+## unimplemented, and §3.4 step 4 ticks only when a [DigRules] is INJECTED ((BA)(vi)). This
+## fixture builds `EndTurnCommand.new(index)` with NO table, so after any number of accepted
+## EndTurns NO unit is spawned, moved, paid, bled or killed, **no dig progress is spent**, no site
+## is removed, and the one seeded stream has still drawn nothing. The POSITIVE counterpart lives in
+## `tests/unit/test_dig_tick.gd` / `tests/sim/test_dig_scenario.gd`.
+func test_ending_turns_without_dig_rules_spawns_no_unit_and_ticks_no_dig() -> void:
 	var state: GameState = GameState.new(GOLDEN_SEED, null, MAX_PLAYERS)
 	var site: DigSite = state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS)
 	assert_not_null(site, "fixture: a dig site is registered")

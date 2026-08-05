@@ -4362,3 +4362,347 @@ constant is not a §13.6 violation). The lettering genuinely ended at **(AY)**, 
   is now **complete as an ordering pair** (`DigHex` + `CancelDig`), but none of *"Scripted 20-turn dig
   scenario matches expected stockpiles exactly"*, *"deficit-bleed test"* or *"zone assigns nearest
   idle worker"* is satisfied — the first needs slice 4's tick and yield application.
+
+## 2026-08-05 — M2-T7 — `DigTick`: §3.4 step 4's dig TICK + §4.2 yield APPLICATION + the hex-becomes-Cave transition + `DigProgressedEvent`/`DigCompletedEvent`; resolution (BA); **the THIRD §12.1 amendment (`dig.cave_terrain_id`, one GDD cell edited)**; **THE §13.2 TIER-3 GOLDEN IS RECORDED — a five-times-restated debt CLOSED**; landed GREEN
+
+**Status: landed green.** `bash tools/run_tests.sh` exits **0** at **Scripts 38 / Tests 938 /
+Passing 938 / Failing 0 / Asserts 11774** (the M2-T6 baseline was 33 / 846 / 846 / 0 / 10077; the
+delta is **exactly** the 26 new tests in `test_dig_tick.gd` + 17 in `test_dig_progressed_event.gd` +
+18 in `test_dig_completed_event.gd` + 7 in `test_dig_scenario.gd` + 5 in `test_dig_tick_golden.gd`
+= **73 in five new suites**, plus **19** added to the five **re-scoped** suites = 92, so **no
+previously-landed test was lost, skipped or regressed** — four negative pins were RE-SCOPED and
+strictly STRENGTHENED, never deleted, per the (AZ)(vi) rule this project adopted last iteration);
+`bash tools/typecheck.sh` exits 0 over **69** files (was 61 — three new production files plus five
+new suites); `bash tools/ci.sh` PASSes; `bash tools/verify_harness.sh` PASSes across all four phases
+(A green · B failing canary · C syntactic parse error · D statically-impossible construct) with the
+tree left clean. All ran headless through the `tools/` scripts on the repo-local pinned
+`godot/Godot_v4.7-stable_win64_console.exe`, never the PATH shim (SETUP-3) and never through WSL
+bash ((AU) item 10). `sim_smoke` (M7), `content_cli` (E4) and `balance_lab` (E5) were correctly
+**SKIPped, not failed**, per CLAUDE.md's applicability rule. `Scripts 38` equals the 38 `test_*.gd`
+on disk, so the M0-T5 enumeration guard is satisfied and nothing was silently un-collected.
+**`goldens_rerecorded: false` — no golden was RE-recorded; one was CREATED for the first time**
+(item 10). `tests/golden/mapgen_concentric_bowl_small_seed1337.json` (`content_hash 0xcad24923`) is
+**byte-untouched and still green**, as are `data/mapgen/`, `scenes/`, `project.godot`, `tools/`,
+`addons/`, `scripts/core/*` (including `event.gd` and `event_bus.gd` — the M0-T3 **(f)** precedent
+holds for a fourth and fifth event), `scripts/sim/game_state.gd`, `scripts/sim/dig_site.gd`,
+`scripts/sim/unit_state.gd`, `scripts/sim/player_state.gd`, `scripts/sim/hex_map.gd`,
+`scripts/sim/map_generator.gd`, `scripts/sim/commands/command.gd`, `command_error.gd`,
+`dig_hex_command.gd` and `cancel_dig_command.gd`. **ONE GDD CELL WAS EDITED** — the §12.1 excerpt's
+`dig` group line (`docs/GAME_DESIGN.md` line 788) gained `"cave\_terrain\_id": "plain\_floor"`,
+by Land, in **this** commit (item 5). **§4.2's table is byte-unchanged — no printed NUMBER moved.**
+
+**THIS IS SLICE 4 OF THE DIG CHAIN, AND IT IS THE SLICE WHERE THE DIG CHAIN FINALLY MOVES A
+NUMBER.** `scripts/sim/systems/dig_tick.gd` (**new**, 93 lines / **41 code** — the project's
+**second** `scripts/sim/systems/` file), `scripts/sim/events/dig_progressed_event.gd` (**new**, 54
+lines / **26 code** — the project's **FOURTH** concrete `Event` subclass) and
+`scripts/sim/events/dig_completed_event.gd` (**new**, 71 lines / **34 code** — the **FIFTH**), plus
+**40 changed lines** across `end_turn_command.gd`, `dig_rules.gd`, `rules_loader.gd` and
+`data/ruleset.json`: **218 new + 40 changed production lines**, comfortably inside the ≤ ~300 LOC
+ceiling, so the contingency split named in the task spec (land the tick alone, defer completion +
+the golden to M2-T8) was **measured and correctly NOT taken** — which is why the golden did **not**
+slip a sixth time. **§14 M2 ACCEPTANCE CRITERION (a) IS NOW MET** (*"Scripted 20-turn dig scenario
+matches expected stockpiles exactly"* — `tests/sim/test_dig_scenario.gd`), **the first M2 criterion
+to fall**; (b) *"deficit-bleed test"* and (c) *"zone assigns nearest idle worker"* are still unmet,
+so **M2 remains OPEN, 1 of 3**.
+
+**Source of truth re-read at Orient, at Tests and again at Verify:** `docs/GAME_DESIGN.md` §3.4
+(**line 148**, step 4 verbatim — *"Dig progress ticks; completed digs apply yields, then Breach
+checks (§4.6), then Noise pings (§4.8)"* — and its framing *"Per player, at start of their turn"*),
+§3.3 (the rotation this hangs off), §4.2 (**lines 184–193**'s nine-row Solid table — dig time
+**and** yield column, transcribed row by row into hand-written test literals; **line 197**'s *"Dig
+time is **total worker-turns**; multiple workers … (max 2 simultaneous diggers per hex). \"Dig 2×\"
+halves remaining time (round up)"*; and the **Cave-hex table row "Plain floor"**, which is where the
+new terrain id's NAME comes from), §5.1 (**line 288** *"No storage caps. Stockpiles are per-player
+integers"*), §7.1 (**line 367**'s Artificial-Granite owner variant — the seam still answers
+`false`), §11.1 (lines 704–708: the one serializable `GameState`, the fourteen printed commands,
+the illustrative event names, stable-ID iteration order + the reproducible FNV hash, and the **JSON**
+save that forces `hex` to be flattened), §11.2, §11.3, §12.1, §13.2 (**tier 3** verbatim: *"fixed
+seed + recorded command log ⇒ recorded `GameState.hash()` after N turns"*), §13.4, §13.5, §13.6 and
+§14's M2 row (**line 1102**, criterion text re-read and **unchanged**). `docs/decisions.md` was
+re-scanned end to end at Tests and again at Verify: the **only** logged §12.1/§4.2 overrides in the
+whole project remain **(AU)(i)** (`dig_yields.artificial_granite` = 2) and **(AW)(i)** (the top-level
+`dig` group — no numeric value moved), and **neither contradicts anything this task pins**, so every
+printed §4.2 dig time and every printed yield governed **as printed** and **no constant needed
+correcting in either direction** — not in code, and not in a table. Binding prior resolutions:
+**(AV)** (the command spine; `execute` as the one gate; the owed golden), **(AW)(iv)** (vein-node
+state and Extractors deferred — item 8), **(AX)(vi)** (placement/rule split), **(AY)(iii)** (the
+**injected already-loaded `DigRules`** pattern and the M7 re-injection debt — extended to
+`EndTurnCommand` by item 7), **(AY)(iv)** (one owner per site / one job per unit — what makes the
+tick unambiguous), **(AY)(x)** (§13.6's *events* clause is LIVE, pinned in both directions),
+**(AY)(xi)** (exact public surfaces; `get_class()` never `is Node`), **(AY)(xiii)**
+(`set_remaining_turns` is TOTAL and CLAMPS, and deliberately does **not** remove the site — that
+completion rule is **this** slice's), **(AZ)(ii)** (the last digger leaving removes the site — which
+is why item 3's zero-digger branch is unreachable today and pinned only for **totality**),
+**(AZ)(vi)** (re-scope a retired negative pin, never delete it), **(AL)** (the *unconfigured*
+sentinel precedent — extended by item 7b), **(AW)(vii)(a)** (`JSON.stringify`'s `sort_keys` defaults
+to **true**), **(AU)(iv)/(T)/(AH)/(f)** (no vocabulary whitelist in engine code), **(AJ)** (a named
+algorithmic constant is not a §13.6 violation). The lettering genuinely ended at **(AZ)**, so this
+entry is **(BA)** — and **none of (AU)/(AV)/(AW)/(AX)/(AY)/(AZ) is renumbered**, all six being
+cross-referenced by production files and suites. **M2-T8 continues at (BB).**
+
+- **What changed / was decided:**
+  1. **(BA)(i) — §3.4 STEP 4 RUNS INSIDE `EndTurnCommand.apply()`, AFTER THE §3.3 ROTATION, FOR THE
+     INCOMING PLAYER.** §3.4 frames its steps as *"Per player, at start of their turn"*, and
+     `EndTurnCommand` is the **only** trigger that exists — there is no `BeginTurn` among §11.1 line
+     705's fourteen printed command names, and inventing one would be inventing vocabulary (§13.4).
+     So the rotation happens first, `TurnEndedEvent` is appended **first**, and the step-4 events
+     follow it. **The consequence is recorded rather than hidden: player 0's very first turn of a
+     match runs NO start-of-turn steps at all**, because nothing has ended a turn yet. That is
+     harmless today (a match starts with no dig sites — §3.1's starting kit is still deferred) and
+     is pinned by a test, so the slice that lands the starting kit or the World phase sees the gap
+     explicitly. §3.4 step 4 is a **turn-sequence rule**, not a Command: it lives in
+     `scripts/sim/systems/dig_tick.gd` and is *called from* `apply()`, because eleven sibling steps
+     are coming and none of them is a fourth printed command.
+  2. **(BA)(ii) — ONLY SITES WHOSE `owner_index()` EQUALS THE INCOMING PLAYER TICK.** A dig site
+     records the ordering player ((AY)(iv)); *"at start of their turn"* therefore means *"their
+     sites"*. Each site consequently ticks **exactly once per full round**, never once per
+     `EndTurn`, which is what makes §4.2's *"total worker-turns"* an honest unit of time. Pinned
+     with a two-player fixture: one `EndTurn` by player 0 moves **only** player 1's site, and the
+     round trip moves each **exactly once**.
+  3. **(BA)(iii) — A SITE SPENDS `digger_ids().size()` WORKER-TURNS PER TICK, NEVER A FIXED 1.**
+     §4.2 line 197 prints *"Dig time is **total worker-turns**"*, so N diggers spend N per tick.
+     Hard Rock (2) finishes in **two** ticks with one digger and **one** tick with two; Dense
+     Granite (4) goes 4 → 2 → 0 with two. The decrement rides
+     `DigSite.set_remaining_turns(remaining - digger_count)`, which is TOTAL and **clamps into
+     [0, total_turns]** ((AY)(xiii)) — so the **overshoot case is settled by the clamp, not by a
+     branch**: Soft Dirt (total 1) worked by two diggers lands on exactly **0** and yields **+1
+     Food EXACTLY ONCE**, never +2 and never twice. A site with **zero** diggers does not move and
+     emits **nothing** (a totality pin — unreachable today because (AZ)(ii) removes a site when its
+     last digger leaves, and the test's own doc comment says so).
+  4. **(BA)(iv) — COMPLETION IS FOUR STATE CHANGES AND ONE RULE.** When the remainder reaches 0
+     **after** the decrement: (a) the row's §4.2 yield is applied to the **SITE'S OWNER's**
+     stockpile — **never** *"the current player"*, a distinction that is only observable because
+     `DigTick.tick_digs(state, player_index)` is callable with an index that is not
+     `state.current_player_index()`, and Verify's probe P5 exploited exactly that to prove the pin
+     discriminating; (b) the hex is flipped to `DigRules.cave_terrain_id()`; (c) the site is removed
+     from the registry; (d) **the diggers are freed IMPLICITLY** — assignment **is** site membership
+     (`dig_site_of_digger` is a linear scan, (AY)/(AX)(xiii)), so **no `UnitState` is mutated by a
+     completion**, and a test asserts every digger still exists with **hp and hex unchanged**. A
+     **partial** tick flips **nothing**: the terrain is asserted unchanged while `remaining > 0`.
+  5. **(BA)(v) — THE THIRD §12.1 AMENDMENT: `dig.cave_terrain_id` = `"plain_floor"`.** The
+     hex-becomes-Cave transition needs a terrain id, and **naming one in engine code would be
+     exactly the whitelist (T)/(AH)/(AU)(iv) forbid** — `dig_tick.gd`'s own source scan makes
+     `"plain_floor"`, `"cave"` and all nine §4.2 terrain ids **forbidden tokens** in it. So the id
+     is a **required, line-number-validated string leaf** on the existing `dig` group in
+     `data/ruleset.json` (line **5**, and the group stays on **one line** — M0-T2 item 7's layout
+     contract is tested, and `test_rules_loader.gd` pins `DIG_LINE == 5` plus every line number
+     below it), reached through **one** new accessor `DigRules.cave_terrain_id()`. The **value** is
+     taken from §4.2's Cave-hex table row **"Plain floor"**, transliterated into the project's
+     existing snake_case terrain-id convention (the same convention that already produced
+     `soft_dirt` / `hard_rock` / `dense_granite`). `RulesLoader` gained one spec entry
+     (`{"path": "cave_terrain_id", "kind": "string"}`) — **purely additive**, no existing kind
+     weakened — so `get_keys("dig")` now answers `["cave_terrain_id", "max_diggers_per_hex",
+     "profiles"]`. **Land edited the §12.1 excerpt cell (line 788) in this same commit** — the
+     M2-T1 / M2-T3 procedure, and the only sanctioned edit to `docs/GAME_DESIGN.md`. **§4.2's table
+     is byte-unchanged: no printed number moved.**
+  6. **(BA)(vi) — TWO EVENTS, NOT FOUR.** A completion changes four things (item 4), and §13.6
+     requires *"events emitted for every state change"*. This slice emits **`dig_progressed`** (one
+     per site whose remainder actually moved, carrying the **post-tick** remainder) and
+     **`dig_completed`** (one per completed site, carrying the owner index, the hex, the freed
+     digger ids **ascending**, the yielded resource ids **ascending** with their amounts, and the
+     new terrain id) — **progress ALWAYS first**, pinned in order and pinned as a **pair** for a
+     site that completes on its first tick. The reading: §3.4 step 4 itself prints the completion as
+     **one** step (*"completed digs apply yields"*), and the completion event's **payload** makes
+     each sub-change independently observable, so §13.6 is satisfied without three redundant events
+     whose only content would be a field of a fourth. **A generic `TerrainChangedEvent` is a named
+     candidate for M3**, when §4.5's collapse gives the terrain flip a **second** producer — one
+     producer is not a pattern. Both classes copy `DigStartedEvent` verbatim in shape: private vars
+     + accessors, `TYPE_NAME` owned by the event itself (`scripts/core/event.gd` and `event_bus.gd`
+     are **byte-unchanged** — the M0-T3 **(f)** precedent, now honoured five times), and `to_dict()`
+     calling the base **FIRST** so `"type"` stays key 0, then flattening `hex` into
+     **`hex_q`/`hex_r`** because §11.1 line 708's save is **JSON**. `DigCompletedEvent` **copies**
+     its three arrays on construction **and** hands out **duplicates** from `to_dict()`, both pinned
+     with `is_same`.
+  7. **(BA)(vii) — AN UNCONFIGURED `DigRules` RUNS NO PASS AT ALL, AND "UNCONFIGURED" HAS TWO
+     SHAPES.** (a) **`EndTurnCommand.new(i)` with no `DigRules` ticks nothing** — the parameter is
+     `_init(p_player_index: int, p_dig_rules: DigRules = null)`, defaulted so that all 846
+     pre-existing tests keep compiling, and a null rules object means **no step-4 pass**, exactly
+     the `DigHexCommand` unconfigured precedent. This **RE-SCOPES** (never deletes) the existing
+     negative §3.4 pins in `tests/sim/test_turn_replay.gd` and `tests/unit/test_end_turn_command.gd`
+     — they now read as *"no `DigRules` injected, so no step-4 pass"* and each gained a **positive
+     counterpart** with a configured `DigRules` ((AZ)(vi)). (b) **A NON-NULL but internally
+     unconfigured `DigRules` (`DigRules.new(null)`) is ALSO a complete no-op** — `tick_digs`
+     short-circuits on `_dig_rules.cave_terrain_id().is_empty()` in addition to the null check.
+     **This is an implementation-level judgment call worth recording**, because without it a
+     one-turn site would still decrement to zero and "complete" with an **empty yield** and a hex
+     flipped to **`""`** — a silent corruption rather than a no-op. The empty string is a legitimate
+     **(AL) unconfigured sentinel** here precisely because the real §12.1 leaf is a **required
+     non-empty** string. **The recorded consequence:** the loader accepts empty strings elsewhere by
+     design (`owner_turns_key` / `yield_key` are legitimately `""`), so a hand-typo'ed **empty**
+     `dig.cave_terrain_id` in data would **silently disable the tick** rather than failing load.
+     That is accepted under the (AL) precedent and is the reason the guard is *safe* rather than
+     merely convenient — and it is the reusable shape for any future rule module handed an injected,
+     possibly-unconfigured `DigRules`. **M7 debt, restated:** the command-log serializer must
+     **re-inject** a loaded `DigRules` into `EndTurnCommand` exactly as (AY)(iii) already notes for
+     `DigHexCommand` — a serialized `EndTurn` carries only `player_index`, and a de-serialized one
+     that forgot the injection would replay as a **silent no-tick**, which is the single most
+     dangerous shape of bug this project can ship. It is pinned negatively today and must become a
+     positive pin at M7.
+  8. **(BA)(viii) — VEIN NODES REMAIN DEFERRED ((AW) item 4), AND THE GAP IS DATED SO IT CANNOT BE
+     INHERITED SILENTLY.** Digging Gold Vein / Iron Vein / Magestone Crust / Mithril Seam applies
+     **only the §4.2 LUMP** (gold 25 · iron 10 · magestone 15 · mithril 10). The *"+ node"* half of
+     those four rows — `vein_nodes.<id>.stock` and `.rate`, shipped and validated since M2-T3 and
+     still **unused** — is **dropped along with the terrain** when the hex flips to plain floor.
+     Pinned **positively**, not merely by omission: a test asserts that a vein completion changes
+     **exactly** the stockpile, the terrain of **exactly one** hex, and the site registry, and
+     nothing else. **The Extractor slice must re-OPEN this**, not discover it.
+  9. **(BA)(ix) — §3.4 STEP 4's BREACH CHECKS (§4.6) AND NOISE PINGS (§4.8) ARE M5, AND THE
+     DEFERRAL IS PINNED NEGATIVELY.** Step 4's printed sentence names three things; this slice
+     builds the first. The other two draw randomness, so the pin is that `state.rng.rolls_drawn()`
+     is **still 0** after any number of ticks and completions — a cheap, load-bearing assertion that
+     goes red the moment someone wires a breach roll into the tick without a decisions entry.
+  10. **(BA)(x) — THE §13.2 TIER-3 GOLDEN IS RECORDED. THE DEBT RESTATED AT (AV) ITEM 7, (AW) ITEM
+      5, (AX) ITEM 11, (AY) ITEM 12 AND (AZ) ITEM 9 IS CLOSED.**
+      `tests/golden/dig_tick_scenario_seed4242.json` holds **`content_hash` `"0xb0629468"`** for
+      seed **4242**, map radius **2**, **2** players, **45** commands, **20** turns — the first
+      scenario in the project whose state genuinely **evolves over N turns**, which is exactly why
+      the five earlier deferrals were correct rather than lazy (M2-T4 and M2-T5 each **extended the
+      fold**; freezing it at M2-T2 would have cost two re-records under §13.6's *"only with a logged
+      reason"* clause). Three things are recorded about **how** it was made, because they are the
+      part that is easy to get wrong: (a) the hash is stored as a **LOWERCASE 8-hex-digit STRING**,
+      never a JSON number, because Godot 4.7 parses every JSON number as `TYPE_FLOAT` (the M1-T5
+      golden's rule, re-applied); (b) the test **fails loudly and NEVER auto-records** when the file
+      is absent, prints recorded-vs-observed, the exact document to write and the re-record rule,
+      and has **no record-mode flag by design** — and its failure message must say **"is MISSING"**,
+      because `tools/run_tests.sh` greps for `does not exist` / `Nothing was run` / `have not been
+      imported` / `Failed to load script` / `Ignoring script` and would then exit 1 on the
+      diagnostic rather than on the assertion; (c) **the hash the RED run printed (`0x1ccf2c23`) was
+      the STUB's** — the hash of a state where nothing ticked — and was deliberately **not**
+      recorded; the value was taken only after the rule was green. This is a **FIRST RECORDING by
+      the Implement stage, not a re-record by Verify** (`goldens_rerecorded: false`), and Verify
+      proved the artefact is **live** rather than decorative: it goes red under a rules mutation
+      (probe P1) and under deletion (probe P7). **From this commit forward, §13.6's *"goldens
+      re-recorded only with a logged reason (same commit)"* applies to it**, exactly as it has
+      applied to `mapgen_concentric_bowl_small_seed1337.json` since M1-T5.
+  11. **§14 M2 ACCEPTANCE CRITERION (a) IS MET — the first M2 criterion to fall.**
+      `tests/sim/test_dig_scenario.gd` is a scripted **20-turn**, **45-command**, **2-player**,
+      **7-worker**, **6-target** dig scenario mixing §4.2 rows including **two vein rows** and a
+      **multi-digger** site, whose expected stockpiles are **HAND-COMPUTED LITERAL CONSTANTS**
+      derived from §4.2's printed table — **never read back from `DigRules`**, which would have made
+      the test a tautology — and which asserts **exact equality for every §5.1 resource id including
+      the zeroes**: player 0 → food **1**, gold **25**, stone **4** (iron / magestone / mithril
+      **absent**); player 1 → iron **10**, magestone **15**, stone **1** (food / gold / mithril
+      **absent**). Verify re-derived both columns from the table independently and they agree.
+  12. **§13.6's DEFINITION OF DONE, CLAUSE BY CLAUSE.** Tests green headless (938/938, exit 0) ·
+      static typing clean by the **mechanical** gate (`tools/typecheck.sh`, `--warnings-as-errors`,
+      69 files, 0 failed) · **constants read from data, not code** (the nine dig times, the nine
+      yields and the cave terrain id are all reached through `DigRules`; `dig_tick.gd`'s own scan
+      permits only the standalone numerals **0** and **1** and forbids all nine §4.2 terrain ids,
+      all six §5.1 resource ids, `"cave"`, `"plain_floor"` and the literal `200`) · **events emitted
+      for every state change**, pinned in **both** directions (an `EndTurn` with no dig sites emits
+      **only** `TurnEndedEvent` and leaves `content_hash()` **byte-identical**) · goldens: one
+      **created**, none re-recorded (item 10) · **the affected §12.1 table cell updated by Land in
+      this same commit** (item 5).
+  13. **DETERMINISM (§11.1), RE-PROVEN RATHER THAN ASSUMED.** `DigTick` is pure `RefCounted`: no
+      `Node` / `SceneTree` / engine singleton, **no `randi()`**, no wall clock, **no float token and
+      no float literal**, integer math only, every returned Array fresh. It iterates the snapshot
+      `GameState.dig_site_hexes()` returns — **fresh** and canonically ordered **r ascending then q
+      ascending** through the private `_hex_before` comparator, **never** `Vector2i`'s default `<`,
+      which sorts **x** first — taken **before** any removal, so removing sites mid-loop is safe;
+      the emitted event order is pinned with three sites laid out so the two orders **differ**.
+      `tests/sim/test_turn_replay.gd` gained a whole **section E** that replays a **TICKING**
+      10-command log which **completes a dig inside the replay**, agreeing on `content_hash()` at
+      **every** step and replaying identically **3×**.
+  14. **VERIFY'S EIGHT-PROBE ADVERSARIAL MUTATION BATTERY: 8/8 CAUGHT** (the standing battery, run
+      for the third iteration running). Mutate the decrement to a fixed **1** → 11 failures
+      **including the golden**; invert the completion comparison to `< 0`; drop the terrain flip;
+      drop the site removal; credit the yield to `state.current_player_index()` instead of
+      `DigSite.owner_index()` (discriminating **only** because a test calls `tick_digs(state, 1)`
+      directly while the current index is still 0 — item 4); reverse the site iteration order;
+      **delete the golden file**; swap the two step-4 events' order. Every probe produced
+      **assertion** failures (0 parse errors, 0 harness diagnostic greps, all 938 tests still
+      collected), was restored, and the tree re-verified **byte-identically** green.
+  15. **ONE COSMETIC EDIT, RECORDED SO IT IS NOT MISTAKEN FOR A BEHAVIOUR CHANGE:** a stale
+      *"STUB (M2-T7 tests stage)"* doc comment on `DigRules.cave_terrain_id()` was corrected to
+      state that the function reads the newly-added §12.1 leaf. The function body was already
+      complete when Implement began (the Tests stage wrote the accessor; only the **data leaf** was
+      missing). **No test file was touched by the Implement stage at all**, and Verify made **no**
+      fix — an empty `fixes_made` for the **sixth** iteration running.
+  16. **NOT BUILT HERE, DELIBERATELY (§13.4 — invent nothing ahead of its milestone), named in the
+      new files' headers so no later slice can claim they were forgotten:** the `EventBus` →
+      `MapRenderer.mark_hex_dirty` seam and a palette tint for the Cave terrain (**M2-T8** — the
+      renderer seam is the *only* thing this slice deferred from its own spec, and it was deferred
+      to keep production under the ≤ ~300 LOC ceiling, (AV) item 9); §4.2 line 197's **"Dig 2×"**
+      halving (`DigRules.halve_remaining_turns` **still has no caller** — no ability exists, pinned
+      negatively); **vein-node stock/rate** and **Extractors** (item 8); §3.4's **other eight**
+      per-player steps and all **three** World-phase steps, including this same step's **Breach
+      checks (§4.6)** and **Noise pings (§4.8)** (item 9); **income**, **upkeep** and step 2's
+      **deficit bleed**; §5.2's **housing cap** (`housing.hq` shipped, unused); §5.3's **Mining
+      Zones**; §12.7's **trait set** (`worker` / `dig_mult` remain **forbidden tokens** —
+      worker-ness is a **TRAIT = DATA** at M6, and **any** unit type may still dig); §3.1's
+      **starting kit** (still needs its own §12.1 key and its own amendment — (AU) item 8,
+      re-affirmed by (AV)/(AW)/(AX)/(AY)/(AZ)); §7.1's **Raise Granite** and any **hex-builder
+      storage** (M3/M4 — `_digs_own_terrain` still answers `false` unconditionally, so Artificial
+      Granite costs **3**, never 1); §3.2/§12.1's **`victory.turn_limit` 200** (M6 — the literal
+      **`200`** remains a forbidden token, (AV) item 3); command/unit **serialization** (M7, item
+      7); `data/units/*.json` stat blocks (M6); **movement/combat/damage**; and the other **eleven**
+      §11.1 line-705 commands.
+
+- **Why:** slice 3a decided *who may start a dig* and slice 3b *what abandoning one costs*; this
+  slice decides *what a dig actually does*, and it is the first M2 task whose output a player would
+  notice. Three of the resolutions are load-bearing rather than bookkeeping. Item 3 is the whole
+  arithmetic of the feature and it is **not** the obvious implementation: the naive reading
+  (*"decrement by 1 each turn"*) contradicts §4.2 line 197's printed *"total worker-turns"* and would
+  make a second digger worthless — Verify's probe P1 mutates exactly that and reds 11 tests including
+  the golden, which is the measurement that the pin is real. Item 4's *"the yield goes to the SITE'S
+  OWNER"* looks like a distinction without a difference while the only caller passes the current
+  player, and would have quietly become a bug the first time a World-phase or an out-of-turn tick
+  appears; it is pinned through a direct `tick_digs(state, 1)` call precisely so the distinction is
+  observable **today**. Item 7b is recorded because it is the kind of guard that reads as defensive
+  clutter in review: without it an unconfigured `DigRules` does not *fail*, it **succeeds wrongly** —
+  flipping a hex to the empty string and paying an empty yield — and that is a corruption, not a
+  no-op. Item 5 is the third time this project has amended §12.1 rather than typing a constant into
+  engine code, and the procedure (data leaf → loader spec → accessor → decisions entry → **Land edits
+  the GDD cell in the same commit**) is now routine enough to be worth naming as routine. Item 10
+  closes a debt that had been restated five times; it was deferred correctly each time (the fold kept
+  moving) and it was recordable **here** for the reason the earlier entries predicted — this is the
+  first slice whose state evolves over turns. The one thing that would have justified a **sixth**
+  deferral, a production change over the ceiling, was **measured** at 218 new + 40 changed lines and
+  did not occur.
+
+- **GDD sections affected:** **ONE CELL EDITED** — the **§12.1** excerpt's `dig` group
+  (`docs/GAME_DESIGN.md` **line 788**) gained `"cave\_terrain\_id": "plain\_floor"` after
+  `"max\_diggers\_per\_hex": 2`, by **Land**, in **this** commit, matching the shipped
+  `data/ruleset.json` line-5 key order (item 5). **§4.2's table is byte-unchanged — no printed
+  NUMBER moved anywhere in the document.** **§3.4** (**step 4** built as printed, for the first
+  time: *"Dig progress ticks; completed digs apply yields"*; its **Breach checks (§4.6)** and **Noise
+  pings (§4.8)** are M5 and pinned negatively via `rolls_drawn() == 0` — items 1, 9; the framing
+  *"Per player, at start of their turn"* is read literally and its consequence for player 0's first
+  turn is recorded — item 1; the other eight per-player steps and the three World-phase steps remain
+  unbuilt — item 16). **§3.3** (the rotation this hangs off; `TurnEndedEvent` stays **first** in the
+  returned array). **§4.2** (**lines 184–193**: the dig-time column drives item 3's arithmetic and
+  the **yield column is APPLIED for the first time** — all nine rows swept against hand-written
+  literals; **line 197**'s *"total worker-turns"* is the whole of item 3 and its max-2-digger cap is
+  consumed unchanged through `DigRules`; the **Cave-hex row "Plain floor"** is where the new §12.1
+  value's name comes from — item 5; the *"Dig 2×"* halving is **not** built). **§5.1** (**line 288**
+  *"No storage caps. Stockpiles are per-player integers"* — `PlayerState.add` is the only path and
+  nothing caps it; every yield is a positive integer). **§7.1** (**line 367**'s owner variant: the
+  seam still answers `false`, so Artificial Granite costs **3** and is pinned at 3, not 1). **§11.1**
+  (line 704's one serializable `GameState`; line 705 — **no fourteenth command was invented**, the
+  tick is a *rule module* called from `EndTurnCommand.apply()`, item 1; line 706's illustrative event
+  names, (f)/(AT); line 707's stable-ID order, honoured by iterating `dig_site_hexes()` rather than
+  re-sorting — item 13; line 708's **JSON** save is why both new events flatten `hex` to
+  `hex_q`/`hex_r`, and its replay clause is re-proven over a **TICKING** log — item 13). **§11.2**
+  (`scripts/sim/systems/` gains its **second** file; `scripts/sim/events/` its **fourth and
+  fifth**). **§11.3** (typing gate green over **69** files; a `## §<section>` doc comment on every
+  public function; all three new public surfaces **exact** — a missing *or extra* member fails).
+  **§12.1** (**THE THIRD AMENDMENT**: new **required**, line-number-validated string leaf
+  `dig.cave_terrain_id`, one `RulesLoader` spec entry, one `DigRules` accessor, one GDD cell —
+  item 5). **§13.2** (three new **tier-1** suites — `test_dig_tick.gd` (**26**),
+  `test_dig_progressed_event.gd` (**17**), `test_dig_completed_event.gd` (**18**); one new **tier-2**
+  suite, `test_dig_scenario.gd` (**7**), plus `test_turn_replay.gd` extended with a whole ticking
+  section; and **TIER 3's GOLDEN, RECORDED AT LAST** — `test_dig_tick_golden.gd` (**5**) +
+  `dig_tick_scenario_seed4242.json`, item 10). **§13.4** (procedure exercised: ten printed silences
+  resolved under **(BA)**, nothing stalled, nothing invented ahead of its milestone; four negative
+  pins **re-scoped and strengthened**, never deleted — the (AZ)(vi) rule, honoured for the first time
+  by a slice other than the one that wrote it). **§13.5** (no terrain-id, resource-id, faction or
+  trait whitelist appears in engine code — scanned per file; the new terrain id is **data**, which is
+  what keeps M6's zero-engine-change canary reachable). **§13.6** (definition of done **MET**, every
+  clause re-checked in item 12). **§14 M2 row (line 1102) — RE-CHECKED AT LAND; THE PRINTED CRITERION
+  TEXT IS UNCHANGED. ACCEPTANCE CRITERION (a) *"Scripted 20-turn dig scenario matches expected
+  stockpiles exactly"* IS NOW MET** (item 11); (b) *"deficit-bleed test"* and (c) *"zone assigns
+  nearest idle worker"* are **NOT** met (no income, no upkeep, no zones, no worker trait), so **M2
+  stays OPEN at 1 of 3**. Of the deliverable line *"Workers, Dig/Cancel commands, yields, vein nodes
+  + Extractors, stockpiles/income/upkeep, housing, Mining Zones v0"*, **"yields" is now COMPLETE** —
+  the table landed at M2-T3 and its **application** lands here — joining stockpiles, the unit
+  **container** and the **Dig/Cancel ordering pair**.

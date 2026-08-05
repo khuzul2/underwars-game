@@ -221,6 +221,7 @@ func _spec() -> Array[Dictionary]:
 			"kind": "object",
 			"children": [
 				{"path": "max_diggers_per_hex", "kind": "int"},
+				{"path": "cave_terrain_id", "kind": "string"},
 				{
 					"path": "profiles",
 					"kind": "map",

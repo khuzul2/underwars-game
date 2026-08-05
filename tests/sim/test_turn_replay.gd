@@ -134,6 +134,14 @@ const MIXED_LOG_CANCEL_STEPS: int = 1
 ## aimed at a log position whose state is hand-known.
 const MIXED_LOG_CANCEL_STEP: int = 2
 
+## --- M2-T7 (BA): the TICKING log's hand-written §4.2 constants ------------------------------
+## §4.2 line 185 "Hard Rock | 2 | \+2 Stone | Baseline" — the yield the completed dig pays, and
+## §4.2's Cave-hex table row "Plain floor" — the terrain the hex becomes. Written as LITERALS here,
+## never read back from `DigRules`.
+const TICK_YIELD_RESOURCE: String = "stone"
+const TICK_YIELD_AMOUNT: int = 2
+const TICK_CAVE_TERRAIN_ID: String = "plain_floor"
+
 ## Cached across tests: `data/ruleset.json` is parsed once, and `DigRules` mutates nothing (M2-T3).
 var _rules_cache: DigRules = null
 
@@ -598,9 +606,14 @@ func test_a_rejected_cancel_in_the_log_changes_nothing() -> void:
 	assert_ne(after_spawn, before, "sanity: the enemy spawn IS a state change, so the pin is live")
 
 
-## §3.4 step 4 NEGATIVE PIN over the mixed log — a FULL EndTurn round happens between the dig
-## orders and NOTHING ticks: the site still has all its worker-turns, the hex still carries its
-## §4.2 Solid terrain, every stockpile is still EMPTY and the seeded stream has drawn NOTHING.
+## §3.4 step 4 NEGATIVE PIN over the mixed log — RE-SCOPED BY M2-T7, never deleted (the (AZ) rule
+## for a scoped negative pin whose slice has landed). `_mixed_log()` builds its End Turns with
+## `EndTurnCommand.new(index)` and therefore carries NO [DigRules], so (BA)(vi) says it runs no
+## §3.4 step-4 pass at all: a FULL EndTurn round happens between the dig orders and NOTHING ticks —
+## the site still has all its worker-turns, the hex still carries its §4.2 Solid terrain, every
+## stockpile is still EMPTY and the seeded stream has drawn NOTHING. Section E below replays the
+## SAME shape of log with the table injected and proves the opposite, so neither half can pass
+## vacuously.
 func test_the_mixed_replay_still_runs_none_of_the_section_three_four_steps() -> void:
 	var state: GameState = _dig_state()
 	_run(_mixed_log(), state, null)
@@ -633,6 +646,150 @@ func test_the_mixed_replay_still_runs_none_of_the_section_three_four_steps() -> 
 		0,
 		"§11.1: nothing in this slice is random — the seeded stream must not advance"
 	)
+
+
+# =============================================================================================
+# E. THE TICKING LOG ((BA), M2-T7) — §3.4 STEP 4 INSIDE A REPLAY
+#    M2-T5 and M2-T6 could only replay logs that ADD and REMOVE registry entries. The tick is the
+#    first rule that MUTATES the map, CREDITS a stockpile and REMOVES a site as a CONSEQUENCE
+#    rather than as an order, and all three of those ride the same `(seed, command_log)` clause.
+#    A rule that read the map in a non-canonical order, or credited "the current player", replays
+#    differently on the second pass — which is exactly what these tests measure.
+# =============================================================================================
+
+## §11.1 line 708 — TWO fresh states on the SAME seed, fed the SAME TICKING log, agree on
+## `content_hash()` AT EVERY STEP. Every command is accepted, so a divergence can only come from
+## the tick.
+func test_two_fresh_states_on_one_ticking_log_agree_at_every_step() -> void:
+	var first: GameState = _dig_state()
+	var second: GameState = _dig_state()
+	var log_a: Array[Command] = _ticking_log()
+	var log_b: Array[Command] = _ticking_log()
+	assert_eq(
+		first.content_hash(),
+		second.content_hash(),
+		"§11.1: two identically-built states on the same seed start identical"
+	)
+	for step: int in range(log_a.size()):
+		var rejection_a: CommandError = log_a[step].execute(first, null)
+		var rejection_b: CommandError = log_b[step].execute(second, null)
+		assert_null(rejection_a, "(BA): ticking step %d must be ACCEPTED" % step)
+		assert_eq(
+			rejection_a == null,
+			rejection_b == null,
+			"§11.1: ticking step %d is accepted (or rejected) identically on both states" % step
+		)
+		assert_eq(
+			first.content_hash(),
+			second.content_hash(),
+			"§11.1: replaying (seed, command_log) must reproduce the hash — diverged at step %d" % [
+				step
+			]
+		)
+
+
+## §11.1 "a match is fully described by (seed, command\_log)" — the SAME ticking log object replays
+## onto fresh states any number of times and produces the identical hash sequence every run. A
+## `DigTick` that cached a site list, or an `EndTurnCommand` that mutated its injected table, would
+## diverge on the second pass.
+func test_one_ticking_log_object_replays_identically_many_times() -> void:
+	var command_log: Array[Command] = _ticking_log()
+	var runs: Array = []
+	for run: int in range(REPLAY_RUNS):
+		runs.append(_run(command_log, _dig_state(), null))
+	for run: int in range(1, REPLAY_RUNS):
+		assert_eq(
+			runs[run],
+			runs[0],
+			"§11.1: ticking replay %d produced a different hash sequence than replay 0" % run
+		)
+
+
+## §4.2/§3.4 step 4 — THE TICKING LOG'S END STATE, hand-computed:
+##   #0 DigHex(0, 1)  -> site created on the Hard Rock target, 2 worker-turns, digger 1
+##   #1 DigHex(0, 2)  -> digger 2 JOINS (§4.2 line 197's cap is 2)
+##   #2 CancelDig(0,1)-> digger 1 leaves; a crew-mate remains, so the site SURVIVES ((AZ)(iii))
+##   #3 EndTurn(0)    -> player 1's turn starts; player 1 owns no site, so nothing ticks
+##   #4 EndTurn(1)    -> player 2's turn starts; nothing ticks
+##   #5 EndTurn(2)    -> wraps to player 0 (turn 2); THE SITE TICKS: 2 - 1 digger = 1 remaining
+##   #6 DigHex(0, 1)  -> unit 1 RE-JOINS; the crew is 2 again, the remainder is untouched
+##   #7 EndTurn(0)    -> nothing ticks
+##   #8 EndTurn(1)    -> nothing ticks
+##   #9 EndTurn(2)    -> wraps to player 0 (turn 3); THE SITE COMPLETES: 1 - 2 diggers clamps to 0,
+##                       \+2 Stone to player 0 (§4.2 "Hard Rock | 2 | \+2 Stone"), the hex becomes
+##                       Cave, the site is removed and BOTH diggers are freed.
+func test_the_ticking_log_ends_in_the_hand_computed_state() -> void:
+	var state: GameState = _dig_state()
+	_run(_ticking_log(), state, null)
+	assert_eq(
+		Vector2i(state.turn(), state.current_player_index()),
+		Vector2i(3, 0),
+		"§3.3: six End Turns at %d players is two full rounds" % PLAYER_COUNT
+	)
+	assert_eq(state.dig_site_hexes(), [] as Array[Vector2i], "§3.4 step 4: the dig COMPLETED")
+	assert_eq(
+		state.map.get_terrain_type(TARGET_HEX),
+		TICK_CAVE_TERRAIN_ID,
+		"§4.2: the Solid hex became the Cave terrain the ruleset names"
+	)
+	assert_eq(
+		state.player(0).amount_of(TICK_YIELD_RESOURCE),
+		TICK_YIELD_AMOUNT,
+		"§4.2: \"Hard Rock | 2 | \\+2 Stone\" credited to the SITE'S OWNER"
+	)
+	assert_eq(
+		state.player(0).resource_ids(),
+		[TICK_YIELD_RESOURCE] as Array[String],
+		"§5.1: and nothing else"
+	)
+	for index: int in range(1, PLAYER_COUNT):
+		assert_eq(
+			state.player(index).resource_ids(),
+			[] as Array[String],
+			"§5.1: player %d dug nothing and holds nothing" % index
+		)
+	for id: int in [FIRST_UNIT_ID, SECOND_UNIT_ID]:
+		assert_not_null(state.unit(id), "(BA)(iv): unit %d survived its own dig" % id)
+		assert_null(state.dig_site_of_digger(id), "(BA)(iv): and holds no dig job")
+	assert_eq(
+		state.rng.rolls_drawn(),
+		0,
+		"§11.1/§3.4: Breach (§4.6) and Noise (§4.8) are M5 — the seeded stream must not advance"
+	)
+
+
+## §11.1/§13.6 — the EVENT STREAM of the ticking log is replayable too, and it is hand-counted:
+## three `dig_started`, one `dig_cancelled`, six `turn_ended`, two `dig_progressed` and exactly one
+## `dig_completed`.
+func test_the_ticking_event_stream_is_identical_across_replays() -> void:
+	var command_log: Array[Command] = _ticking_log()
+	var streams: Array = []
+	for run: int in range(REPLAY_RUNS):
+		var bus: EventBus = EventBus.new()
+		var recorder: StreamRecorder = StreamRecorder.new()
+		for type_name: StringName in [
+			TurnEndedEvent.TYPE_NAME,
+			DigStartedEvent.TYPE_NAME,
+			DigCancelledEvent.TYPE_NAME,
+			DigProgressedEvent.TYPE_NAME,
+			DigCompletedEvent.TYPE_NAME,
+		]:
+			bus.subscribe(type_name, recorder.on_event)
+		_run(command_log, _dig_state(), bus)
+		streams.append(recorder.lines)
+	for run: int in range(1, REPLAY_RUNS):
+		assert_eq(
+			streams[run], streams[0], "§11.1: ticking replay %d emitted a different stream" % run
+		)
+	var counted: Dictionary = {}
+	for line: String in streams[0]:
+		var type_name: String = line.split("|")[0].replace("type=", "")
+		counted[type_name] = int(counted.get(type_name, 0)) + 1
+	assert_eq(int(counted.get("dig_started", 0)), 3, "§13.6: three accepted dig orders")
+	assert_eq(int(counted.get("dig_cancelled", 0)), 1, "§13.6: one accepted cancel")
+	assert_eq(int(counted.get("turn_ended", 0)), 6, "§3.3: six accepted End Turns")
+	assert_eq(int(counted.get("dig_progressed", 0)), 2, "§13.6: the site moved on TWO ticks")
+	assert_eq(int(counted.get("dig_completed", 0)), 1, "§13.6: and completed exactly ONCE")
 
 
 # =============================================================================================
@@ -696,9 +853,27 @@ func _dig_state() -> GameState:
 	return state
 
 
+## (BA)/§3.4 step 4 — THE TICKING LOG: the same shape as `_mixed_log()` but with every End Turn
+## carrying the injected [DigRules], plus a SECOND full round so the dig actually COMPLETES inside
+## the replay. Hand-run in `test_the_ticking_log_ends_in_the_hand_computed_state`. A FRESH set of
+## command objects every call.
+func _ticking_log() -> Array[Command]:
+	var out: Array[Command] = []
+	out.append(DigHexCommand.new(0, FIRST_UNIT_ID, TARGET_HEX, _dig_rules()))
+	out.append(DigHexCommand.new(0, SECOND_UNIT_ID, TARGET_HEX, _dig_rules()))
+	out.append(CancelDigCommand.new(0, FIRST_UNIT_ID))
+	for index: int in range(PLAYER_COUNT):
+		out.append(EndTurnCommand.new(index, _dig_rules()))
+	out.append(DigHexCommand.new(0, FIRST_UNIT_ID, TARGET_HEX, _dig_rules()))
+	for index: int in range(PLAYER_COUNT):
+		out.append(EndTurnCommand.new(index, _dig_rules()))
+	return out
+
+
 ## §11.1 line 705 — a log MIXING all THREE implemented commands ((AZ)): dig (create), dig (join),
-## CANCEL, a full EndTurn round, dig again. A FRESH set of command objects every call, so a caller
-## can compare two independently-built logs.
+## CANCEL, a full EndTurn round, dig again. Its End Turns carry NO [DigRules], which is what makes
+## it the NEGATIVE half of (BA)(vi). A FRESH set of command objects every call, so a caller can
+## compare two independently-built logs.
 func _mixed_log() -> Array[Command]:
 	var out: Array[Command] = []
 	out.append(DigHexCommand.new(0, FIRST_UNIT_ID, TARGET_HEX, _dig_rules()))

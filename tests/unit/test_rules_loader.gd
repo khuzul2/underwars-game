@@ -58,6 +58,10 @@ const DIG_LINE: int = 5
 ## §4.2 line 197 "max 2 simultaneous diggers per hex".
 const MAX_DIGGERS_PER_HEX: int = 2
 
+## §4.2's Cave-hex table, first row: "Plain floor | —" — the value of the M2-T7 §12.1 amendment
+## `dig.cave_terrain_id`.
+const CAVE_TERRAIN_ID: String = "plain_floor"
+
 ## §4.2's nine Solid terrain ids in TABLE ROW ORDER — the order `dig.profiles` is AUTHORED in.
 const DIG_PROFILE_IDS_ROW_ORDER: Array[String] = [
 	"soft_dirt",
@@ -764,6 +768,44 @@ func test_dig_group_carries_the_max_diggers_per_hex_cap() -> void:
 	)
 
 
+## §4.2/§12.1 — THE M2-T7 AMENDMENT, the project's THIRD: the `dig` group gains one required string
+## leaf, `cave_terrain_id`, whose value is §4.2's Cave-hex table row "Plain floor". It exists so
+## §3.4 step 4's hex-becomes-Cave transition names no terrain id in engine code
+## ((T)/(AH)/(AU)(iv)); §4.2's printed table is byte-unchanged, because no printed NUMBER moves.
+func test_dig_group_carries_the_cave_terrain_id() -> void:
+	var loader: RulesLoader = _loaded()
+	assert_true(loader.has("dig.cave_terrain_id"), "§12.1: dig.cave_terrain_id is REQUIRED")
+	assert_eq(
+		loader.get_string("dig.cave_terrain_id"),
+		CAVE_TERRAIN_ID,
+		"§4.2: the Cave-hex table's first row is \"Plain floor\""
+	)
+	assert_false(
+		DIG_PROFILE_IDS_ASCENDING.has(CAVE_TERRAIN_ID),
+		"§4.2: the Cave id is NOT one of the nine Solid rows — a dug hex can never be dug again"
+	)
+
+
+## §14 M0 + §12.1 — `dig.cave_terrain_id` is REQUIRED, not merely present: deleting it is one
+## line-numbered error, attributed to the `dig` group line, and the ruleset stays unpublished.
+func test_reject_missing_cave_terrain_id() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_dig_line(lines):
+		return
+	lines[DIG_LINE - 1] = _delete_member(lines[DIG_LINE - 1], "cave_terrain_id")
+	_assert_dig_rejection(lines, "dig.cave_terrain_id", "a missing cave terrain id")
+
+
+## §14 M0 + §12.1 — and it must be a STRING: a number where the terrain id belongs is rejected by
+## the same spec machinery that already types `max_diggers_per_hex` as an int.
+func test_reject_non_string_cave_terrain_id() -> void:
+	var lines: PackedStringArray = _ruleset_lines()
+	if not _require_dig_line(lines):
+		return
+	lines[DIG_LINE - 1] = _replace_value(lines[DIG_LINE - 1], "cave_terrain_id", "1")
+	_assert_dig_rejection(lines, "dig.cave_terrain_id", "a non-string cave terrain id")
+
+
 ## §11.1 "iterate collections in stable ID order" — `get_keys` answers ASCENDING, never the parse
 ## result's key order (which is §4.2's row order, deliberately different).
 func test_get_keys_answers_the_nine_dig_profiles_ascending() -> void:
@@ -775,7 +817,7 @@ func test_get_keys_answers_the_nine_dig_profiles_ascending() -> void:
 	)
 	assert_eq(
 		loader.get_keys("dig"),
-		["max_diggers_per_hex", "profiles"] as Array[String],
+		["cave_terrain_id", "max_diggers_per_hex", "profiles"] as Array[String],
 		"§11.1: get_keys is ascending at every level"
 	)
 	assert_eq(
@@ -1005,6 +1047,11 @@ func test_ruleset_layout_keeps_the_whole_dig_group_on_one_line() -> void:
 		"§4.2 line 197: dig.max_diggers_per_hex sits on the group line"
 	)
 	assert_true(group.contains("\"profiles\""), "§12.1: dig.profiles sits on the group line")
+	assert_true(
+		group.contains("\"cave_terrain_id\""),
+		"M0-T2 item 7/§4.2: the M2-T7 dig.cave_terrain_id leaf sits on the group line too, so the"
+			+ " whole group stays ONE line and every line number below it is unmoved"
+	)
 	for terrain_id: String in DIG_PROFILE_IDS_ROW_ORDER:
 		assert_true(
 			group.contains("\"%s\"" % terrain_id),

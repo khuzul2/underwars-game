@@ -179,6 +179,7 @@ const FORBIDDEN_NUMERALS: Array[String] = ["3", "4", "10", "15", "25", "60", "12
 const REQUIRED_SCHEMA_TOKENS: Array[String] = [
 	"dig.profiles",
 	"dig.max_diggers_per_hex",
+	"dig.cave_terrain_id",
 	"dig_turns",
 	"dig_yields",
 	"vein_nodes",
@@ -200,7 +201,14 @@ const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"vein_resource_id",
 	"max_diggers_per_hex",
 	"halve_remaining_turns",
+	"cave_terrain_id",
 ]
+
+## §4.2's Cave-hex table, first row: "Plain floor | —". M2-T7 adds the THIRD §12.1 amendment —
+## `dig.cave_terrain_id` — so §3.4 step 4's hex-becomes-Cave transition names no terrain id in
+## engine code ((T)/(AH)/(AU)(iv)). The value is transcribed from the printed Cave row, in the same
+## snake_case terrain-id convention `dig.profiles` already uses for the nine Solid rows.
+const CAVE_TERRAIN_ID: String = "plain_floor"
 const REQUIRED_PUBLIC_VARS: Array[String] = []
 const REQUIRED_PUBLIC_CONSTS: Array[String] = []
 
@@ -513,6 +521,32 @@ func test_an_unknown_resource_id_yields_zero() -> void:
 				0,
 				"§13.4: %s yields no \"%s\"" % [terrain_id, resource_id]
 			)
+
+
+## §4.2/§12.1 — THE CAVE TERRAIN a completed dig leaves behind, read from the new required leaf
+## `dig.cave_terrain_id` and NEVER named in engine code. §4.2's Cave-hex table's first row is
+## "Plain floor | —", and that is the id the shipped ruleset must carry.
+func test_the_cave_terrain_id_is_read_from_data() -> void:
+	var rules: DigRules = _dig_rules()
+	assert_eq(
+		rules.cave_terrain_id(),
+		CAVE_TERRAIN_ID,
+		"§4.2/§12.1: dig.cave_terrain_id is the Cave-hex row \"Plain floor\""
+	)
+	assert_false(
+		rules.is_diggable(rules.cave_terrain_id()),
+		"§4.2: a Cave hex is not a Solid row — it can never be dug again"
+	)
+	assert_eq(
+		rules.dig_turns_for(rules.cave_terrain_id(), false),
+		0,
+		"§4.2: and it carries no dig time"
+	)
+	assert_eq(
+		rules.yield_resource_ids(rules.cave_terrain_id()),
+		[] as Array[String],
+		"§4.2: and no yield"
+	)
 
 
 ## (AL) UNCONFIGURED PRECEDENT — a DigRules built on a NULL loader answers the unconfigured value
@@ -834,6 +868,11 @@ func _dig_rules() -> DigRules:
 ## precedent): no crash, no invented default.
 func _assert_unconfigured(rules: DigRules, why: String) -> void:
 	assert_eq(rules.max_diggers_per_hex(), 0, "(AL): %s leaves the digger cap unconfigured" % why)
+	assert_eq(
+		rules.cave_terrain_id(),
+		"",
+		"(AL): %s names no cave terrain — the tick must never write a hex to \"\"" % why
+	)
 	var probed: Array[String] = []
 	probed.append_array(SOLID_TERRAIN_IDS)
 	probed.append_array(UNKNOWN_TERRAIN_IDS)

@@ -1,0 +1,10 @@
+{
+  "scenario": "dig_tick_20_turns",
+  "seed": 4242,
+  "map_radius": 2,
+  "player_count": 2,
+  "turns": 20,
+  "commands": 45,
+  "command_log": "4x DigHex(player 0) -> EndTurn(0) -> 3x DigHex(player 1) -> 37 more EndTurns",
+  "content_hash": "0xb0629468"
+}

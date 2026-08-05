@@ -83,6 +83,15 @@ func yield_amount(p_terrain_id: String, p_resource_id: String) -> int:
 	return 0
 
 
+## §4.2/§12.1 — the Cave terrain id a completed dig leaves behind (§4.2's Cave-hex table row
+## "Plain floor"), read from `dig.cave_terrain_id` (the THIRD §12.1 amendment, M2-T7); "" when
+## unconfigured.
+func cave_terrain_id() -> String:
+	if _rules == null:
+		return ""
+	return _rules.get_string("dig.cave_terrain_id")
+
+
 ## §5.2 — the vein-node resource id `p_terrain_id` leaves behind, "" when the row leaves none.
 ## Vein-node STATE (stock/rate) and Extractors are a LATER M2 slice; this answers the resource
 ## only.

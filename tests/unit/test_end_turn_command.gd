@@ -106,6 +106,16 @@ const RENDERER_TOKENS: Array[String] = [
 ## explicitly NOT this task.
 const VICTORY_TURN_LIMIT_TOKEN: String = "200"
 
+## M2-T7 (BA)(vi) fixture — the crewed dig site that must NOT tick when no [DigRules] is injected.
+## §4.1 "axial coordinates (q, r)"; §4.2 line 185 "Hard Rock | 2 | \+2 Stone"; §12.2's example
+## `"hp": 70` with an OPAQUE type id (`data/units/*.json` is M6).
+const TICK_MAP_RADIUS: int = 1
+const TICK_TARGET: Vector2i = Vector2i(0, 0)
+const TICK_TERRAIN_ID: String = "hard_rock"
+const TICK_TERRAIN_TURNS: int = 2
+const TICK_UNIT_TYPE_ID: String = "dwarf_worker"
+const TICK_UNIT_MAX_HP: int = 70
+
 ## The COMPLETE public surface of EndTurnCommand. `_init` is excluded from the collected list by
 ## the leading underscore and is pinned separately by construction.
 const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
@@ -485,12 +495,16 @@ func test_the_same_command_object_replays_identically() -> void:
 	)
 
 
-## §3.4 (lines 141–165) NEGATIVE PIN — the nine per-player start-of-turn steps (income, upkeep,
-## construction/training ticks, dig ticks + Breach + Noise, healing, status/cooldown ticks,
-## structural stress, light/vision recompute, action phase) and the three World-phase steps
-## (creep AI, Wrath, victory checks) are ALL deliberately unimplemented in this slice. Pinned
-## negatively so a later slice cannot claim they were forgotten (§13.4): after any number of
-## EndTurns every stockpile is still EMPTY.
+## §3.4 (lines 141–165) NEGATIVE PIN — RE-SCOPED BY M2-T7, never deleted (the (AZ) "a scoped
+## negative pin is re-scoped when the slice it named finally lands" rule). §3.4 step 4's dig tick
+## IS implemented now, but ONLY through an INJECTED [DigRules] ((BA)(vi)); this fixture constructs
+## `EndTurnCommand.new(index)` with NO table, so no step-4 pass runs and NOTHING else does either.
+## The other eight per-player steps (income, upkeep, construction/training ticks, healing,
+## status/cooldown ticks, structural stress, light/vision recompute, action phase) and the three
+## World-phase steps (creep AI, Wrath, victory checks) remain deliberately unimplemented, so after
+## any number of EndTurns every stockpile is still EMPTY.
+## The POSITIVE counterpart — a configured EndTurn that DOES tick — lives in
+## `tests/unit/test_dig_tick.gd` and `tests/sim/test_dig_scenario.gd`.
 func test_ending_turns_runs_none_of_the_section_three_four_steps_yet() -> void:
 	var state: GameState = GameState.new(GOLDEN_SEED, null, MAX_PLAYERS)
 	for k: int in range(3 * MAX_PLAYERS):
@@ -507,6 +521,44 @@ func test_ending_turns_runs_none_of_the_section_three_four_steps_yet() -> void:
 		)
 
 
+## (BA)(vi)/§13.4 — THE UNCONFIGURED CONTRACT, stated where the Command lives: `EndTurnCommand` is
+## constructible with ONE argument, that construction leaves it with no [DigRules], and it then runs
+## NO §3.4 step-4 pass at all — not even over a fully-crewed dig site. M7's command-log reader must
+## RE-INJECT the table when it rebuilds an EndTurn from a save, exactly as (AY) already notes for
+## `DigHexCommand`; if it forgets, this is the behaviour it silently gets.
+func test_an_end_turn_built_without_dig_rules_runs_no_step_four() -> void:
+	var map: HexMap = HexMap.new(TICK_MAP_RADIUS)
+	map.set_terrain_type(TICK_TARGET, TICK_TERRAIN_ID)
+	var state: GameState = GameState.new(GOLDEN_SEED, map, 2)
+	var digger: UnitState = state.spawn_unit(1, TICK_UNIT_TYPE_ID, TICK_TARGET, TICK_UNIT_MAX_HP)
+	var site: DigSite = state.add_dig_site(TICK_TARGET, 1, TICK_TERRAIN_TURNS)
+	assert_not_null(digger, "fixture: player 1 has a worker")
+	assert_not_null(site, "fixture: player 1 has a crewed dig site")
+	if digger == null or site == null:
+		return
+	site.add_digger(digger.unit_id())
+	var before: int = state.content_hash()
+
+	assert_null(EndTurnCommand.new(0).execute(state, null), "§3.3: player 0 ends the turn")
+	assert_eq(state.current_player_index(), 1, "§3.3: player 1 is the incoming player")
+	assert_eq(
+		site.remaining_turns(),
+		TICK_TERRAIN_TURNS,
+		"(BA)(vi): an EndTurn with no DigRules spends NO worker-turn"
+	)
+	assert_eq(
+		state.map.get_terrain_type(TICK_TARGET),
+		TICK_TERRAIN_ID,
+		"(BA)(vi): and flips no hex"
+	)
+	assert_eq(
+		state.player(1).resource_ids(),
+		[] as Array[String],
+		"(BA)(vi): and credits nothing"
+	)
+	assert_ne(before, state.content_hash(), "sanity: the rotation itself IS a state change")
+
+
 ## §3.4 / §11.1 NEGATIVE PIN — EndTurn draws NO roll. Nothing in this slice is random, so the one
 ## seeded stream must still be at position 0 after any number of turns; a stray draw would make
 ## every later replay diverge.
@@ -521,8 +573,10 @@ func test_ending_turns_draws_no_random_roll() -> void:
 	)
 
 
-## §11.1 — the turn position is the ONLY thing an accepted EndTurn changes, so two states that
-## agree on the position agree on the hash, and one that does not disagrees.
+## §11.1 — RE-SCOPED BY M2-T7: with NO [DigRules] injected the turn position is still the ONLY
+## thing an accepted EndTurn changes, so two states that agree on the position agree on the hash and
+## one that does not disagrees. (A CONFIGURED EndTurn additionally runs §3.4 step 4 — pinned in
+## `tests/unit/test_dig_tick.gd`.)
 func test_the_turn_advance_is_the_only_state_change() -> void:
 	var advanced: GameState = GameState.new(GOLDEN_SEED, null, 3)
 	var positioned: GameState = GameState.new(GOLDEN_SEED, null, 3)
@@ -677,6 +731,51 @@ func test_public_api_is_exactly_the_documented_members() -> void:
 		REQUIRED_PUBLIC_VARS,
 		"(AV): %s declares ZERO public vars — it is an immutable value object" % END_TURN_PATH
 	)
+
+
+## S8 §3.4/(BA)(i)/§13.6 — THE STEP-4 RULE IS NOT INLINED HERE. §3.4 step 4 is one of TWELVE turn
+## sequence steps and will gain eleven siblings, so the Command DELEGATES to [DigTick] and does not
+## itself decrement, yield or flip anything: it must name `DigTick`, and it must name no §4.2
+## terrain id, no §5.1 resource id and none of §4.2's dig/yield numbers.
+func test_source_delegates_the_step_four_rule_instead_of_inlining_it() -> void:
+	var code: String = _code_text(END_TURN_PATH)
+	assert_false(code.is_empty(), "sanity: %s must be readable and non-empty" % END_TURN_PATH)
+	assert_true(
+		code.contains("DigTick"),
+		"§3.4/(BA)(i): %s runs step 4 by delegating to DigTick" % END_TURN_PATH
+	)
+	var lowered: String = code.to_lower()
+	for banned: String in [
+		"soft_dirt", "hard_rock", "dense_granite", "artificial_granite", "rubble", "gold_vein",
+		"iron_vein", "magestone_crust", "mithril_seam", "plain_floor", "food", "gold", "stone",
+		"iron", "magestone", "mithril", "scrap"
+	]:
+		assert_false(
+			lowered.contains(banned),
+			"(T)/(AH)/(AU)(iv): terrain and resource ids are DATA — %s must not name \"%s\"" % [
+				END_TURN_PATH, banned
+			]
+		)
+	for banned: String in ["set_terrain_type", "add_dig_site", "remove_dig_site", "set_remaining"]:
+		assert_false(
+			code.contains(banned),
+			"§3.4/(BA)(i): the step-4 MUTATIONS belong to DigTick — %s must not call %s" % [
+				END_TURN_PATH, banned
+			]
+		)
+	var numeral: RegEx = RegEx.new()
+	assert_eq(
+		numeral.compile("(?<![0-9A-Za-z._])([0-9]+)(?![0-9A-Za-z._])"),
+		OK,
+		"sanity: the standalone-numeral pattern compiles"
+	)
+	for found: RegExMatch in numeral.search_all(code):
+		assert_true(
+			["0", "1"].has(found.get_string()),
+			"§13.6: only 0 and 1 are permitted in %s — found \"%s\"" % [
+				END_TURN_PATH, found.get_string()
+			]
+		)
 
 
 ## S7 §11.1/§11.2 — EndTurnCommand is a pure [RefCounted] in `scripts/sim/commands/`. Asserted
