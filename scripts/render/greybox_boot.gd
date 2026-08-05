@@ -51,6 +51,12 @@ extends Node3D
 ## spot reading (1,800 sampled frames ~= 12.5 s at a 144 Hz vsync).
 @export var auto_quit_frames: int = 3300
 
+## §9.1/§14 — play mode for manual testing (`scenes/Play.tscn`, launched by `game.bat`): `true`
+## disables the (AO) auto-orbit/auto-quit/fps sampling so a human can drive the §9.1 camera
+## through [CameraRig]'s own input layer. The default `false` keeps `scenes/Main.tscn` the
+## unattended (AO) measurement run, unchanged.
+@export var free_run: bool = false
+
 @onready var _renderer: MapRenderer = $MapRenderer
 @onready var _rig: CameraRig = $CameraRig
 
@@ -96,6 +102,8 @@ func _process(delta: float) -> void:
 	if not _booted:
 		return
 	_frame += 1
+	if free_run:
+		return
 	_rig.orbit(_rig.orbit_speed_dps() * delta)
 
 	if _frame > warmup_frames:
