@@ -12,7 +12,8 @@ not-yet-committed.
 - **Phase:** 1 (MVP, GDD §14)
 - **Milestone:** **M2 — Dig & Economy is IN PROGRESS (opened 2026-08-04 by M2-T1; M2-T2 landed the
   §11.1 command spine; M2-T3 landed §4.2's dig TABLE; M2-T4 landed the §11.1 UNIT ROSTER; M2-T5
-  landed the DIG-SITE REGISTRY + `DigHexCommand` + `DigStartedEvent`).**
+  landed the DIG-SITE REGISTRY + `DigHexCommand` + `DigStartedEvent`; M2-T6 landed
+  `CancelDigCommand` + `DigCancelledEvent`, closing the "Dig/Cancel commands" ORDERING PAIR).**
   **M2 is NOT done:** M2-T1 landed the §11.1
   state container (`GameState`, `PlayerState`, the shared `Fnv` fold) plus the §12.1
   `dig_yields.artificial_granite` amendment that closed the M0-T2 item-10 forward gap; **M2-T2
@@ -41,23 +42,29 @@ not-yet-committed.
   unit roster — §4.2 line 197's adjacency + max-2-digger rules, an eleven-code rejection vocabulary
   in a fixed precedence, and the §7.1 ownership **seam**) and
   `scripts/sim/events/dig_started_event.gd` (**the project's second concrete `Event` subclass**,
-  `&"dig_started"`, emitted for every accepted dig order and for nothing else).
+  `&"dig_started"`, emitted for every accepted dig order and for nothing else);
+  **M2-T6 landed SLICE 3b** — `scripts/sim/commands/cancel_dig_command.gd` (**the THIRD of §11.1 line
+  705's fourteen printed commands**, a **pure consumer** of M2-T5: unit-targeted, six-code rejection
+  vocabulary, and the four rules §4.2 does not print — decisions.md **(AZ)**) plus
+  `scripts/sim/events/dig_cancelled_event.gd` (**the project's THIRD concrete `Event` subclass**,
+  `&"dig_cancelled"`).
   **None of §14's three M2 acceptance criteria is met** — *"Scripted 20-turn dig scenario matches
   expected stockpiles exactly"*, *"deficit-bleed test"* and *"zone assigns nearest idle worker"* all
   need systems that do not exist yet — and of the §14 M2 deliverable list (*"Workers, Dig/Cancel
   commands, yields, vein nodes + Extractors, stockpiles/income/upkeep, housing, Mining Zones v0"*)
   only **stockpiles**, the **yields TABLE** (the lookup, not its application), the **unit CONTAINER**
-  (the roster, not a worker) and now **half of the "Dig/Cancel commands" line — `DigHex` only** are
-  built. **A dig can be ORDERED but nothing DIGS:** a dig site can be created and joined, and that
-  is all — there is still **no §12.7 trait set (worker-ness is a TRAIT, i.e. DATA — there is no
-  worker CLASS), no `CancelDigCommand` (M2-T6), no dig TICK, no yield application, no
+  (the roster, not a worker) and now — as of M2-T6 — **the WHOLE "Dig/Cancel commands" line as an
+  ORDERING PAIR (`DigHex` + `CancelDig`)** are built. **A dig can be ORDERED and CANCELLED but
+  nothing DIGS:** a dig site can be created, joined, left and (on the last digger's exit) removed,
+  and that is all — there is still **no §12.7 trait set (worker-ness is a TRAIT, i.e. DATA — there
+  is no worker CLASS), no dig TICK, no yield application, no
   hex-becomes-Cave transition, no vein-node state, no Extractor, no income/upkeep, no housing cap
   and no zone**, and **none of §3.4's nine per-player steps or three World-phase steps** — every one
   is named as deliberately deferred in decisions.md **(AV)** item 9, **(AW)** item 4, **(AX)** item
-  18 and **(AY)** item 18 and in the new files' headers, and the §3.4 absence is pinned
-  **negatively** by test (after any number of EndTurns every `resource_ids()` is still empty, every
-  site's `remaining_turns()` is UNCHANGED, the target's terrain is UNCHANGED and
-  `rng.rolls_drawn()` is still 0).
+  18, **(AY)** item 18 and **(AZ)** item 14 and in the new files' headers, and the §3.4 absence is
+  pinned **negatively** by test (after any number of EndTurns **and cancels** every `resource_ids()`
+  is still empty, every surviving site's `remaining_turns()` is UNCHANGED, the target's terrain is
+  UNCHANGED — a cancel NEVER turns a hex into Cave — and `rng.rolls_drawn()` is still 0).
 - **Milestone:** **M1 — World is DONE (closed 2026-08-04 by M1-T9).** M0 — Bootstrap is **DONE**
   (closed by M0-T5): every §14 M0 deliverable is built (Godot project, GUT wired, `run_tests.sh`,
   EventBus, RulesLoader + `ruleset.json`, CI script, `decisions.md`), **both** §14 acceptance clauses
@@ -92,43 +99,47 @@ not-yet-committed.
   frustum, and with `hex_width_m` 18 the Medium map is ≈1150 m across, so the **whole** map cannot be
   framed inside §9.1's 60 m ceiling — the figure is honest for the view §9.1 permits, not for all 65
   chunks at once. The ceiling was **not** widened; the criterion was **not** reinterpreted.
-- **Next task:** **M2-T6 — `CancelDigCommand` + `DigCancelledEvent` (§11.1 / §4.2 / §3.4), slice
-  **3b** of "(a) workers + dig progress".** **THE DIG CHAIN'S SLICE 3 WAS RE-SLICED AT M2-T5**
-  (decisions.md **(AY)** item 1): PROGRESS had planned slice 3 as *"DigHex + CancelDig + progress
-  state"*, which measured well over the ≤ ~300 LOC ceiling in this repo's doc-heavy style (M2-T4
-  spent 289 lines on **two** files), so **3a** (`DigSite` + the registry + `DigHexCommand` +
-  `DigStartedEvent`, **203 production code lines**) landed as M2-T5 and **3b** is what remains. The
-  slices now are: **(3a) DONE, M2-T5**; **(3b) `CancelDigCommand` + `DigCancelledEvent`** ← *this is
-  the next one* — the **third** of §11.1 line 705's fourteen printed names, and a **pure consumer**
-  of what M2-T5 landed: `DigSite.remove_digger`, `GameState.remove_dig_site` and
-  `dig_site_of_digger` all exist and are already pinned, so the task is the **rule** (who may
-  cancel, what happens to a site whose last digger leaves, and whether progress is kept or lost —
-  §4.2 prints no answer, so pick the simplest reading consistent with §1.1 and **log it**), its
-  rejection vocabulary (reuse M2-T5's codes where they apply; **author any new one at its own call
-  site**, never as an enum or const list), and **exactly one** `DigCancelledEvent` per accepted
-  cancel; **(4) §3.4 step 4's dig tick + yield application + the hex-becomes-Cave transition + its
-  events + the OWED tier-3 golden**. **Do not pull slice 4 forward.** Slice 4 is also where the
-  `EventBus` → `MapRenderer.mark_hex_dirty` seam finally gets wired ((AV) item 9).
-  **3b MUST ride the command spine** ((AV)) and §13.6's *events* clause is **LIVE, not vacuous**,
-  from M2-T5 onward: an `Event` for **every** state change, and **no** event when nothing changed —
-  M2-T5 pins **both** directions and 3b must too.
-  **§13.2 TIER 3's GOLDEN IS STILL DUE AND STILL OWED, NOW FOUR TIMES OVER** — decisions.md
-  **(AV) item 7**, **(AW) item 5**, **(AX) item 11** and **(AY) item 12**: M2-T5 **again extended
-  the fold**, which is exactly why freezing it earlier would have cost a re-record; **the slice that
-  lands the dig tick (4) records it**, and if it still looks premature, say so **in decisions.md**
-  rather than skipping it a **fifth** time.
-  **Continue the decisions.md lettering at (AZ)** — M2-T5 used **(AY)** as a single umbrella
-  resolution with fourteen lettered sub-items plus four unlettered ones, cross-referenced by all
-  four production files and five suites; **(AX)** is cross-referenced by `unit_state.gd`,
-  `game_state.gd` and two suites, **(AW)** by several files, **(AV)** by five and **(AU)** by four,
-  so **do not renumber any of them**.
-- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 31 / Tests 795 /
-  **Passing 795** / Failing 0 / Asserts 9295; `bash tools/typecheck.sh` exits 0 over 57 files;
+- **Next task:** **M2-T7 — SLICE 4 OF THE DIG CHAIN: §3.4 step 4's dig TICK + yield APPLICATION +
+  the hex-becomes-Cave transition + their events + THE OWED §13.2 TIER-3 GOLDEN (§3.4 / §4.2 / §5.1 /
+  §11.1 / §13.2).** The dig chain's slices are now: **(1) the §4.2 dig TABLE — DONE, M2-T3**
+  (`DigRules`); **(2) the unit ROSTER — DONE, M2-T4**; **(3a) `DigSite` + the registry +
+  `DigHexCommand` + `DigStartedEvent` — DONE, M2-T5**; **(3b) `CancelDigCommand` +
+  `DigCancelledEvent` — DONE, M2-T6** (the ordering pair is complete: a dig can be started, joined,
+  left and abandoned); **(4) the TICK ← *this is the next one*.** It is the slice where the dig
+  chain finally **moves a number**: `remaining_turns` decrements by the number of assigned diggers
+  during §3.4 **step 4**, a site that reaches 0 applies its §4.2 yield to the **owning** player's
+  stockpile, the hex **becomes Cave**, the site is removed, the diggers are freed, and an `Event` is
+  emitted for **each** of those state changes — and it is where the `EventBus` →
+  `MapRenderer.mark_hex_dirty` seam is finally wired ((AV) item 9). **SIZE IT AND EXPECT TO SPLIT
+  IT**: measure at Orient against the ≤ ~300 LOC production ceiling the way M2-T5 did ((AY) item 1
+  — the re-slice was arithmetic, not taste), because a tick + a yield application + a terrain
+  mutation + a renderer seam + a golden is plausibly two slices. **Everything it needs already
+  exists and is already pinned**: `DigSite.set_remaining_turns` (TOTAL, clamping, and deliberately
+  does **not** remove the site — completion is **this** slice's rule), `DigRules.yield_resource_ids`
+  / `yield_amount` / `vein_resource_id` (the four *"+ node"* rows — **node STATE and Extractors are
+  still a LATER slice**, (AW) item 4), `PlayerState.add`, `HexMap.set_terrain_type`,
+  `GameState.remove_dig_site`. **Do not pull further forward than the tick**: no vein-node stock/rate,
+  no Extractor, no income/upkeep, no housing, no zone, no §4.2 *"Dig 2×"* halving
+  (`DigRules.halve_remaining_turns` still has **no caller** — no ability exists).
+  **§13.2 TIER 3's GOLDEN IS DUE HERE AND IS NOW OWED FIVE TIMES OVER** — decisions.md
+  **(AV) item 7**, **(AW) item 5**, **(AX) item 11**, **(AY) item 12** and **(AZ) item 9**. M2-T6
+  extended **no** fold and added **no** `GameState` field, so no re-record was triggered and none was
+  due; **slice 4 is the slice that RECORDS it**, because it is the first slice whose state genuinely
+  evolves over N turns. If it still looks premature, say so **in decisions.md** rather than skipping
+  it a **sixth** time.
+  **Continue the decisions.md lettering at (BA)** — M2-T6 used **(AZ)** as a single umbrella
+  resolution with ten lettered sub-items plus four unlettered ones, cross-referenced by both new
+  production files and three suites; **(AY)** is cross-referenced by four production files and five
+  suites, **(AX)** by `unit_state.gd`, `game_state.gd` and two suites, **(AW)** by several files,
+  **(AV)** by five and **(AU)** by four, so **do not renumber any of them**.
+- **Blockers:** **none.** `bash tools/run_tests.sh` exits **0** at Scripts 33 / Tests 846 /
+  **Passing 846** / Failing 0 / Asserts 10077; `bash tools/typecheck.sh` exits 0 over 61 files;
   `bash tools/ci.sh` PASSes; `bash tools/verify_harness.sh` PASSes across all four phases with the
-  tree left clean (all four measured at Verify, 2026-08-05, M2-T5, and `run_tests.sh` re-run at
-  Land — **Scripts 31 / Tests 795 / Passing 795 / Asserts 9295**, exit 0; Verify made **no** fix for
-  the **fourth** iteration running — `fixes_made` empty again — and ran an independent 27-assertion
-  probe that passed 27/27 and was deleted afterwards).
+  tree left clean (all four measured at Verify, 2026-08-05, M2-T6, and `run_tests.sh` re-run at
+  Land — **Scripts 33 / Tests 846 / Passing 846 / Asserts 10077**, exit 0; Verify made **no** fix for
+  the **FIFTH** iteration running — `fixes_made` empty again — and ran an **eight-probe adversarial
+  mutation battery in which ALL EIGHT mutants were caught**, each reverted and the restored tree
+  re-verified green).
 
 ## Milestone tracker
 
@@ -136,7 +147,7 @@ not-yet-committed.
 | --- | --- | --- |
 | M0 Bootstrap | **DONE** (2026-08-04, M0-T5) | **BOTH §14 acceptance clauses MET headless, checked against the §14 row this iteration** — (a) *sentinel suite green AND a deliberately failing sentinel makes `run_tests.sh` exit non-zero* (SETUP-2 amendment): `verify_harness.sh` exit 0 with **four** phases — A green, B failing canary, C syntactic parse error, D statically-impossible construct — each red phase non-zero **and naming its probe**, tree clean afterwards; (b) *invalid ruleset rejected with a line-numbered error*: pinned by `tests/unit/test_rules_loader.gd`, suite exit 0 at **Scripts 7 / Tests 62 / Passing 62 / Asserts 473** with the collected-script count equal to the `test_*.gd` count on disk. **ALL §14 M0 deliverables built:** Godot project, GUT wired, `run_tests.sh`, RulesLoader + `ruleset.json`, EventBus (M0-T3), CI script (M0-T4: `tools/ci.sh` + `tools/typecheck.sh` + the `project.godot` §11.3 gate), `decisions.md`. M0-T5 closed the last open item: the false-green mode *inside* the signal that reports clause (a) (decisions.md M0-T5, correcting M0-T4 item (i)). |
 | M1 World | **DONE** (opened 2026-08-04 by M1-T1; **closed 2026-08-04 by M1-T9**) | **ALL 3 of 3 §14 M1 acceptance criteria MET *and* ALL 5 of 5 §14 M1 deliverables BUILT — both re-checked against the §14 row (line 1097) at Land this iteration** — (a) *golden mapgen test (seed ⇒ terrain hash)*: **MET headless** (M1-T5 — `tests/golden/test_mapgen_golden.gd` + `tests/golden/mapgen_concentric_bowl_small_seed1337.json`, radius 24 / 1,801 hexes / seed 1337 ⇒ `content_hash` `0xcad24923`, the value measured three times independently; the test fails loudly and never auto-records when the file is absent, and six adversarial probes incl. a reversed roll stream and a perturbation of the shipped data all went red on demand; **untouched and still green after M1-T8**, which hashes nothing and moves neither `HexMap` storage nor the canonical order); (b) *60 fps on Medium map greybox*: **MET as of M1-T8** — measured **windowed** (per decisions.md M1-T6 **(Z)** it is **not headless-measurable at all**: the `--headless` dummy renderer stores no MultiMesh instance data and draws nothing), unattended, **twice**, on `scenes/Main.tscn` at boot defaults — **hexes=3169** (Medium, radius 32) / **chunks=65** / **SDFGI off** / 1600×900 / auto-orbiting: **`fps_min=144.00 fps_avg=144.00 fps_max=144.00` in both vsync-capped runs (144 Hz panel), and 236 / 357 / 395 / 608 fps uncapped** on an i7-14700HX + RTX 4070 Laptop. Logged in full at decisions.md M1-T8 **with its caveat** (at §9.1's widest legal framing only 8–9 of the 65 chunks are in frustum; the whole ≈1150 m map cannot be framed inside §9.1's 60 m zoom ceiling, which was **not** widened); (c) *LOS property tests*: **MET headless** (M1-T3 — `tests/unit/test_los.gd`, 8 property sweeps incl. symmetry/reflexivity/all-open/adjacency/agreement/monotonicity over the 3,721 ordered pairs of the radius-4 disc, all green, and three adversarial mutation probes proved the subtlest pins load-bearing). **The milestone is MARKED DONE as of M1-T9: §14 M1's five deliverables are all built and its three acceptance criteria all pass headless** (criterion (b) measured windowed, because per **(Z)** it is not headless-measurable at all). A milestone closes only when its deliverables **and** its acceptance criteria are both satisfied — as of this commit both are. **Deliverables built: HexMath COMPLETE, both slices** (`scripts/core/hex_math.gd` — slice 1: axial/cube conversion, the fixed 6-direction table, neighbours/opposites, cube distance, radius membership, hex count; slice 2 (M1-T2): exact-integer `cube_round_scaled`, `line`, `ring`, `hexes_in_range` + the private `_floor_div`); **`Los` COMPLETE** (M1-T3, `scripts/core/los.gd` — the §4.1 blocking predicate, exactly two public functions over injected terrain `Callable`s, resolutions (H)–(L)); **concentric-bowl generator COMPLETE, both slices** (M1-T4 slice 1 + M1-T5 slice 2 — `scripts/core/rng.gd`, `scripts/sim/hex_map.gd`, `scripts/sim/map_generator.gd`, `data/mapgen/concentric_bowl.json`: the hex container with its pinned canonical order and terrain-type field, the §4.4 band/terrace rules and the §4.4 composition rule all as pure integer math, the single seeded `Rng`, and `content_hash` (FNV-1a 32-bit); resolutions (M)–(U)); **chunked MultiMesh renderer COMPLETE, both slices** (M1-T6 slice 1 — `scripts/render/hex_layout.gd` + `data/render/greybox.json`: flat-top hex→world placement on the XZ plane, the axial-square chunk partition with true floor division and (O)-matching key order, and the (P)-mirroring `RulesError` load contract; resolutions (V)–(Z), 44 tests. M1-T7 slice 2 — `scripts/render/map_renderer.gd` + `data/render/terrain_palette.json`: the project's **first `Node`** (`class_name MapRenderer extends Node3D`), one `MultiMeshInstance3D` per chunk in canonical order, ONE shared hexagonal `CylinderMesh` + ONE shared `StandardMaterial3D` for the whole renderer, per-instance transforms and type/tint custom data written from `HexLayout`/`HexMap`, the in-place dirty-chunk rebuild seam M2's dig will call, and the (AF) palette load contract reusing `RulesError`; resolutions (AA)–(AH), 43 tests, six adversarial probes). **camera rig COMPLETE, plus the project's first scene** (M1-T8 — `scripts/render/camera_rig.gd` + `data/render/camera.json`: the §9.1 orbiting rig with yaw **wrapping** into [0,360), pitch/zoom **clamping inclusively** to the printed 15–80° / 8–60 m bands read from data, the derived `looking_at` transform, camera-relative ground pan, the (AL) `RulesError` load contract and a thin WASD/Q-E/R-F/wheel/edge-pan input layer; `scripts/render/greybox_boot.gd` + `scenes/Main.tscn` — the project's **FIRST scene**, `run/main_scene` now set, `WorldEnvironment` with **SDFGI explicitly off**, a lit `DirectionalLight3D`; and the **flat-top correction yaw** in `MapRenderer` that M1-T7 item 16 owed; resolutions (AI)–(AP), 67 tests, seven adversarial probes). **hex picking COMPLETE — the last deliverable, and the one that CLOSES M1** (M1-T9 — `scripts/render/hex_picker.gd`, a pure `RefCounted` with **exactly five public functions and zero public vars**: the (AR) algebraic inverse of (W) reusing `HexMath.cube_round_scaled` for the cube repair, the (AS) ray/plane intersector, the (AQ) elevation-layered pick scanned **top-down** with an explicit empty-Array "no hex", and the thin `pick_from_screen` `Camera3D` adapter; resolutions (AQ)–(AT), 37 tests, thirteen adversarial probes of which **two found weak TESTS rather than weak code** and were fixed at Verify). |
-| M2 Dig & Economy | **in progress** (opened 2026-08-04 by M2-T1; spine landed by M2-T2; unit roster landed by M2-T4; `DigHex` + the dig-site registry landed by M2-T5) | **0 of 3 §14 M2 acceptance criteria met — the milestone is NOT done, and this row was RE-CHECKED against the §14 M2 row (`docs/GAME_DESIGN.md` line 1102) at Land this iteration; the printed criterion text is unchanged.** (a) *"Scripted 20-turn dig scenario matches expected stockpiles exactly"* — **NOT met**: turns and Commands exist (M2-T2), §4.2's dig numbers are readable (M2-T3), units exist (M2-T4) and a dig can now be **ORDERED** (M2-T5) — but **nothing DIGS**: there is no dig **tick** and no yield **application**, so no stockpile moves and nothing can be scripted yet; the *stockpile* half of the fixture now exists (`PlayerState`, per-player 64-bit integers, §5.1 *"No storage caps"*). (b) *"deficit-bleed test"* — **NOT met**: §3.4 step 2's *"every unpaid unit loses 10% max HP this turn"* needs units and upkeep, neither of which exists; what M2-T1 **did** pin is the half of §3.4 step 2 that constrains the stockpile — `spend` refuses **atomically** rather than going negative, because a shortage is paid in HP (decisions.md **(AU)** item 2). (c) *"zone assigns nearest idle worker"* — **NOT met**: no zones, no workers. **Deliverables built so far, of the §14 M2 list** (*"Workers, Dig/Cancel commands, yields, vein nodes + Extractors, stockpiles/income/upkeep, housing, Mining Zones v0"*): **stockpiles, plus — as of M2-T3 — the *yields* LOOKUP TABLE (see the M2-T3 paragraph at the end of this cell)** — `scripts/sim/player_state.gd` (opaque §5.1 resource ids, atomic non-negative `spend`, zero entries removed, ascending-id canonical order, 64-bit amounts) and `scripts/sim/game_state.gd` (§11.1's single serializable state: map + index-stable player roster + **the ONE** `state.rng`, with a reproducible `content_hash`) on the shared `scripts/core/fnv.gd` FNV-1a fold. Also landed: the **§12.1 `dig_yields.artificial_granite` amendment** (value **2**, governed by §4.2's `Artificial Granite \| 3 (owner: 1) \| \+2 Stone` row) — the M0-T2 item-10 forward gap, now closed in `data/ruleset.json` as a **required, line-numbered-validated** leaf **and** in the §12.1 table cell itself (decisions.md **(AU)** item 1; the one sanctioned GDD edit, made by Land in the M2-T1 commit). **M2-T2 added the §11.1 SPINE those deliverables will hang on — infrastructure, not a §14 M2 deliverable line-item, and it moves no acceptance criterion:** `scripts/sim/commands/command_error.gd` (a NEW error type, deliberately not `RulesError` — decisions.md **(AV)(i)**), `scripts/sim/commands/command.gd` (the §11.1 base — `command_name`/`validate`/`apply` plus **`execute`, the ONE gate** that welds validate → apply → `EventBus.emit_all` so nothing can apply without validating, **(AV)(ii)**), `scripts/sim/commands/end_turn_command.gd` (the project's FIRST real Command, one of §11.1's fourteen printed names, carrying §3.3's rotation `next = (current + 1) % n` with `turn += 1` only on the wrap to 0), `scripts/sim/events/turn_ended_event.gd` (the project's **FIRST concrete `Event` subclass**, `&"turn_ended"`), and §3.3's **turn position** on `GameState` (`turn()` / `current_player_index()` / the total+atomic `set_turn_position()`, folded into `content_hash()` — **the fold order is AMENDED, see (AV)(vi)**). **§11.1's replay clause is now PROVEN, not merely intended**: `tests/sim/test_turn_replay.gd` (the project's first tier-2 suite) shows two fresh states on the same seed fed the same `command_log` agree on `content_hash()` **at every step**, that the log replays identically 3×, and that a rejected command changes nothing. **NO GOLDEN was recorded and §13.2 tier 3's golden is OWED, NOT FORGOTTEN — (AV) item 7.** **Not built, deliberately (§13.4, decisions.md (AV) item 9):** the other **thirteen** §11.1 commands, `Command.to_dict()`/serialization and a `CommandLog` (M7), §3.4's nine per-player steps and three World-phase steps (pinned **negatively** by test), §3.2/§12.1's `victory.turn_limit` and victory checks (M6), workers, dig progress, yield application, vein nodes, Extractors, income, upkeep, housing, Mining Zones, §3.1's starting kit (which needs its own §12.1 key and amendment), and any `EventBus` → `MapRenderer.mark_hex_dirty` wiring. **M2-T3 added the FIRST HALF of §14 M2's *"yields"* deliverable — the §4.2 dig TABLE as a pure lookup, not its application, and it moves NO acceptance criterion:** `scripts/sim/systems/dig_rules.gd` (`class_name DigRules extends RefCounted`, the project's first `scripts/sim/systems/` file — §11.2 line 724 prints that directory verbatim) answers §4.2's whole Solid-hex dig paragraph **entirely from loaded data** — `is_diggable` (true for exactly the nine printed Solid rows), `dig_turns_for(terrain_id, by_owner)` (1/2/4/3/1/2/2/2/4 with the §7.1 owner variant `artificial_granite → 1`, inert on the other eight rows), `yield_resource_ids` + `yield_amount` (food 1 · stone 2/4/2/1 · the four vein lumps gold 25 / iron 10 / magestone 15 / mithril 10), `vein_resource_id` (the four *"+ node"* rows only — **node STATE and Extractors are a LATER slice**, decisions.md **(AW)** item 4), `max_diggers_per_hex` (§4.2 line 197's *"max 2 simultaneous diggers per hex"*) and `halve_remaining_turns` (line 197's *"Dig 2× halves remaining time (round up)"* = ceil(n/2), **fixed point at 1**). **THE PROJECT'S SECOND §12.1 AMENDMENT landed with it** — a new top-level `dig` group in `data/ruleset.json` (line 5, one line) = `{max_diggers_per_hex: 2, profiles: {nine §4.2 terrain ids → turns_key / owner_turns_key / yield_key / vein_key}}`, i.e. **the binding between §4.2's terrain-id vocabulary and §12.1's dig-key vocabulary, put in DATA precisely so it is not a whitelist in engine code** ((T)/(AH)/(AU)(iv), and §13.5's M6 canary); the §12.1 excerpt gained the one new key line, edited by Land in the M2-T3 commit, and **§4.2's table is byte-unchanged**. `RulesLoader` grew (purely additively) a new **`map` spec kind** — author-chosen keys validated against one shared entry spec, keys visited in **ASCENDING sorted order** so `errors` stays deterministic, rejecting both a non-object and an **empty** `profiles` — and the public accessor `get_keys(dotted_path)` (ascending, fresh per call, total). **NO Command, NO GameState mutation, NO Event** — pinned negatively, and `tests/sim/test_turn_replay.gd` is untouched and still green. **M2-T4 added the §11.1 line-704 UNIT ROSTER — the CONTAINER half of §14 M2's *"Workers"* deliverable, and it moves NO acceptance criterion:** `scripts/sim/unit_state.gd` (`class_name UnitState extends RefCounted`, **new**, 146 lines) is one unit INSTANCE as a pure record — stable id, **owner player index** (units are a **TOP-LEVEL** `GameState` collection per §11.1 line 704, **never** a `PlayerState` field, and `tests/unit/test_player_state.gd` is byte-untouched and still green), the **opaque** §12.2 `type_id`, an axial `Vector2i` position, and `hp`/`max_hp` with a **TOTAL clamping** `set_hp` (overheal saturates, overkill floors, **0 hp does NOT remove the unit** — that is a later RULE) — exactly **nine** public functions plus `_init`, **zero public vars, zero public consts**, and a documented FNV fold — `unit_id` → `owner_index` → `hex.x` → `hex.y` → `hp` → `max_hp` → `type_id`'s UTF-8 bytes → the private `_SEPARATOR` (fixed-width fields first, the one variable-length field LAST, so the record is injective by construction). `scripts/sim/game_state.gd` (**+143 lines**) gained the roster itself: a private `_units` Dictionary (keyed by int id, **never iterated for output**) + `_next_unit_id`, and six public functions — `spawn_unit`, `unit`, `unit_ids`, `units_of`, `units_at`, `remove_unit` — each **total**, each list accessor sorting a **fresh copy** of the keys and returning a **fresh Array** every call (`units_of`/`units_at` are **linear scans** over `unit_ids()`; **no reverse index**), `unit(id)` returning the **SAME object** every call. **IDS START AT 1, ADVANCE ONLY ON A SUCCESSFUL SPAWN AND ARE NEVER REUSED** (0 means *"no unit"* — an algorithmic constant, the (AJ) precedent, **not** a §12.1 key); **every refusal is ATOMIC and BURNS NO ID** (owner outside `0..player_count()-1`, empty `type_id`, non-positive `max_hp`). **Placement is NOT validated** (`map` is never consulted; §6.4 stacking legality is M4) and **neutral ownership is deliberately NOT modelled** (§8.1/§3.2 need an explicit sentinel at M5 — never a silent -1). The `content_hash` fold was **EXTENDED BY APPENDING ONLY** — `_next_unit_id` → unit count → per ascending id (the id, then that unit's hash) — so *"spawned 3 then removed all 3"* cannot hash like *"never spawned"*; **no existing fold step was renamed or reordered**, and the unit-count step is a **knowingly EQUIVALENT MUTANT** kept for symmetry (the (AU) item 11 precedent — do not chase it). **NO Command, NO Event, NO data key, NO rule** — §13.6's *events* clause is **VACUOUS** here and said to be so ((AX) item 10); `tests/sim/test_turn_replay.gd` is untouched and green, `scripts/sim/commands/` and `scripts/sim/events/` gained no file, `data/ruleset.json` and `docs/GAME_DESIGN.md` are **byte-unchanged**, and **no golden was recorded** (still OWED — (AX) item 11). **M2-T5 added SLICE 3a of the dig chain — the FIRST HALF of §14 M2's *"Dig/Cancel commands"* line (`DigHex` only), and the FIRST M2 task that mutates state through a `Command`; it still moves NO acceptance criterion:** `scripts/sim/dig_site.gd` (**new**, 128 lines / 51 code — `class_name DigSite extends RefCounted`, the dig-site PROGRESS RECORD: `hex`, `owner_index`, `total_turns`, `remaining_turns` + a TOTAL clamping `set_remaining_turns`, a **fresh ASCENDING** `digger_ids()`, `add_digger`/`remove_digger`, `content_hash` — exactly **nine** public functions, **zero** public vars/consts, identity **read-only**, and **NO digger cap** because the cap is the Command's rule), five new `GameState` registry functions over a private `_dig_sites` Dictionary (`add_dig_site` — TOTAL, every refusal **ATOMIC**, and validating **nothing** about placement/terrain exactly as `spawn_unit` does not; `dig_site` — the **SAME object** every call; `dig_site_hexes` — **FRESH** every call in the canonical order **r ascending then q ascending** through an explicit private `_hex_before` comparator, **never** `Vector2i`'s default `<`, which sorts x first; `dig_site_of_digger` — a **LINEAR SCAN**, no reverse index; `remove_dig_site`), `scripts/sim/commands/dig_hex_command.gd` (**new**, 147 lines / 79 code — **the SECOND of §11.1 line 705's fourteen printed commands**, an immutable value object, the first consumer of **both** `DigRules` and the unit roster, carrying §4.2 line 197's **adjacency** (cube distance exactly 1 via the named private `_ADJACENT_DISTANCE`, all six §4.1 neighbours accepted) and **max-2-diggers** cap (read from §12.1 `dig.max_diggers_per_hex` through `DigRules` — the literal `2` is a **forbidden token**), an **eleven-code** rejection vocabulary in a fixed precedence (`null_state` → `no_map` → `no_players` → `not_current_player` → `no_such_unit` → `not_your_unit` → `unit_not_adjacent` → `not_diggable` → `site_not_yours` → `already_digging` → `dig_site_full`, each authored at its own call site), and the **§7.1 ownership SEAM** `_digs_own_terrain` — the **only** caller of `dig_turns_for`, answering `false` unconditionally today because **no hex carries a builder index** and §7.1's Raise Granite is **M3/M4**, so Artificial Granite comes out **3**, never 1) and `scripts/sim/events/dig_started_event.gd` (**new**, 64 lines / 30 code — **the project's SECOND concrete `Event` subclass**, `&"dig_started"`, emitted **exactly once** for every accepted dig order (creation **and** join) and for nothing else, with `to_dict()` calling the base **first** then flattening `hex` into `hex_q`/`hex_r` because §11.1 line 708's save is **JSON**). The `content_hash` fold was **EXTENDED BY APPENDING ONLY** again (site count → per hex in canonical order: `hex.x`, `hex.y`, that site's hash) with **no existing step renamed or reordered**, and it **deliberately DIVERGES from (AX)'s `_next_unit_id`**: *add-then-remove-every-site* **DOES** hash like *never-added*, because a dig site has **no dangling identity** to protect (asserted **positively** — (AY) item 9). **§13.6's *events* clause is LIVE for the first time in M2 and pinned in BOTH directions** (an event for every state change; an `apply()` with an unconfigured `DigRules` creates **no** site and returns an **EMPTY** array). **NO GDD edit, `data/ruleset.json` byte-unchanged, no new §12.1 key, no golden recorded** (still OWED, a **fourth** time — (AY) item 12). **Still NOT built after M2-T5:** §12.7's **trait set** (worker-ness is a TRAIT = DATA; there is **no worker CLASS** and no `is_worker()`, and **any** unit type may be assigned a dig today), `CancelDigCommand` + `DigCancelledEvent` (**M2-T6**, slice 3b), the dig **TICK**, yield **application**, the hex-becomes-Cave transition, §4.2's *"Dig 2×"* halving (`halve_remaining_turns` has **no caller**), §7.1's Raise Granite and any hex-builder storage, vein-node stock/rate, Extractors, income, upkeep, §5.2's housing cap (`housing.hq` shipped and **unused**), Mining Zones, §3.1's starting kit, `data/units/*.json` stat blocks (M6), command/unit serialization (M7), movement/combat/damage and all twelve §3.4 steps. |
+| M2 Dig & Economy | **in progress** (opened 2026-08-04 by M2-T1; spine landed by M2-T2; unit roster landed by M2-T4; `DigHex` + the dig-site registry landed by M2-T5; `CancelDig` landed by M2-T6) | **0 of 3 §14 M2 acceptance criteria met — the milestone is NOT done, and this row was RE-CHECKED against the §14 M2 row (`docs/GAME_DESIGN.md` line 1102) at Land this iteration; the printed criterion text is unchanged.** (a) *"Scripted 20-turn dig scenario matches expected stockpiles exactly"* — **NOT met**: turns and Commands exist (M2-T2), §4.2's dig numbers are readable (M2-T3), units exist (M2-T4) and a dig can now be **ORDERED** (M2-T5) and **CANCELLED** (M2-T6) — but **nothing DIGS**: there is no dig **tick** and no yield **application**, so no stockpile moves and nothing can be scripted yet; the *stockpile* half of the fixture now exists (`PlayerState`, per-player 64-bit integers, §5.1 *"No storage caps"*). (b) *"deficit-bleed test"* — **NOT met**: §3.4 step 2's *"every unpaid unit loses 10% max HP this turn"* needs units and upkeep, neither of which exists; what M2-T1 **did** pin is the half of §3.4 step 2 that constrains the stockpile — `spend` refuses **atomically** rather than going negative, because a shortage is paid in HP (decisions.md **(AU)** item 2). (c) *"zone assigns nearest idle worker"* — **NOT met**: no zones, no workers. **Deliverables built so far, of the §14 M2 list** (*"Workers, Dig/Cancel commands, yields, vein nodes + Extractors, stockpiles/income/upkeep, housing, Mining Zones v0"*): **stockpiles, plus — as of M2-T3 — the *yields* LOOKUP TABLE (see the M2-T3 paragraph at the end of this cell)** — `scripts/sim/player_state.gd` (opaque §5.1 resource ids, atomic non-negative `spend`, zero entries removed, ascending-id canonical order, 64-bit amounts) and `scripts/sim/game_state.gd` (§11.1's single serializable state: map + index-stable player roster + **the ONE** `state.rng`, with a reproducible `content_hash`) on the shared `scripts/core/fnv.gd` FNV-1a fold. Also landed: the **§12.1 `dig_yields.artificial_granite` amendment** (value **2**, governed by §4.2's `Artificial Granite \| 3 (owner: 1) \| \+2 Stone` row) — the M0-T2 item-10 forward gap, now closed in `data/ruleset.json` as a **required, line-numbered-validated** leaf **and** in the §12.1 table cell itself (decisions.md **(AU)** item 1; the one sanctioned GDD edit, made by Land in the M2-T1 commit). **M2-T2 added the §11.1 SPINE those deliverables will hang on — infrastructure, not a §14 M2 deliverable line-item, and it moves no acceptance criterion:** `scripts/sim/commands/command_error.gd` (a NEW error type, deliberately not `RulesError` — decisions.md **(AV)(i)**), `scripts/sim/commands/command.gd` (the §11.1 base — `command_name`/`validate`/`apply` plus **`execute`, the ONE gate** that welds validate → apply → `EventBus.emit_all` so nothing can apply without validating, **(AV)(ii)**), `scripts/sim/commands/end_turn_command.gd` (the project's FIRST real Command, one of §11.1's fourteen printed names, carrying §3.3's rotation `next = (current + 1) % n` with `turn += 1` only on the wrap to 0), `scripts/sim/events/turn_ended_event.gd` (the project's **FIRST concrete `Event` subclass**, `&"turn_ended"`), and §3.3's **turn position** on `GameState` (`turn()` / `current_player_index()` / the total+atomic `set_turn_position()`, folded into `content_hash()` — **the fold order is AMENDED, see (AV)(vi)**). **§11.1's replay clause is now PROVEN, not merely intended**: `tests/sim/test_turn_replay.gd` (the project's first tier-2 suite) shows two fresh states on the same seed fed the same `command_log` agree on `content_hash()` **at every step**, that the log replays identically 3×, and that a rejected command changes nothing. **NO GOLDEN was recorded and §13.2 tier 3's golden is OWED, NOT FORGOTTEN — (AV) item 7.** **Not built, deliberately (§13.4, decisions.md (AV) item 9):** the other **thirteen** §11.1 commands, `Command.to_dict()`/serialization and a `CommandLog` (M7), §3.4's nine per-player steps and three World-phase steps (pinned **negatively** by test), §3.2/§12.1's `victory.turn_limit` and victory checks (M6), workers, dig progress, yield application, vein nodes, Extractors, income, upkeep, housing, Mining Zones, §3.1's starting kit (which needs its own §12.1 key and amendment), and any `EventBus` → `MapRenderer.mark_hex_dirty` wiring. **M2-T3 added the FIRST HALF of §14 M2's *"yields"* deliverable — the §4.2 dig TABLE as a pure lookup, not its application, and it moves NO acceptance criterion:** `scripts/sim/systems/dig_rules.gd` (`class_name DigRules extends RefCounted`, the project's first `scripts/sim/systems/` file — §11.2 line 724 prints that directory verbatim) answers §4.2's whole Solid-hex dig paragraph **entirely from loaded data** — `is_diggable` (true for exactly the nine printed Solid rows), `dig_turns_for(terrain_id, by_owner)` (1/2/4/3/1/2/2/2/4 with the §7.1 owner variant `artificial_granite → 1`, inert on the other eight rows), `yield_resource_ids` + `yield_amount` (food 1 · stone 2/4/2/1 · the four vein lumps gold 25 / iron 10 / magestone 15 / mithril 10), `vein_resource_id` (the four *"+ node"* rows only — **node STATE and Extractors are a LATER slice**, decisions.md **(AW)** item 4), `max_diggers_per_hex` (§4.2 line 197's *"max 2 simultaneous diggers per hex"*) and `halve_remaining_turns` (line 197's *"Dig 2× halves remaining time (round up)"* = ceil(n/2), **fixed point at 1**). **THE PROJECT'S SECOND §12.1 AMENDMENT landed with it** — a new top-level `dig` group in `data/ruleset.json` (line 5, one line) = `{max_diggers_per_hex: 2, profiles: {nine §4.2 terrain ids → turns_key / owner_turns_key / yield_key / vein_key}}`, i.e. **the binding between §4.2's terrain-id vocabulary and §12.1's dig-key vocabulary, put in DATA precisely so it is not a whitelist in engine code** ((T)/(AH)/(AU)(iv), and §13.5's M6 canary); the §12.1 excerpt gained the one new key line, edited by Land in the M2-T3 commit, and **§4.2's table is byte-unchanged**. `RulesLoader` grew (purely additively) a new **`map` spec kind** — author-chosen keys validated against one shared entry spec, keys visited in **ASCENDING sorted order** so `errors` stays deterministic, rejecting both a non-object and an **empty** `profiles` — and the public accessor `get_keys(dotted_path)` (ascending, fresh per call, total). **NO Command, NO GameState mutation, NO Event** — pinned negatively, and `tests/sim/test_turn_replay.gd` is untouched and still green. **M2-T4 added the §11.1 line-704 UNIT ROSTER — the CONTAINER half of §14 M2's *"Workers"* deliverable, and it moves NO acceptance criterion:** `scripts/sim/unit_state.gd` (`class_name UnitState extends RefCounted`, **new**, 146 lines) is one unit INSTANCE as a pure record — stable id, **owner player index** (units are a **TOP-LEVEL** `GameState` collection per §11.1 line 704, **never** a `PlayerState` field, and `tests/unit/test_player_state.gd` is byte-untouched and still green), the **opaque** §12.2 `type_id`, an axial `Vector2i` position, and `hp`/`max_hp` with a **TOTAL clamping** `set_hp` (overheal saturates, overkill floors, **0 hp does NOT remove the unit** — that is a later RULE) — exactly **nine** public functions plus `_init`, **zero public vars, zero public consts**, and a documented FNV fold — `unit_id` → `owner_index` → `hex.x` → `hex.y` → `hp` → `max_hp` → `type_id`'s UTF-8 bytes → the private `_SEPARATOR` (fixed-width fields first, the one variable-length field LAST, so the record is injective by construction). `scripts/sim/game_state.gd` (**+143 lines**) gained the roster itself: a private `_units` Dictionary (keyed by int id, **never iterated for output**) + `_next_unit_id`, and six public functions — `spawn_unit`, `unit`, `unit_ids`, `units_of`, `units_at`, `remove_unit` — each **total**, each list accessor sorting a **fresh copy** of the keys and returning a **fresh Array** every call (`units_of`/`units_at` are **linear scans** over `unit_ids()`; **no reverse index**), `unit(id)` returning the **SAME object** every call. **IDS START AT 1, ADVANCE ONLY ON A SUCCESSFUL SPAWN AND ARE NEVER REUSED** (0 means *"no unit"* — an algorithmic constant, the (AJ) precedent, **not** a §12.1 key); **every refusal is ATOMIC and BURNS NO ID** (owner outside `0..player_count()-1`, empty `type_id`, non-positive `max_hp`). **Placement is NOT validated** (`map` is never consulted; §6.4 stacking legality is M4) and **neutral ownership is deliberately NOT modelled** (§8.1/§3.2 need an explicit sentinel at M5 — never a silent -1). The `content_hash` fold was **EXTENDED BY APPENDING ONLY** — `_next_unit_id` → unit count → per ascending id (the id, then that unit's hash) — so *"spawned 3 then removed all 3"* cannot hash like *"never spawned"*; **no existing fold step was renamed or reordered**, and the unit-count step is a **knowingly EQUIVALENT MUTANT** kept for symmetry (the (AU) item 11 precedent — do not chase it). **NO Command, NO Event, NO data key, NO rule** — §13.6's *events* clause is **VACUOUS** here and said to be so ((AX) item 10); `tests/sim/test_turn_replay.gd` is untouched and green, `scripts/sim/commands/` and `scripts/sim/events/` gained no file, `data/ruleset.json` and `docs/GAME_DESIGN.md` are **byte-unchanged**, and **no golden was recorded** (still OWED — (AX) item 11). **M2-T5 added SLICE 3a of the dig chain — the FIRST HALF of §14 M2's *"Dig/Cancel commands"* line (`DigHex` only), and the FIRST M2 task that mutates state through a `Command`; it still moves NO acceptance criterion:** `scripts/sim/dig_site.gd` (**new**, 128 lines / 51 code — `class_name DigSite extends RefCounted`, the dig-site PROGRESS RECORD: `hex`, `owner_index`, `total_turns`, `remaining_turns` + a TOTAL clamping `set_remaining_turns`, a **fresh ASCENDING** `digger_ids()`, `add_digger`/`remove_digger`, `content_hash` — exactly **nine** public functions, **zero** public vars/consts, identity **read-only**, and **NO digger cap** because the cap is the Command's rule), five new `GameState` registry functions over a private `_dig_sites` Dictionary (`add_dig_site` — TOTAL, every refusal **ATOMIC**, and validating **nothing** about placement/terrain exactly as `spawn_unit` does not; `dig_site` — the **SAME object** every call; `dig_site_hexes` — **FRESH** every call in the canonical order **r ascending then q ascending** through an explicit private `_hex_before` comparator, **never** `Vector2i`'s default `<`, which sorts x first; `dig_site_of_digger` — a **LINEAR SCAN**, no reverse index; `remove_dig_site`), `scripts/sim/commands/dig_hex_command.gd` (**new**, 147 lines / 79 code — **the SECOND of §11.1 line 705's fourteen printed commands**, an immutable value object, the first consumer of **both** `DigRules` and the unit roster, carrying §4.2 line 197's **adjacency** (cube distance exactly 1 via the named private `_ADJACENT_DISTANCE`, all six §4.1 neighbours accepted) and **max-2-diggers** cap (read from §12.1 `dig.max_diggers_per_hex` through `DigRules` — the literal `2` is a **forbidden token**), an **eleven-code** rejection vocabulary in a fixed precedence (`null_state` → `no_map` → `no_players` → `not_current_player` → `no_such_unit` → `not_your_unit` → `unit_not_adjacent` → `not_diggable` → `site_not_yours` → `already_digging` → `dig_site_full`, each authored at its own call site), and the **§7.1 ownership SEAM** `_digs_own_terrain` — the **only** caller of `dig_turns_for`, answering `false` unconditionally today because **no hex carries a builder index** and §7.1's Raise Granite is **M3/M4**, so Artificial Granite comes out **3**, never 1) and `scripts/sim/events/dig_started_event.gd` (**new**, 64 lines / 30 code — **the project's SECOND concrete `Event` subclass**, `&"dig_started"`, emitted **exactly once** for every accepted dig order (creation **and** join) and for nothing else, with `to_dict()` calling the base **first** then flattening `hex` into `hex_q`/`hex_r` because §11.1 line 708's save is **JSON**). The `content_hash` fold was **EXTENDED BY APPENDING ONLY** again (site count → per hex in canonical order: `hex.x`, `hex.y`, that site's hash) with **no existing step renamed or reordered**, and it **deliberately DIVERGES from (AX)'s `_next_unit_id`**: *add-then-remove-every-site* **DOES** hash like *never-added*, because a dig site has **no dangling identity** to protect (asserted **positively** — (AY) item 9). **§13.6's *events* clause is LIVE for the first time in M2 and pinned in BOTH directions** (an event for every state change; an `apply()` with an unconfigured `DigRules` creates **no** site and returns an **EMPTY** array). **NO GDD edit, `data/ruleset.json` byte-unchanged, no new §12.1 key, no golden recorded** (still OWED, a **fourth** time — (AY) item 12). **M2-T6 added SLICE 3b — the SECOND HALF of §14 M2's *"Dig/Cancel commands"* line, which is now COMPLETE as an ORDERING PAIR; it still moves NO acceptance criterion:** `scripts/sim/commands/cancel_dig_command.gd` (**new**, 109 lines / **49 code** — **the THIRD of §11.1 line 705's fourteen printed commands**, an immutable value object `(player_index, unit_id)` and a **pure consumer** of what M2-T5 landed, adding **no** `GameState` and **no** `DigSite` function and **no** `data/ruleset.json` key) and `scripts/sim/events/dig_cancelled_event.gd` (**new**, 65 lines / **30 code** — **the project's THIRD concrete `Event` subclass**, `&"dig_cancelled"`, payload `player_index`/`unit_id`/`hex`/`remaining_turns`/`site_removed`, `to_dict()` base-first with `hex` flattened to `hex_q`/`hex_r`). **§4.2 PRINTS NOTHING ABOUT CANCEL, so four rules are §13.4 judgment calls logged under decisions.md (AZ):** (i) **cancel is UNIT-targeted, not hex-targeted** — `dig_site_of_digger(unit_id)` has exactly one answer by (AY)(iv)'s *one job per unit*, so the command takes **no hex and no `DigRules`** and is the exact inverse of `DigHex`; (ii) **the LAST digger leaving REMOVES the site and its progress is LOST** — an ownerless site would be un-startable by anyone (`site_not_yours`) while §5.3's Mining Zones re-issue Dig commands every turn, i.e. a **deadlock**, and §1.1 pillar 1 makes a dig a **commitment, not a free undo**; (iii) **a NON-last cancel leaves `remaining_turns`/`total_turns`/`owner_index` UNCHANGED** and the site alive (crew size is not progress); (iv) **`no_map` is deliberately NOT a code** — a cancel reads no terrain, so `state.map` is never consulted, pinned **POSITIVELY** by a mapless `GameState` that cancels successfully **and** by two source scans. The rejection vocabulary is **SIX** opaque `StringName`s, each at its own call site, in the precedence `null_state` → `no_players` → `not_current_player` → `no_such_unit` → `not_your_unit` → **`not_digging`** (the one genuinely new code, the exact inverse of `already_digging`), with **two** load-bearing orderings pinned (`no_players` before `not_current_player`; **`not_your_unit` before `not_digging`**, so an enemy's dig state never leaks through an error code). **The `content_hash` fold was NOT extended and NO `GameState` field was added** — which is why **no golden re-record was triggered and none was due** (still OWED, a **fifth** time — (AZ) item 9; slice 4 records it). §13.6's *events* clause pinned in **both** directions again (exactly one `DigCancelledEvent` per accepted cancel and nothing else; `apply()` on a unit with no site changes nothing and returns an **EMPTY** array). **NO GDD edit, `data/ruleset.json` byte-unchanged, `scripts/core/event.gd`/`event_bus.gd`/`game_state.gd`/`dig_site.gd`/`dig_rules.gd`/`dig_hex_command.gd` all byte-unchanged.** **Still NOT built after M2-T6:** §12.7's **trait set** (worker-ness is a TRAIT = DATA; there is **no worker CLASS** and no `is_worker()`, and **any** unit type may be assigned a dig or cancelled today), the dig **TICK**, yield **application**, the hex-becomes-Cave transition and the `EventBus` → `MapRenderer.mark_hex_dirty` wiring (**slice 4, M2-T7**), §4.2's *"Dig 2×"* halving (`halve_remaining_turns` has **no caller**), §7.1's Raise Granite and any hex-builder storage, vein-node stock/rate, Extractors, income, upkeep, §5.2's housing cap (`housing.hq` shipped and **unused**), Mining Zones, §3.1's starting kit, `data/units/*.json` stat blocks (M6), command/unit serialization (M7), movement/combat/damage and all twelve §3.4 steps. |
 | M3 Build, Light, Structure | not started | — |
 | M4 Units & Combat | not started | — |
 | M5 Living World | not started | — |
@@ -175,22 +186,25 @@ not-yet-committed.
 | 2026-08-04 | M2-T3 | DigRules: data-driven dig times, owner variant and dig yields (**§4.2's whole dig table as a pure lookup; opens `scripts/sim/systems/`; the project's SECOND §12.1 amendment — the new `dig` group binding §4.2 terrain ids to §12.1 dig keys IN DATA — plus the `RulesLoader` `map` spec kind and `get_keys`; one GDD §12.1 line added by Land, §4.2's table byte-unchanged; no Command, no state mutation, no golden recorded**) | landed | M2-T3: DigRules: data-driven dig times, owner variant and dig yields |
 | 2026-08-05 | M2-T4 | UnitState and the GameState unit roster with stable ascending ids (**§11.1 line 704's TOP-LEVEL unit collection as a pure CONTAINER — the new `UnitState` record plus six `GameState` roster functions; ids from 1, never reused, every refusal atomic and burning no id; the `content_hash` fold EXTENDED BY APPENDING ONLY; `GameState`'s exact public surface grown 8 → 14 in this same commit; NO Command, NO Event, NO data key, NO rule — §13.6's events clause vacuous and said so; NO GDD edit, `data/ruleset.json` byte-unchanged, no golden recorded**) | landed | M2-T4: UnitState and the GameState unit roster with stable ascending ids |
 | 2026-08-05 | M2-T5 | DigHexCommand, dig-site progress state and the first dig event (**slice 3a of the dig chain — the dig chain's slice 3 was RE-SLICED here, `CancelDigCommand` + `DigCancelledEvent` become M2-T6; the new `DigSite` progress record + five `GameState` registry functions + `DigHexCommand` (the SECOND of §11.1 line 705's fourteen printed commands, first consumer of `DigRules` AND the unit roster, eleven-code rejection vocabulary, §4.2 line 197's adjacency + max-2-digger rules, the §7.1 ownership SEAM answering `false` until Raise Granite at M3/M4) + `DigStartedEvent` (the project's SECOND concrete `Event` subclass); the `content_hash` fold EXTENDED BY APPENDING ONLY again, deliberately DIVERGING from (AX) — add-then-remove-every-site hashes like never-added; `GameState`'s exact public surface grown 14 → 19 in this same commit; §13.6's events clause LIVE for the first time in M2 and pinned in BOTH directions; NO GDD edit, `data/ruleset.json` byte-unchanged, no new §12.1 key, no golden recorded — still OWED a fourth time**) | landed | M2-T5: DigHexCommand, dig-site progress state and the first dig event |
+| 2026-08-05 | M2-T6 | CancelDigCommand, dig cancellation and the third printed command (**slice 3b of the dig chain — the "Dig/Cancel commands" ORDERING PAIR is now complete; `CancelDigCommand` (the THIRD of §11.1 line 705's fourteen printed commands, unit-targeted, six-code rejection vocabulary with `not_digging` the one new code) + `DigCancelledEvent` (the project's THIRD concrete `Event` subclass); the four rules §4.2 does NOT print resolved and logged under (AZ) — unit-targeted cancel, LAST digger removes the site with its progress LOST, a partial cancel leaves `remaining_turns` UNCHANGED, and `no_map` deliberately ABSENT and pinned positively; NO `GameState`/`DigSite` function added (surfaces stay at 19 and 9), the `content_hash` fold NOT extended, so no golden re-record was triggered — the tier-3 golden is still OWED a fifth time and slice 4 records it; the two slice-3a scoped pins RE-SCOPED and strictly STRENGTHENED, never weakened; NO GDD edit, `data/ruleset.json` byte-unchanged; Verify's eight-probe mutation battery caught all eight**) | landed | M2-T6: CancelDigCommand and DigCancelledEvent (dig chain slice 3b) |
 
 ## Notes for the next iteration
 
-- **Pick up: M2-T6 — `CancelDigCommand` + `DigCancelledEvent`, slice 3b of the
-  dig chain. M2 IS OPEN, NOT DONE** (M2-T1 landed the state container, M2-T2 the §11.1 spine, M2-T3
+- **Pick up: M2-T7 — SLICE 4 of the dig chain: §3.4 step 4's dig TICK + yield APPLICATION + the
+  hex-becomes-Cave transition + the OWED tier-3 golden. M2 IS OPEN, NOT DONE** (M2-T1 landed the
+  state container, M2-T2 the §11.1 spine, M2-T3
   §4.2's dig **table**, M2-T4 the §11.1 unit **roster**, M2-T5 the dig-site **registry** +
-  `DigHexCommand` + `DigStartedEvent`; **0 of 3** §14 M2 acceptance criteria are
-  met). The tree is green and **nothing is carried over** — M2-T5 left no blocker and Verify made no
-  fix (**fourth** iteration running with an empty `fixes_made`). **M2-T5 made NO GDD edit at all**
+  `DigHexCommand` + `DigStartedEvent`, M2-T6 `CancelDigCommand` + `DigCancelledEvent`; **0 of 3**
+  §14 M2 acceptance criteria are
+  met). The tree is green and **nothing is carried over** — M2-T6 left no blocker and Verify made no
+  fix (**fifth** iteration running with an empty `fixes_made`). **M2-T6 made NO GDD edit at all**
   (no printed number moved and no new §12.1 key was needed), so `docs/GAME_DESIGN.md` is
   byte-identical to what M2-T3 left.
   - **THE DIG CHAIN IS SLICED; FOLLOW THE ORDER AND DO NOT PULL SLICES FORWARD. SLICE 3 WAS
     RE-SLICED INTO 3a/3b AT M2-T5 — decisions.md (AY) item 1, and the reason was measured, not
     guessed** (a record + a registry + **two** commands + **two** events is well over the ≤ ~300 LOC
-    ceiling in this repo's doc-heavy style; M2-T4 spent 289 lines on **two** files, and 3a alone came
-    to **203 production code lines**). (1) the §4.2 dig
+    ceiling in this repo's doc-heavy style; M2-T4 spent 289 lines on **two** files, 3a alone came
+    to **203 production code lines**, and 3b — a pure consumer — came to **79**). (1) the §4.2 dig
     **table** — **DONE, M2-T3** (`DigRules`); (2) the unit **roster** on `GameState` — **DONE,
     M2-T4** (`UnitState` + six roster functions); **(3a) `DigSite` + the dig-site registry +
     `DigHexCommand` + `DigStartedEvent` — DONE, M2-T5** (the first consumers of `DigRules` **and** of
@@ -198,22 +212,22 @@ not-yet-committed.
     `_digs_own_terrain`, the **only** caller of `dig_turns_for` — decisions.md **(AY)** item 2 — and
     §4.2 line 197's **max-2-diggers cap** is counted from `DigSite.digger_ids()`, **not** from
     `units_at`, because a *digger* is an assignment, not a location); **(3b) `CancelDigCommand` +
-    `DigCancelledEvent` ← NEXT** — the **third** of §11.1 line 705's fourteen printed names, and a
-    **pure consumer** of 3a: `DigSite.remove_digger`, `GameState.remove_dig_site` and
-    `dig_site_of_digger` all exist and are already pinned, so the work is the **RULE** — who may
-    cancel (the site's owner, by (AY) item 4; a unit cancels **its own** job, since a unit has at
-    most one), **what happens to a site whose last digger leaves** (does the site vanish, or does
-    partial progress persist for a later crew?) and whether `remaining_turns` is kept or reset.
-    **§4.2 prints no answer to either**, so pick the simplest reading consistent with §1.1,
-    implement it and **log it under (AZ)** — never stall (§13.4). Reuse M2-T5's rejection codes where
-    they apply and **author any new one at its own call site**; emit **exactly one**
-    `DigCancelledEvent` per accepted cancel and **none** otherwise; (4) §3.4 step 4's dig tick +
+    `DigCancelledEvent` — DONE, M2-T6** (the **third** of §11.1 line 705's fourteen printed names, a
+    **pure consumer** of 3a that added **no** `GameState`/`DigSite` function and extended **no**
+    fold; the four rules §4.2 does not print are settled and logged at **(AZ)** — **cancel is
+    UNIT-targeted**, the **LAST digger leaving removes the site and its progress is LOST** (the
+    orphan-site/§5.3-zone deadlock argument + §1.1 pillar 1), a **partial cancel changes nothing but
+    the crew**, and **`no_map` is deliberately not a code**, pinned positively by a mapless state
+    that cancels successfully); (4) §3.4 step 4's dig tick +
     **yield application** + the
     hex-becomes-Cave transition + its events + **the OWED tier-3 golden**, and the slice where the
     `EventBus` → `MapRenderer.mark_hex_dirty` seam is finally wired ((AV) item 9).
-    **§13.6's *events* clause is LIVE from M2-T5 onward, not vacuous** — M2-T5 pins it in **both**
-    directions (an event for every state change **and** no event when nothing changed), and 3b must
-    do the same; the roster's `spawn_unit`/`remove_unit`/`set_hex`/`set_hp` and the registry's
+    **§13.6's *events* clause is LIVE from M2-T5 onward, not vacuous** — M2-T5 and M2-T6 both pin it
+    in **both** directions (an event for every state change **and** no event when nothing changed:
+    `CancelDigCommand.apply()` on a unit assigned to no site returns an **EMPTY** `Array[Event]` with
+    the hash byte-identical), and slice 4 must do the same for **each** of its state changes —
+    a tick, a completion, a yield and a terrain flip are **four** changes, not one;
+    the roster's `spawn_unit`/`remove_unit`/`set_hex`/`set_hp` and the registry's
     `add_dig_site`/`remove_dig_site`/`DigSite.set_remaining_turns`/`add_digger`/`remove_digger` are
     all Command-only **by documentation** (GDScript has no package-private — review is the only
     enforcement) and must be called **from inside `apply()`**.
@@ -231,26 +245,33 @@ not-yet-committed.
     be **said in decisions.md** ((AW) item 8, (AX) item 10), not assumed. **The exception EXPIRED at
     M2-T5:** `DigHexCommand` is the second Command, `DigStartedEvent` the second concrete Event, and
     from here on the moment a rule decides something, it rides the spine and owes an Event.
-  - **§13.2 TIER 3's GOLDEN IS STILL DUE — OWED, NOT FORGOTTEN, FOUR TIMES OVER (decisions.md
-    (AV) item 7, re-stated at (AW) item 5, again at (AX) item 11 and again at (AY) item 12).**
+  - **§13.2 TIER 3's GOLDEN IS DUE IN SLICE 4 — OWED, NOT FORGOTTEN, FIVE TIMES OVER (decisions.md
+    (AV) item 7, re-stated at (AW) item 5, again at (AX) item 11, again at (AY) item 12 and again at
+    (AZ) item 9).**
     *"Fixed seed + recorded
     command log ⇒ recorded `GameState.hash()` after N turns"* was deliberately not recorded at M2-T2
     (freezing the fold before units/dig/income exist forces a re-record every slice, and §13.6
     permits a re-record only with a logged reason), **could not** be recorded at M2-T3, which changes
     no state at all, was **deferred again at M2-T4**, which added a container rather than a tick,
-    and was **deferred a fourth time at M2-T5** — and note that M2-T4 **and** M2-T5 each **extended
+    was **deferred a fourth time at M2-T5** — and note that M2-T4 **and** M2-T5 each **extended
     the fold**, which is exactly why freezing it early would have
-    cost a re-record twice over. **Slice (4), the dig tick, is the one that RECORDS it** — and if it
-    still looks premature, say so **in decisions.md** rather than skipping it a **fifth** time. What
-    exists meanwhile is the stronger §11.1 line 708 proof M2-T5 added: `tests/sim/test_turn_replay.gd`
-    now replays a **MIXED** log (spawn two units → `DigHex` → a full `EndTurn` round → `DigHex`
-    again) into two fresh states on the same seed, agreeing on `content_hash()` at **every** step and
-    replaying identically **3×**.
+    cost a re-record twice over — and was **deferred a fifth time at M2-T6, which extended NO fold
+    and added NO `GameState` field, so nothing triggered a re-record and none was due**.
+    **Slice (4), the dig tick, is the one that RECORDS it** — it is the first slice whose state
+    genuinely evolves over N turns — and if it
+    still looks premature, say so **in decisions.md** rather than skipping it a **sixth** time. What
+    exists meanwhile is the §11.1 line 708 proof M2-T5 added and M2-T6 **extended**:
+    `tests/sim/test_turn_replay.gd`
+    now replays a **seven-step MIXED** log (spawn two units → `DigHex` create → `DigHex` join →
+    **`CancelDig`** → a full `EndTurn` round → `DigHex` again) into two fresh states on the same
+    seed, agreeing on `content_hash()` at **every** step and
+    replaying identically **3×**, with a **rejected** `CancelDig` proven to change nothing.
   - **§14's M2 row is far bigger than one task — keep slicing it.** Deliverables: *"Workers,
     Dig/Cancel commands, yields, vein nodes + Extractors, stockpiles/income/upkeep, housing, Mining
-    Zones v0"* (**stockpiles + the yields lookup TABLE + the unit CONTAINER + HALF of the
-    "Dig/Cancel commands" line (`DigHex` only), so far — the table is
-    not its application, the container is not a worker, and ordering a dig is not digging**);
+    Zones v0"* (**stockpiles + the yields lookup TABLE + the unit CONTAINER + the WHOLE
+    "Dig/Cancel commands" line as an ORDERING PAIR (`DigHex` + `CancelDig`), so far — the table is
+    not its application, the container is not a worker, and ordering or abandoning a dig is not
+    digging**);
     acceptance: *"Scripted 20-turn dig scenario matches expected stockpiles exactly; deficit-bleed
     test; zone assigns nearest idle worker"* (**none met**).
     Read **§5** (economy), **§3.4** (the turn sequence and the deficit bleed) and **§4.2** (the
@@ -271,7 +292,14 @@ not-yet-committed.
     comment-stripped source scan currently **forbids the literal `200`** in all four M2-T2
     production files (decisions.md **(AV)** item 3). The turn counter being 1-based is what makes
     §3.2's printed *"If turn 200 is reached"* mean what it says.
-  - **Read first:** decisions.md **(AY)** (this iteration — the **3a/3b re-slice** and its measured
+  - **Read first:** decisions.md **(AZ)** (this iteration — the four rules **§4.2 does not print**:
+    **unit-targeted cancel**, **last-digger-removes-the-site with progress LOST** and its
+    orphan-site/§5.3-zone **deadlock** argument, **partial cancel changes nothing but the crew**, and
+    the **deliberate absence of `no_map`** pinned *positively*; the **six-code vocabulary** and its
+    two load-bearing orderings; how a **scoped negative pin is RE-SCOPED rather than deleted** when
+    the slice it named finally lands; the `JSON.stringify(data, "", false)` citation of (AW)(vii)(a);
+    and the **fifth** re-statement of the owed tier-3 golden),
+    **(AY)** (the **3a/3b re-slice** and its measured
     LOC reason, the **§7.1 ownership seam** and where it lands, the **injected-`DigRules`** decision
     and what M7's serializer must re-inject, **one owner per site / one job per unit**, the
     **eleven-code rejection vocabulary and its precedence**, the **second append-only fold
@@ -291,12 +319,13 @@ not-yet-committed.
     **M1-T4/M1-T5 (M)–(U)** (the map, its canonical order, the golden and the single `Rng`), and the
     **GOLDEN contract** bullet below, because M2's *"scripted 20-turn dig scenario"* is the
     project's second golden-shaped artefact.
-  - **Continue the decisions.md lettering at (AZ)** — M2-T5 used **(AY)** as a single umbrella
-    resolution with fourteen lettered sub-items plus four unlettered ones, cross-referenced by all
-    four production files and five suites; M2-T4 used **(AX)** (cross-referenced by
-    `scripts/sim/unit_state.gd`, `scripts/sim/game_state.gd` and two suites), M2-T3
+  - **Continue the decisions.md lettering at (BA)** — M2-T6 used **(AZ)** as a single umbrella
+    resolution with ten lettered sub-items plus four unlettered ones, cross-referenced by **both**
+    new production files (the command's header block quotes (AZ)(i)–(AZ)(v) verbatim) and three
+    suites; M2-T5 used **(AY)** (four production files and five suites), M2-T4 **(AX)**
+    (`scripts/sim/unit_state.gd`, `scripts/sim/game_state.gd` and two suites), M2-T3
     **(AW)** (several files), M2-T2 **(AV)** (five files) and M2-T1 **(AU)**
-    (four files). **Do not renumber (AU), (AV), (AW), (AX) or (AY).**
+    (four files). **Do not renumber (AU), (AV), (AW), (AX), (AY) or (AZ).**
   - **(Z) STILL GOVERNS EVERY RENDERER ASSERTION.** Under `--headless` the dummy renderer **does not
     store MultiMesh instance data** — `set_instance_transform` → `get_instance_transform` returns the
     **identity**, `set_instance_custom_data` reads back `(0,0,0,1)`, and `MultiMesh.buffer` is **size
@@ -352,19 +381,22 @@ not-yet-committed.
   `Main.tscn`; `tests/` now has a **`tests/sim/`** directory (tier-2 system tests) alongside
   `tests/unit/` and `tests/golden/`. **There is still no shader** (§10 line 679's Lit/Dark tint is
   M3), **no selection state** (picking exists as of M1-T9, but tap-select/drag-box are M4/M8), and
-  **no worker TRAIT, no `CancelDigCommand`, no dig TICK, no yield application, no
+  **no worker TRAIT, no dig TICK, no yield application, no
   hex-becomes-Cave transition, no vein-node state, no Extractor, housing,
   zone, cave feature, river, lair or spawn code** — the §4.2 dig **numbers** are readable as of
   M2-T3 (`sim/systems/dig_rules.gd`), a **unit can exist** as of M2-T4
-  (`sim/unit_state.gd` + the `GameState` roster), and as of M2-T5 **a dig can be ORDERED**
-  (`sim/dig_site.gd` + the `GameState` dig-site registry + `sim/commands/dig_hex_command.gd`) — but
+  (`sim/unit_state.gd` + the `GameState` roster), and as of M2-T5/M2-T6 **a dig can be ORDERED and
+  CANCELLED**
+  (`sim/dig_site.gd` + the `GameState` dig-site registry + `sim/commands/dig_hex_command.gd` +
+  `sim/commands/cancel_dig_command.gd`) — but
   **nothing DIGS**, and **nothing yet spawns a
-  unit**: `spawn_unit` still has no caller in production code (only the command's *validate* reads
+  unit**: `spawn_unit` still has no caller in production code (only the commands' *validate* reads
   the roster), exactly as intended until §3.1's starting kit lands.
   **`Command`, `CommandError`, the turn counter and the first concrete `Event` subclass NOW EXIST**
-  (M2-T2) — the spine is built, and as of M2-T5 **`EndTurnCommand` and `DigHexCommand` are the
-  TWO of §11.1's fourteen printed
-  commands that are implemented** (`CancelDig` is M2-T6; the other eleven belong to their own
+  (M2-T2) — the spine is built, and as of M2-T6 **`EndTurnCommand`, `DigHexCommand` and
+  `CancelDigCommand` are the
+  THREE of §11.1's fourteen printed
+  commands that are implemented** (the other eleven belong to their own
   milestones). **`scripts/sim/systems/` EXISTS** (M2-T3) and holds exactly one
   file; §11.2 line 724 prints it verbatim as *"systems/ (economy, breach, escalation, victory)"*,
   and the other three belong to the milestones that need them. The rest belong to the milestones
@@ -373,7 +405,8 @@ not-yet-committed.
   (`scripts/sim/dig_site.gd`, five new `GameState` functions,
   `scripts/sim/commands/dig_hex_command.gd`, `scripts/sim/events/dig_started_event.gd`, NEW at
   M2-T5 — read decisions.md **(AY)** before touching any of them. This is slice 3a of the dig
-  chain; slice 3b (`CancelDig`) and slice 4 (the tick) both consume it).** All four are pure
+  chain; slice 3b (`CancelDig`) **consumed it unchanged at M2-T6** and slice 4 (the tick) consumes it
+  next).** All four are pure
   `RefCounted`, engine-free, integer/String only — **no `float` token, no float literal**, no
   `Node`/`SceneTree`/`Engine.`/`Input.`/`get_tree(`/`randi`/`RandomNumberGenerator` — and none loads
   a document, so a scan asserts `RulesError` and `RulesLoader` are **ABSENT** (the M1-T9
@@ -415,8 +448,9 @@ not-yet-committed.
     `validate` is a **pure predicate** on both paths.
   - **ONE OWNER PER SITE, ONE JOB PER UNIT ((AY) item 4).** A site records the **ordering player**;
     another player's `DigHex` on that hex is `site_not_yours`. A unit is assigned to **at most one**
-    site (`already_digging`, checked via `dig_site_of_digger`) — that is what makes slice 3b's
-    *cancel* and slice 4's *tick* unambiguous. Neither is a §12.1 constant; both are structural.
+    site (`already_digging`, checked via `dig_site_of_digger`) — that is what made slice 3b's
+    *cancel* **unit-targeted** ((AZ)(i)) and what will make slice 4's *tick* unambiguous. Neither is
+    a §12.1 constant; both are structural.
   - **THE RECORD ENFORCES NO CAP, AND THAT IS DELIBERATE.** `DigSite` = **nine** public functions
     (`hex`, `owner_index`, `total_turns`, `remaining_turns`, `set_remaining_turns`, `digger_ids`,
     `add_digger`, `remove_digger`, `content_hash`) + `_init`, **zero** public vars/consts, identity
@@ -463,6 +497,53 @@ not-yet-committed.
     rejecting. The case §13.6 requires — `DigRules.new(null)`, a real object over no document — is
     handled correctly everywhere. Adding a twelfth code would be **inventing vocabulary** (§13.4);
     the right place to settle it is M7's command **deserialization**, explicitly and with an entry.
+- **`CancelDigCommand` + `DigCancelledEvent` (`scripts/sim/commands/cancel_dig_command.gd`,
+  `scripts/sim/events/dig_cancelled_event.gd`, NEW at M2-T6 — read decisions.md **(AZ)** before
+  touching either. This is slice 3b; it added NO `GameState` and NO `DigSite` function, extended NO
+  fold and consumed NO data.)** Both are pure `RefCounted`, engine-free, integer/String only — **no
+  `float` token, no float literal**, no `Node`/`SceneTree`/`Engine.`/`Input.`/`get_tree(`/`randi`/
+  `Time.`/`OS.` — and the only standalone numerals in either file are **`0` and `1`** (`apply()` uses
+  `is_empty()`, not `size() == 0`, so it introduces none at all).
+  - **CANCEL IS UNIT-TARGETED ((AZ)(i)) — `_init(p_player_index, p_unit_id)`, NO hex and NO
+    `DigRules`.** `dig_site_of_digger(unit_id)` has exactly one answer ((AY) item 4), so the command
+    is total without naming a hex and is the exact inverse of `DigHex`. It reads **no data**, so
+    unlike `DigHex` ((AY) item 3) **M7's deserializer has nothing to re-inject**; the file names no
+    `DigRules`, `RulesLoader`, `RulesError`, `HexMath` or `HexMap` (all scanned).
+  - **SIX rejection codes, each at its own call site, in precedence `null_state` → `no_players` →
+    `not_current_player` → `no_such_unit` → `not_your_unit` → `not_digging`** — five reused from
+    `DigHex` with the same meaning, **`not_digging`** the one new code (the exact inverse of
+    `already_digging`; it also fires on a **second** cancel of the same unit). **Two orderings are
+    load-bearing and pinned:** `no_players` before `not_current_player` (an empty roster still reads
+    current index 0), and **`not_your_unit` before `not_digging`** (an enemy's dig state must never
+    leak through an error code). An out-of-range issuer is `not_current_player`, never a new code.
+  - **`no_map` IS DELIBERATELY ABSENT ((AZ)(iv)) AND THE ABSENCE IS PINNED POSITIVELY.** A cancel
+    reads no terrain, so `validate` never consults `state.map`; a `GameState.new(seed, null, 2)`
+    whose unit is on a site **cancels successfully and emits**. **Do not "restore" the check by
+    symmetry with `DigHex`** — and do not add a null guard for the constructor contract either
+    ((AY) item 14 is deliberate, not an oversight).
+  - **THE LAST DIGGER REMOVES THE SITE AND ITS PROGRESS IS LOST ((AZ)(ii)); A PARTIAL CANCEL CHANGES
+    NOTHING BUT THE CREW ((AZ)(iii)).** An ownerless site with kept progress is un-startable by
+    anyone (`site_not_yours`) while §5.3's zones re-issue Dig orders every turn — a **deadlock**; and
+    §1.1 pillar 1 makes a dig a **commitment**. When a crew-mate remains, `owner_index()`,
+    `total_turns()` and `remaining_turns()` are all **unchanged** (crew size is not progress —
+    the symmetric partner of *"a join leaves them untouched"*), and `digger_ids()` comes back fresh
+    and ascending without the departed id. Cancelling **frees a capped slot**: 2 diggers ⇒ a third
+    `DigHex` is `dig_site_full` ⇒ cancel one ⇒ the third is accepted as a **join**.
+  - **`DigCancelledEvent` IS THE THIRD CONCRETE `Event` SUBCLASS.** `TYPE_NAME = &"dig_cancelled"`
+    (its **own** name — `scripts/core/event.gd` and `event_bus.gd` are **byte-unchanged**, the M0-T3
+    **(f)** precedent); **one** public const, **five** public vars (`player_index`, `unit_id`, `hex`,
+    `remaining_turns`, `site_removed`), **one** public function. **Exactly one** event per accepted
+    cancel and nothing else; `apply()` on a unit with **no** site changes nothing and returns an
+    **EMPTY** `Array[Event]`. `to_dict()` is base-first, then `player_index`, `unit_id`, **`hex_q`,
+    `hex_r`**, `remaining_turns`, `site_removed` — **the raw `Vector2i` is never serialized**
+    (§11.1 line 708's save is JSON), and any fixture asserting document order must call
+    **`JSON.stringify(data, "", false)`** ((AW)(vii)(a), cited a sixth time at (AZ)(x)).
+  - **RETIRING A SCOPED NEGATIVE PIN: RE-SCOPE IT, NEVER DELETE IT ((AZ)(vi)) — the rule this slice
+    established.** `test_no_cancel_dig_exists_anywhere_yet` became
+    `test_cancel_dig_exists_in_exactly_one_production_file` (an *absence* assertion became an
+    *exactly-one-and-here* assertion, plus a new assertion that `DigHex` does not name it), and
+    `test_game_state.gd`'s `COMMAND_FILES`/`EVENT_FILES` were extended and re-worded. **Prefer the
+    strictly stronger assertion; never drop one because the slice it named has landed.**
 - **`DigRules` contract + THE §12.1 `dig` GROUP (`scripts/sim/systems/dig_rules.gd`,
   `data/ruleset.json`'s new `dig` group, `RulesLoader`'s `map` kind + `get_keys`, NEW at M2-T3 —
   read decisions.md **(AW)** before touching any of them). This is §4.2's dig TABLE, and slices
@@ -673,24 +754,33 @@ not-yet-committed.
     (**NINETEEN** members;
     the list was grown 5 → 8 in the M2-T2 commit, 8 → 14 in the M2-T4 commit and 14 → 19 in the
     M2-T5 commit, each time in the
-    same commit as the code). **If a later slice needs a new public member, update the expected list
+    same commit as the code — and **M2-T6 added NONE**: a pure-consumer slice should move no
+    container surface, and *"the exact list is unchanged"* is itself pinned negatively). **If a later
+    slice needs a new public member, update the expected list
     in the same commit.**
   - **`content_hash()`, NEVER `hash()`** — overriding `Object.hash()` trips `native_method_override`
     (level 2 = hard error), and a scan asserts `func hash(` is absent. **The `GameState` seed
     parameter is `p_seed_value`, never `seed`** (`shadowed_global_identifier`, the M1-T5 (R) trap).
-  - **THE FOLD ORDER IS FIXED AND DOCUMENTED IN `game_state.gd`'s HEADER, because a future golden
-    will record it — AMENDED BY M2-T2 (AV)(vi) AND EXTENDED BY M2-T4 (AX)(viii), and this is the
+  - **THE FOLD ORDER IS FIXED AND DOCUMENTED IN `game_state.gd`'s HEADER, because the SLICE-4 golden
+    will record it — AMENDED BY M2-T2 (AV)(vi), EXTENDED BY M2-T4 (AX)(viii) AND AGAIN BY M2-T5
+    (AY)(ix), UNCHANGED BY M2-T6, and this is the
     CURRENT copy:** private seed →
     `rng.rolls_drawn()` → **turn** → **current_player_index** → map-presence flag (0/1) →
     `map.content_hash()` when present → `player_count()` → per index ascending, the index then that
     player's hash → **`_next_unit_id`** → **the unit count** → **per unit id ascending, the id then
-    that unit's `content_hash()`**. (M2-T2 **inserted** the two turn-position steps; M2-T4
-    **APPENDED** the three roster steps. **No existing step has ever been renamed or reordered — an
+    that unit's `content_hash()`** → **the dig-site count** → **per hex in canonical order (r
+    ascending, then q ascending): `hex.x`, `hex.y`, that site's `content_hash()`**. (M2-T2
+    **inserted** the two turn-position steps; M2-T4
+    **APPENDED** the three roster steps; M2-T5 **APPENDED** the two dig-site steps; **M2-T6 changed
+    nothing**, which is why it triggered no golden re-record. **No existing step has ever been
+    renamed or reordered — an
     amendment is append-or-insert plus a decisions.md entry, never a rewrite** — and two tests scan
     for exactly this order, one over `content_hash()`'s comment-stripped body, one over the header
-    doc block. `_next_unit_id` folds **first** of the three so that *"spawned then removed every
-    unit"* cannot hash like *"never spawned"*; the **unit count** is a knowingly equivalent step kept
-    for symmetry — (AX) item 8.)
+    doc block. `_next_unit_id` folds **first** of the roster steps so that *"spawned then removed
+    every unit"* cannot hash like *"never spawned"*; the **unit count** is a knowingly equivalent
+    step kept for symmetry — (AX) item 8. The dig-site steps deliberately **DIVERGE**: there is no
+    site counter, so *"dug then cancelled everything"* **does** hash like *"never dug"*, and that is
+    asserted positively — (AY)(ix), re-asserted from the cancel side at (AZ)(ii).)
     `PlayerState` folds, per held id in **ascending id order**: the id's UTF-8 bytes → the amount as
     **eight** little-endian bytes → a **separator byte** `0x1f`. **Three of those are load-bearing and
     each is pinned by exactly one test:** (a) **the RNG stream position** — drawing a roll changes the
@@ -1221,7 +1311,11 @@ not-yet-committed.
   §12.1 excerpt, edited **by Land, in the same commit as the decisions.md entry** ((AU)(i), (AW)(i));
   see the CLOSED forward-gap bullet below for the procedure. **M2-T5 needed NO new key** — the
   `dig` group already carried everything `DigHexCommand` reads, which is the intended payoff of
-  putting the terrain-id → dig-key binding in data rather than in engine code ((AW)(i), §13.5).
+  putting the terrain-id → dig-key binding in data rather than in engine code ((AW)(i), §13.5) —
+  and **M2-T6 needed none either**: cancel semantics are **structural rules, not tunables**, so
+  `CancelDigCommand` reads **no data at all** ((AZ)(i)). *"Is this a §12.1 constant or a structural
+  rule?"* is a question to answer explicitly, not by reflex: a number §4.2/§12.1 prints is **data**;
+  *"the last digger leaving removes the site"* is a **rule** and belongs in code with a logged entry.
   `data/ruleset.json` holds the full §12.1 constant set and
   `RulesLoader` (`scripts/sim/rules_loader.gd`) is the only sanctioned way to read it. Never
   re-type a §12.1 number as a literal in `.gd` code (§13.6) — go through
@@ -1229,13 +1323,13 @@ not-yet-committed.
   Errors surface as `RulesError` (`line` 1-based, `path` dotted, `message`,
   `format_for(source)` → `"<source>:<line>: <message>"`). Line 0 means "file-level, no line" and
   is reserved for missing/unreadable files.
-- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 31 /
-  Tests 795 / Passing 795 / Failing 0 / Asserts 9295** (measured at Verify, 2026-08-05, M2-T5, and
+- **CURRENT SUITE STATE IS GREEN.** `bash tools/run_tests.sh` → **exit 0** at **Scripts 33 /
+  Tests 846 / Passing 846 / Failing 0 / Asserts 10077** (measured at Verify, 2026-08-05, M2-T6, and
   re-run at Land with the same totals).
-  `Scripts 31` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
-  `bash tools/typecheck.sh` exits **0** over 57 files; `bash tools/ci.sh`
+  `Scripts 33` equals the number of `test_*.gd` on disk, so nothing is silently skipped;
+  `bash tools/typecheck.sh` exits **0** over 61 files; `bash tools/ci.sh`
   exits 0 (PASS with the three documented M7/E4/E5 skips) and `bash tools/verify_harness.sh` exits 0.
-  Prior green baselines, for reference: M2-T4's 28 / 690 / 690 / 7885, M2-T3's
+  Prior green baselines, for reference: M2-T5's 31 / 795 / 795 / 9295, M2-T4's 28 / 690 / 690 / 7885, M2-T3's
   27 / 643 / 643 / 7452, M2-T2's 26 / 598 / 598 / 6435, M2-T1's
   21 / 503 / 503 / 5646, M1-T9's 18 / 425 / 425 / 5144, M1-T8's
   17 / 388 / 388 / 4959, M1-T7's 15 / 321 / 321 / 3380, M1-T6's
@@ -1245,7 +1339,7 @@ not-yet-committed.
   7 / 62 / 62 / 473 at the close of M0 (the M0 tracker row above deliberately keeps that historical
   figure). **Expect these totals to RISE as you add tests — they are enumerated, not hard-coded.**
 - The green signal is real and two-way: `bash tools/run_tests.sh` → exit 0 on a healthy tree, and
-  `bash tools/typecheck.sh` → exit 0 over **57** project `.gd` files, and
+  `bash tools/typecheck.sh` → exit 0 over **61** project `.gd` files, and
   `bash tools/verify_harness.sh` → exit 0
   with **four** phases (A green · B failing canary · C syntactic parse error · D
   statically-impossible construct), each red phase non-zero *and naming its probe*, self-cleaning
@@ -1358,10 +1452,15 @@ not-yet-committed.
   says so ((AY) item 1).** M2-T4 spent **289** lines on **two** files in this repo's doc-heavy
   style, so a slice needing a record + a registry + **two** commands + **two** events was
   arithmetically over budget before a line was written; splitting it into 3a (**203 production code
-  lines**, landed) and 3b (M2-T6) was the honest call, and the split is pinned mechanically — a test
-  enumerates `scripts/sim/commands/` and a recursive scan asserts `cancel_dig` appears nowhere in
-  production code. **Doc lines are not free here** (`dig_site.gd` is 128 lines for 51 of code), so
-  budget on **code** lines and say which number you measured.
+  lines**, landed) and 3b (M2-T6, **79 production code lines**, landed) was the honest call, and the
+  split was pinned mechanically at both ends — a test enumerates `scripts/sim/commands/`, and the
+  `cancel_dig` token scan went from *"appears in NO production file"* (3a) to *"appears in EXACTLY
+  ONE"* (3b) without ever being deleted ((AZ)(vi)).
+  **Doc lines are not free here** (`dig_site.gd` is 128 lines for 51 of code;
+  `cancel_dig_command.gd` is 109 for 49), so
+  budget on **code** lines and say which number you measured. **The payoff of a clean re-slice is
+  visible in the follow-on:** because 3a landed `remove_digger`/`remove_dig_site`/`dig_site_of_digger`
+  already pinned, 3b was **pure rule** — 79 code lines against 2,333 lines of new suite.
 - **Golden discipline is now LIVE, not upcoming.** `tests/golden/` holds the project's first golden
   as of M1-T5 (`mapgen_concentric_bowl_small_seed1337.json`, `content_hash 0xcad24923`), and §13.6
   applies **forever**: a golden may be re-recorded **only** with a dated `docs/decisions.md` reason in
@@ -1473,3 +1572,17 @@ not-yet-committed.
   **audited the test diff for weakening** (+733/−30, every removed line a doc comment or a renamed
   test header that was strictly **extended**) — do that too whenever a task modifies an existing
   suite.
+  **M2-T6's yield (eight probes, ALL EIGHT caught — a second clean sweep) adds two lessons.**
+  (i) **PROBE THE ABSENCE OF A CHECK, not only the presence of one.** *"`no_map` is deliberately not
+  a code here"* ((AZ)(iv)) is the kind of claim that rots silently, so the probe was to **ADD** the
+  check — it reds the mapless positive pin **and** two source scans, which is what proves the
+  absence is load-bearing rather than merely current. Whenever a slice **narrows** an inherited
+  vocabulary, probe by re-widening it. (ii) **VERIFY RE-DERIVED, RATHER THAN BELIEVED, THE
+  IMPLEMENTER'S ONE TEST EDIT.** Implement had changed a Tests-stage assertion
+  (`JSON.stringify(serialized)` → `JSON.stringify(serialized, "", false)`); Verify **reverted the
+  edit and re-ran**, observed the alphabetized key order, and only then accepted it — and probe 3
+  (moving `"type"` to the end of `to_dict()`) confirmed the *fixed* assertion still bites. **An
+  implementer edit to a test is guilty until re-measured**: the honest ones survive that, and the
+  distinction between *"the test was wrong"* and *"the test was inconvenient"* is exactly what a
+  re-measurement makes visible. Verify again audited the test diff for weakening (+27/−10 and
+  +17/−9 on the two re-scoped suites, `test_turn_replay.gd` sections A–C **byte-untouched**).

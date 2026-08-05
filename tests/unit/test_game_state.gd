@@ -290,16 +290,23 @@ const FOLD_ORDER_TOKENS: Array[String] = [
 	"dig_site_hexes",
 ]
 
-## (AY)/G1 NEGATIVE PIN — the `.gd` files `scripts/sim/commands/` and `scripts/sim/events/` hold
-## after this slice. M2-T5 adds EXACTLY ONE of each: `DigHexCommand` (§11.1 line 705's fourth
-## printed name) and `DigStartedEvent`. `CancelDigCommand`/`DigCancelledEvent` are SLICE 3b.
+## (AY)/G1 NEGATIVE PIN, RE-SCOPED BY M2-T6 (slice 3b) — the `.gd` files `scripts/sim/commands/`
+## and `scripts/sim/events/` hold after this slice. M2-T6 adds EXACTLY ONE of each:
+## `CancelDigCommand` (§11.1 line 705's FIFTH printed name, and the THIRD of the fourteen to be
+## built) and `DigCancelledEvent`. The dig TICK, its yield application and the hex-becomes-Cave
+## transition are SLICE 4 and add neither a Command nor an Event here.
 const COMMAND_FILES: Array[String] = [
+	"cancel_dig_command.gd",
 	"command.gd",
 	"command_error.gd",
 	"dig_hex_command.gd",
 	"end_turn_command.gd",
 ]
-const EVENT_FILES: Array[String] = ["dig_started_event.gd", "turn_ended_event.gd"]
+const EVENT_FILES: Array[String] = [
+	"dig_cancelled_event.gd",
+	"dig_started_event.gd",
+	"turn_ended_event.gd",
+]
 
 ## Doc-comment sections accepted by the S6 scan for this file (§11.3).
 const DOC_SECTIONS: Array[String] = ["§11.1", "§3.3", "§4.2"]
@@ -1480,19 +1487,20 @@ func test_content_hash_separates_states_differing_only_in_one_site() -> void:
 # C8. §13.4 NEGATIVE PINS — what M2-T5 deliberately does NOT add
 # =============================================================================================
 
-## (AY)/G1 — M2-T5 adds EXACTLY ONE Command file and EXACTLY ONE Event file. `CancelDigCommand`
-## and `DigCancelledEvent` are SLICE 3b (M2-T6). Pinned by enumerating the two spine directories so
-## a stray file cannot appear unremarked (§13.4).
+## (AY)/G1, RE-SCOPED BY M2-T6 — M2-T6 adds EXACTLY ONE Command file and EXACTLY ONE Event file:
+## `CancelDigCommand` and `DigCancelledEvent`. The dig TICK, yield application and the
+## hex-becomes-Cave transition are SLICE 4 and add neither. Pinned by enumerating the two spine
+## directories so a stray file cannot appear unremarked (§13.4).
 func test_exactly_one_command_and_one_event_file_was_added_in_this_slice() -> void:
 	assert_eq(
 		_gd_files("res://scripts/sim/commands"),
 		COMMAND_FILES,
-		"(AY): M2-T5 adds exactly one Command (DigHexCommand) — CancelDig is slice 3b"
+		"(AZ): M2-T6 adds exactly one Command (CancelDigCommand) — the dig tick is slice 4"
 	)
 	assert_eq(
 		_gd_files("res://scripts/sim/events"),
 		EVENT_FILES,
-		"(AY): M2-T5 adds exactly one Event (DigStartedEvent) — DigCancelled is slice 3b"
+		"(AZ): M2-T6 adds exactly one Event (DigCancelledEvent) — the dig tick is slice 4"
 	)
 
 

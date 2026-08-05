@@ -30,10 +30,19 @@
 ## 705's replay clause is over the whole command vocabulary, so the moment a second Command exists
 ## the property has to be re-proven over an INTERLEAVING — two commands can each be replayable in
 ## isolation while their combination is not (a Command caching state across `apply()` calls is the
-## obvious way that happens). §13.2 tier 3's golden is STILL OWED, for the FOURTH time: M2-T5 adds
-## a Command and a registry but no TICK, so freezing the fold here would force a re-record when
-## slice 4 lands §3.4 step 4 — the slice that lands the tick records it, or says in
-## `docs/decisions.md` why not.
+## obvious way that happens).
+##
+## EXTENDED AGAIN BY M2-T6, resolution **(AZ)**: sections A-C are STILL byte-untouched, and
+## section D's mixed log now carries all THREE built commands — `DigHex` (create) -> `DigHex`
+## (join) -> **`CancelDig`** -> a full `EndTurn` round -> `DigHex` again. A cancel is the first
+## command in the project that REMOVES something from a `GameState` collection, which is exactly
+## the shape that breaks a replay when a container's iteration order depends on insertion history;
+## the property is therefore re-proven over the interleaving rather than assumed. §13.2 tier 3's
+## golden is STILL OWED, now for the FIFTH time: M2-T5 added a Command and a registry, M2-T6 adds
+## the command that undoes it, and NEITHER adds a TICK — freezing the fold here would force a
+## re-record when slice 4 lands §3.4 step 4, so the slice that lands the tick records it, or says
+## in `docs/decisions.md` why not. **This slice extends no fold** (no new `GameState` field), so no
+## re-record is triggered and none is due here.
 extends GutTest
 
 ## §12.6's example seed, and the seed the project's first golden already uses.
@@ -105,16 +114,25 @@ const UNIT_MAX_HP: int = 70
 const FIRST_UNIT_ID: int = 1
 const SECOND_UNIT_ID: int = 2
 
-## Hand-computed acceptance of `_mixed_log()` against a fresh `_dig_state()`:
+## Hand-computed acceptance of `_mixed_log()` against a fresh `_dig_state()` — M2-T6 (AZ) inserts
+## the `CancelDig` at step #2:
 ##   #0 DigHex(0, 1, target) at (1,0) -> ACCEPTED (site created, 2 worker-turns, digger 1)
-##   #1 EndTurn(0) at (1,0) -> ACCEPTED, now (1,1)
-##   #2 EndTurn(1) at (1,1) -> ACCEPTED, now (1,2)
-##   #3 EndTurn(2) at (1,2) -> ACCEPTED, wraps to index 0, so turn + 1 -> (2,0)
-##   #4 DigHex(0, 2, target) at (2,0) -> ACCEPTED (digger 2 JOINS; §4.2 line 197's cap is 2)
-const MIXED_LOG_ACCEPTED: Array[bool] = [true, true, true, true, true]
+##   #1 DigHex(0, 2, target) at (1,0) -> ACCEPTED (digger 2 JOINS; §4.2 line 197's cap is 2)
+##   #2 CancelDig(0, 1)      at (1,0) -> ACCEPTED (digger 1 leaves; a crew-mate remains, so the
+##                                      site SURVIVES with its 2 worker-turns UNCHANGED — (AZ)(iii))
+##   #3 EndTurn(0) at (1,0) -> ACCEPTED, now (1,1)
+##   #4 EndTurn(1) at (1,1) -> ACCEPTED, now (1,2)
+##   #5 EndTurn(2) at (1,2) -> ACCEPTED, wraps to index 0, so turn + 1 -> (2,0)
+##   #6 DigHex(0, 1, target) at (2,0) -> ACCEPTED (unit 1 is free again and RE-JOINS the site)
+const MIXED_LOG_ACCEPTED: Array[bool] = [true, true, true, true, true, true, true]
 
-## How many of `_mixed_log()`'s entries are DigHex orders.
-const MIXED_LOG_DIG_STEPS: int = 2
+## How many of `_mixed_log()`'s entries are DigHex orders, and how many are CancelDig orders.
+const MIXED_LOG_DIG_STEPS: int = 3
+const MIXED_LOG_CANCEL_STEPS: int = 1
+
+## The step at which the cancel sits, so the "a rejected CancelDig changes nothing" probe can be
+## aimed at a log position whose state is hand-known.
+const MIXED_LOG_CANCEL_STEP: int = 2
 
 ## Cached across tests: `data/ruleset.json` is parsed once, and `DigRules` mutates nothing (M2-T3).
 var _rules_cache: DigRules = null
@@ -433,14 +451,24 @@ func test_one_mixed_log_object_replays_identically_many_times() -> void:
 		)
 
 	var dig_steps: int = 0
+	var cancel_steps: int = 0
 	for command: Command in command_log:
 		var order: DigHexCommand = command as DigHexCommand
-		if order == null:
+		if order != null:
+			dig_steps += 1
+			assert_eq(order.hex(), TARGET_HEX, "§11.1: a Command is an IMMUTABLE value object")
+			assert_eq(order.player_index(), 0, "§11.1: a Command is an IMMUTABLE value object")
 			continue
-		dig_steps += 1
-		assert_eq(order.hex(), TARGET_HEX, "§11.1: a Command is an IMMUTABLE value object")
-		assert_eq(order.player_index(), 0, "§11.1: a Command is an IMMUTABLE value object")
-	assert_eq(dig_steps, MIXED_LOG_DIG_STEPS, "sanity: the log really does carry two dig orders")
+		var cancel: CancelDigCommand = command as CancelDigCommand
+		if cancel == null:
+			continue
+		cancel_steps += 1
+		assert_eq(cancel.player_index(), 0, "§11.1: a Command is an IMMUTABLE value object")
+		assert_eq(
+			cancel.unit_id(), FIRST_UNIT_ID, "§11.1: a Command is an IMMUTABLE value object"
+		)
+	assert_eq(dig_steps, MIXED_LOG_DIG_STEPS, "sanity: the log really does carry three dig orders")
+	assert_eq(cancel_steps, MIXED_LOG_CANCEL_STEPS, "sanity: and exactly one CancelDig ((AZ))")
 
 
 ## §11.1/§13.6 — the EVENT STREAM of the mixed log is replayable too: the same log emits the same
@@ -454,6 +482,7 @@ func test_the_mixed_event_stream_is_identical_across_replays() -> void:
 		var recorder: StreamRecorder = StreamRecorder.new()
 		bus.subscribe(TurnEndedEvent.TYPE_NAME, recorder.on_event)
 		bus.subscribe(DigStartedEvent.TYPE_NAME, recorder.on_event)
+		bus.subscribe(DigCancelledEvent.TYPE_NAME, recorder.on_event)
 		_run(command_log, _dig_state(), bus)
 		streams.append(recorder.lines)
 	var first_stream: Array = streams[0]
@@ -469,8 +498,10 @@ func test_the_mixed_event_stream_is_identical_across_replays() -> void:
 
 
 ## §4.2/§4.2 line 197 — the mixed log's END STATE, hand-computed: one dig site on the target, owned
-## by player 0, sized at §4.2's Hard Rock 2 worker-turns, with BOTH spawned units assigned, and the
-## match back at (turn 2, index 0) after the full EndTurn round.
+## by player 0, sized at §4.2's Hard Rock 2 worker-turns, with BOTH spawned units assigned (unit 1
+## having been cancelled at step #2 and having RE-JOINED at step #6 — (AZ)(iii): the site survived
+## because a crew-mate remained), and the match back at (turn 2, index 0) after the full EndTurn
+## round.
 func test_the_mixed_log_ends_in_the_hand_computed_state() -> void:
 	var state: GameState = _dig_state()
 	_run(_mixed_log(), state, null)
@@ -495,7 +526,79 @@ func test_the_mixed_log_ends_in_the_hand_computed_state() -> void:
 	)
 
 
-## §3.4 step 4 NEGATIVE PIN over the mixed log — a FULL EndTurn round happens between the two dig
+## (AZ) — THE CANCEL IS REALLY IN THE LOG AND REALLY DOES SOMETHING. Replaying only the log's
+## PREFIX up to and including the cancel leaves the site standing with exactly ONE digger and its
+## §4.2 worker-turns UNCHANGED ((AZ)(iii)), and the cancelled unit holding no job — so the mixed
+## log above is not merely "three dig orders with a no-op wedged between them".
+func test_the_cancel_step_of_the_mixed_log_frees_exactly_one_digger() -> void:
+	var state: GameState = _dig_state()
+	var prefix: Array[Command] = []
+	var command_log: Array[Command] = _mixed_log()
+	for step: int in range(MIXED_LOG_CANCEL_STEP + 1):
+		prefix.append(command_log[step])
+	_run(prefix, state, null)
+
+	var site: DigSite = state.dig_site(TARGET_HEX)
+	assert_not_null(site, "(AZ)(iii): a crew-mate remained, so the site SURVIVED the cancel")
+	if site == null:
+		return
+	assert_eq(
+		site.digger_ids(), [SECOND_UNIT_ID] as Array[int], "(AZ)(iii): exactly one digger is left"
+	)
+	assert_eq(site.owner_index(), 0, "(AZ)(iii): the ordering player is unchanged")
+	assert_eq(site.total_turns(), FIXTURE_TURNS, "§4.2: \"Hard Rock | 2\" is unchanged")
+	assert_eq(
+		site.remaining_turns(),
+		FIXTURE_TURNS,
+		"(AZ)(iii): a PARTIAL cancel spends and refunds nothing"
+	)
+	assert_null(
+		state.dig_site_of_digger(FIRST_UNIT_ID), "(AZ)(i): the cancelled unit holds no dig job"
+	)
+
+
+## (AV)/§11.1 — A REJECTED `CancelDig` IS INVISIBLE TO THE STATE, exactly as section B proved for
+## `EndTurn`. Three rejections are probed against the log's end state — the wrong player, an
+## enemy-owned unit and a unit that is not digging — and none of them moves `content_hash()`,
+## removes a site or unassigns a digger.
+func test_a_rejected_cancel_in_the_log_changes_nothing() -> void:
+	var state: GameState = _dig_state()
+	_run(_mixed_log(), state, null)
+	var before: int = state.content_hash()
+	var site: DigSite = state.dig_site(TARGET_HEX)
+	assert_not_null(site, "sanity: the mixed log ends with a site")
+	if site == null:
+		return
+	var diggers_before: Array[int] = site.digger_ids()
+
+	var their_unit: UnitState = state.spawn_unit(1, UNIT_TYPE_ID, SECOND_DIGGER_HEX, UNIT_MAX_HP)
+	assert_not_null(their_unit, "fixture: an enemy unit is spawned")
+	if their_unit == null:
+		return
+	var after_spawn: int = state.content_hash()
+
+	var probes: Array[CancelDigCommand] = [
+		CancelDigCommand.new(1, FIRST_UNIT_ID),
+		CancelDigCommand.new(0, their_unit.unit_id()),
+		CancelDigCommand.new(0, 9999),
+	]
+	for probe: CancelDigCommand in probes:
+		var rejection: CommandError = probe.execute(state, null)
+		assert_not_null(rejection, "(AV): the probe must be REJECTED")
+		if rejection == null:
+			return
+		assert_false(rejection.message.is_empty(), "(AV): every rejection carries a message")
+	assert_eq(
+		state.content_hash(), after_spawn, "§11.1: a rejected cancel leaves the state identical"
+	)
+	assert_eq(
+		state.dig_site_hexes(), [TARGET_HEX] as Array[Vector2i], "(AV): no site was removed"
+	)
+	assert_eq(site.digger_ids(), diggers_before, "(AV): no digger was unassigned")
+	assert_ne(after_spawn, before, "sanity: the enemy spawn IS a state change, so the pin is live")
+
+
+## §3.4 step 4 NEGATIVE PIN over the mixed log — a FULL EndTurn round happens between the dig
 ## orders and NOTHING ticks: the site still has all its worker-turns, the hex still carries its
 ## §4.2 Solid terrain, every stockpile is still EMPTY and the seeded stream has drawn NOTHING.
 func test_the_mixed_replay_still_runs_none_of_the_section_three_four_steps() -> void:
@@ -593,14 +696,17 @@ func _dig_state() -> GameState:
 	return state
 
 
-## §11.1 line 705 — a log MIXING both implemented commands: dig, a full EndTurn round, dig again.
-## A FRESH set of command objects every call, so a caller can compare two independently-built logs.
+## §11.1 line 705 — a log MIXING all THREE implemented commands ((AZ)): dig (create), dig (join),
+## CANCEL, a full EndTurn round, dig again. A FRESH set of command objects every call, so a caller
+## can compare two independently-built logs.
 func _mixed_log() -> Array[Command]:
 	var out: Array[Command] = []
 	out.append(DigHexCommand.new(0, FIRST_UNIT_ID, TARGET_HEX, _dig_rules()))
+	out.append(DigHexCommand.new(0, SECOND_UNIT_ID, TARGET_HEX, _dig_rules()))
+	out.append(CancelDigCommand.new(0, FIRST_UNIT_ID))
 	for index: int in range(PLAYER_COUNT):
 		out.append(EndTurnCommand.new(index))
-	out.append(DigHexCommand.new(0, SECOND_UNIT_ID, TARGET_HEX, _dig_rules()))
+	out.append(DigHexCommand.new(0, FIRST_UNIT_ID, TARGET_HEX, _dig_rules()))
 	return out
 
 

@@ -1036,23 +1036,40 @@ func test_ending_turns_ticks_no_dig_progress_and_applies_no_yield() -> void:
 	)
 
 
-## §13.4 — M2-T5 adds EXACTLY ONE Command file, and CancelDig (§11.1 line 705's fifth printed name)
-## is SLICE 3b. Pinned by enumerating `scripts/sim/commands/` and by a recursive scan of the whole
-## `scripts/` tree for the token, so a stray half-built cancel cannot appear unremarked.
-func test_no_cancel_dig_exists_anywhere_yet() -> void:
+## §13.4 — RE-SCOPED BY M2-T6, NOT DELETED (this was `test_no_cancel_dig_exists_anywhere_yet`, the
+## slice-3a pin that CancelDig did not exist yet; slice 3b legitimately retires that clause, so the
+## test is re-scoped to what is true NOW rather than weakened). `scripts/sim/commands/` holds
+## EXACTLY the five files below — the base, the error type and the THREE of §11.1 line 705's
+## fourteen printed commands that are built — and the token `cancel_dig` appears in EXACTLY ONE
+## production file, the new command itself, so a second half-built cancel cannot appear unremarked.
+func test_cancel_dig_exists_in_exactly_one_production_file() -> void:
 	assert_eq(
 		_gd_files(COMMANDS_DIR),
-		["command.gd", "command_error.gd", "dig_hex_command.gd", "end_turn_command.gd"] as Array[String],
-		"§13.4: M2-T5 adds exactly ONE Command file — CancelDig is slice 3b"
+		[
+			"cancel_dig_command.gd",
+			"command.gd",
+			"command_error.gd",
+			"dig_hex_command.gd",
+			"end_turn_command.gd",
+		] as Array[String],
+		"§13.4: M2-T6 adds exactly ONE Command file (CancelDigCommand) — the dig TICK is slice 4"
 	)
 	var sources: Array[String] = []
 	_gd_files_recursive(SCRIPTS_DIR, sources)
 	assert_gt(sources.size(), 0, "sanity: the recursive source walk found files")
+	var naming: Array[String] = []
 	for path: String in sources:
-		assert_false(
-			_code_text(path).contains("cancel_dig"),
-			"§13.4: CancelDig is slice 3b — %s must not name it yet" % path
-		)
+		if _code_text(path).contains("cancel_dig"):
+			naming.append(path)
+	assert_eq(
+		naming,
+		["res://scripts/sim/commands/cancel_dig_command.gd"] as Array[String],
+		"§13.4/(AU)(iv): exactly ONE production file names \"cancel_dig\" — its own command"
+	)
+	assert_false(
+		_code_text(DIG_HEX_PATH).contains("cancel_dig"),
+		"§13.4: DigHexCommand knows nothing about the command that cancels it"
+	)
 
 
 ## §13.4 — the `DigRules` members that belong to LATER slices are NOT called here: "Dig 2x" needs
