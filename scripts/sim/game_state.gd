@@ -69,11 +69,37 @@
 ##     the precedents; GDScript has no package-private), and because NO rule runs in this slice
 ##     §13.6's "events emitted for every state change" clause is VACUOUS here.
 ##
-## DELIBERATELY NOT IN M2-T2/M2-T4 (§13.4 — invent nothing ahead of its milestone): §3.4's
-## per-player start-of-turn steps and World-phase steps, §3.2/§12.1's victory turn limit, §12.7's
-## trait set (worker-ness is a TRAIT, i.e. DATA), dig progress, yields, vein nodes, Extractors,
-## income/upkeep, §5.2's housing cap (`housing.hq` is already shipped in `data/ruleset.json` and
-## stays UNUSED), Mining Zones and §3.1's starting kit.
+## EXTENDED AGAIN BY M2-T5, resolution (AY) ((AU)/(AV)/(AW)/(AX) are cross-referenced by many files
+## — do NOT renumber any of them). §11.1 line 704 lists `nodes` alongside `units` as a TOP-LEVEL
+## GameState collection, and a dig site is the first such per-hex progress record, so the registry
+## lands here beside the unit roster:
+##   - THE DIG-SITE REGISTRY is a pure CONTAINER (no Command, no Event, no data key, no rule — the
+##     RULES live in DigHexCommand): private `_dig_sites` keyed by Vector2i, NEVER iterated for
+##     output; five public functions `add_dig_site`, `dig_site`, `dig_site_hexes`,
+##     `dig_site_of_digger`, `remove_dig_site`.
+##   - `add_dig_site` is TOTAL and every refusal is ATOMIC: a duplicate hex, an owner outside
+##     `0..player_count()-1`, or a non-positive `total_turns` answers null and leaves
+##     `content_hash()` byte-identical. PLACEMENT AND TERRAIN ARE NOT VALIDATED HERE, exactly as
+##     `spawn_unit` does not validate placement — legality is DigHexCommand's job.
+##   - `dig_site(hex)` answers the SAME object every call (the `player()`/`unit()` precedent);
+##     `dig_site_hexes()` is FRESH per call, sorted by a private `_hex_before` comparator into the
+##     canonical order — r ascending, then q ascending — the SAME order `HexMap.hexes()` produces,
+##     spelled out rather than borrowed from Vector2i's default `<` (which sorts x first and would
+##     give a different sequence).
+##   - `dig_site_of_digger(unit_id)` is a LINEAR SCAN over `dig_site_hexes()` — no reverse index
+##     (the `units_of`/`units_at` precedent).
+##   - THE FOLD IS EXTENDED BY APPENDING ONLY, after the unit fold: the dig site COUNT, then per hex
+##     in canonical order `hex.x`, `hex.y`, that site's `content_hash()`. No existing step is
+##     renamed or reordered. DELIBERATE DIVERGENCE FROM (AX)'s `_next_unit_id`: "added then removed
+##     every site" DOES hash like "never added" — a dig site is keyed by its hex, not by a minted
+##     id, so it has no dangling identity to protect and there is no counter to fold.
+##
+## DELIBERATELY NOT IN M2-T2/M2-T4/M2-T5 (§13.4 — invent nothing ahead of its milestone): §3.4's
+## per-player start-of-turn steps and World-phase steps (step 4's dig TICK included — the registry
+## stores progress but nothing spends it), §3.2/§12.1's victory turn limit, §12.7's trait set
+## (worker-ness is a TRAIT, i.e. DATA), yields, vein nodes, Extractors, income/upkeep, §5.2's
+## housing cap (`housing.hq` is already shipped in `data/ruleset.json` and stays UNUSED), Mining
+## Zones and §3.1's starting kit.
 class_name GameState
 extends RefCounted
 
@@ -111,6 +137,11 @@ var _units: Dictionary = {}
 ## folded into [method content_hash] so "spawned then removed every unit" cannot hash the same as
 ## "never spawned".
 var _next_unit_id: int = 1
+
+## (AY) — the dig-site registry, keyed by Vector2i; touched ONLY by lookup/assign/erase and NEVER
+## iterated for output — [method dig_site_hexes] sorts a FRESH copy of the keys instead (the
+## `_units` precedent).
+var _dig_sites: Dictionary = {}
 
 
 ## §11.1/§3.3 — builds a state for `p_player_count` players (a non-positive count clamps to the
@@ -243,6 +274,73 @@ func remove_unit(unit_id: int) -> bool:
 	return true
 
 
+## §4.2/(AY) — registers a new dig site on `hex`, ordered by `owner_index`, costing `total_turns`
+## worker-turns. TOTAL and every refusal is ATOMIC (null, [method content_hash] byte-identical): a
+## DUPLICATE hex, `owner_index` outside `0..player_count()-1`, or a non-positive `total_turns`.
+## PLACEMENT AND TERRAIN ARE NOT VALIDATED HERE — legality is DigHexCommand's job, exactly as
+## [method spawn_unit] does not validate placement. Intended to be called only from a Command's
+## apply() (GDScript has no package-private).
+func add_dig_site(hex: Vector2i, owner_index: int, total_turns: int) -> DigSite:
+	if _dig_sites.has(hex):
+		return null
+	if owner_index < 0 or owner_index >= player_count():
+		return null
+	if total_turns <= 0:
+		return null
+	var created: DigSite = DigSite.new(hex, owner_index, total_turns)
+	_dig_sites[hex] = created
+	return created
+
+
+## §4.2/(AY) — the SAME [DigSite] for `hex` every call, so a mutation through it is visible on
+## every later call (the [method player]/[method unit] precedent). Null when `hex` holds no site.
+func dig_site(hex: Vector2i) -> DigSite:
+	if not _dig_sites.has(hex):
+		return null
+	var found: DigSite = _dig_sites[hex]
+	return found
+
+
+## §11.1 line 707 "iterate collections in stable ID order" / (AY) — every registered hex, in the
+## CANONICAL order (r ascending, then q ascending — the same order [method HexMap.hexes] produces),
+## as a FRESH Array every call (never a cached reference).
+func dig_site_hexes() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for key: Variant in _dig_sites.keys():
+		out.append(key as Vector2i)
+	out.sort_custom(_hex_before)
+	return out
+
+
+## §4.2/(AY) — the site `unit_id` is assigned to, or null when it digs nothing. A LINEAR SCAN over
+## [method dig_site_hexes] — no reverse index (the [method units_of]/[method units_at] precedent).
+func dig_site_of_digger(unit_id: int) -> DigSite:
+	for hex: Vector2i in dig_site_hexes():
+		var site: DigSite = dig_site(hex)
+		if site != null and site.digger_ids().has(unit_id):
+			return site
+	return null
+
+
+## §4.2/(AY) — removes the site on `hex`. TOTAL: true exactly once for a registered hex, false on a
+## second call and for a hex that never had one. Intended to be called only from a Command's
+## apply().
+func remove_dig_site(hex: Vector2i) -> bool:
+	if not _dig_sites.has(hex):
+		return false
+	_dig_sites.erase(hex)
+	return true
+
+
+## §4.1/(AY) — the canonical dig-site order comparator: r ascending, then q ascending (matching
+## [method HexMap.hexes], §11.1 line 707), spelled out rather than relying on Vector2i's default
+## `<` (which sorts x/q first and would give a different sequence).
+func _hex_before(a: Vector2i, b: Vector2i) -> bool:
+	if a.y != b.y:
+		return a.y < b.y
+	return a.x < b.x
+
+
 ## §11.1 — an FNV-1a 32-bit content hash over this state's replayable surface, in this fixed
 ## order (documented here because a future golden will record it): the private seed, then the
 ## RNG's stream position (§11.1 "replaying (seed, command_log) must reproduce the hash" — a
@@ -278,4 +376,10 @@ func content_hash() -> int:
 	for id: int in minted_ids:
 		hash_value = Fnv.fold_int64(hash_value, id)
 		hash_value = Fnv.fold_int64(hash_value, unit(id).content_hash())
+	var site_hexes: Array[Vector2i] = dig_site_hexes()
+	hash_value = Fnv.fold_int64(hash_value, site_hexes.size())
+	for site_hex: Vector2i in site_hexes:
+		hash_value = Fnv.fold_int64(hash_value, site_hex.x)
+		hash_value = Fnv.fold_int64(hash_value, site_hex.y)
+		hash_value = Fnv.fold_int64(hash_value, dig_site(site_hex).content_hash())
 	return hash_value

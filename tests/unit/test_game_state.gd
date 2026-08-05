@@ -100,10 +100,40 @@
 ##         clause is VACUOUS here — the (AW) item 8 precedent, which must be SAID in
 ##         `docs/decisions.md`, not assumed.
 ##
+## EXTENDED AGAIN BY M2-T5, resolution **(AY)** ((AU)/(AV)/(AW)/(AX) are cross-referenced by many
+## files — do NOT renumber any of them). §11.1 line 704 lists `nodes` alongside `units` as a
+## TOP-LEVEL GameState collection, and a DIG SITE is the first such per-hex progress record, so the
+## registry lands here beside the unit roster:
+##   (AY) THE DIG-SITE REGISTRY (a pure CONTAINER — the RULES live in `DigHexCommand`).
+##       - Private `_dig_sites` keyed by `Vector2i` and NEVER iterated for output; five public
+##         functions `add_dig_site`, `dig_site`, `dig_site_hexes`, `dig_site_of_digger`,
+##         `remove_dig_site`.
+##       - `add_dig_site` is TOTAL and every refusal is ATOMIC (null, `content_hash()`
+##         byte-identical): a DUPLICATE hex, an owner outside `0..player_count()-1`, and a
+##         non-positive `total_turns`.
+##       - PLACEMENT AND TERRAIN ARE NOT VALIDATED HERE, exactly as `spawn_unit` does not validate
+##         placement: legality (adjacency, diggability, §4.2 line 197's max-2 cap, whose turn it
+##         is) is the COMMAND's job.
+##       - `dig_site(hex)` answers the SAME object every call (the `player()`/`unit()` precedent);
+##         `dig_site_hexes()` is FRESH per call in the canonical order **r ascending, then q
+##         ascending** — the SAME order as `HexMap.hexes()`, spelled out rather than borrowed from
+##         `Vector2i`'s default `<` (which sorts x first and would give a DIFFERENT sequence).
+##       - `dig_site_of_digger(unit_id)` is a LINEAR SCAN over `dig_site_hexes()` — no reverse
+##         index (the `units_of`/`units_at` precedent: a second source of truth is a determinism
+##         hazard).
+##       - THE FOLD IS EXTENDED BY APPENDING ONLY, after the unit fold: the SITE COUNT, then per
+##         hex in canonical order `hex.x`, `hex.y`, that site's `content_hash()`. No existing step
+##         is renamed or reordered ((AV)(vi)/(AX) is the only sanctioned amendment shape).
+##       - DELIBERATE DIVERGENCE FROM (AX)'s `_next_unit_id`: "added then removed every site"
+##         DOES hash like "never added". A dig site has no dangling identity to protect — it is
+##         keyed by its hex, not by a minted id — so there is no counter to fold, and that is
+##         asserted POSITIVELY below so it cannot drift silently.
+##
 ## STILL DELIBERATELY NOT BUILT (§13.4 — invent nothing ahead of its milestone): §3.4's nine
-## per-player start-of-turn steps and three World-phase steps, §3.2/§12.1's victory turn limit
+## per-player start-of-turn steps and three World-phase steps (step 4's DIG TICK included — the
+## registry stores progress but nothing spends it), §3.2/§12.1's victory turn limit
 ## and victory checks (M6), §12.7's trait set (worker-ness is a TRAIT, i.e. DATA — §12.7 line
-## 1015), dig progress, yields, vein nodes, Extractors, income/upkeep, §5.2's housing cap
+## 1015), yields, vein nodes, Extractors, income/upkeep, §5.2's housing cap
 ## (`housing.hq` is already shipped in `data/ruleset.json` and stays UNUSED), Mining Zones and
 ## §3.1's starting kit (which needs its own §12.1 key and amendment).
 ##
@@ -199,11 +229,30 @@ const HEX_C: Vector2i = Vector2i(-2, 3)
 ## legality is a Command rule for a later slice.
 const HEX_OFF_MAP: Vector2i = Vector2i(999, -999)
 
-## The COMPLETE public surface of GameState at M2-T4 scope: two fields and TWELVE functions
-## (FOURTEEN members — grown from five by (AV) to eight, and from eight by (AX) to fourteen in
-## the same commit that adds the unit roster, per the standing PROGRESS rule). `buildings`,
-## `nodes`, `serialize` and friends all belong to later slices and would be invented API here
-## (§13.4).
+## §4.2 — the hexes the dig-site registry fixtures use. Deliberately chosen so that sorting by
+## `Vector2i`'s DEFAULT `<` (x first, then y) gives a DIFFERENT sequence from the canonical
+## r-ascending-then-q-ascending order (AY) requires: default order would be
+## (-1,2), (0,0), (1,-1), (2,-1); the canonical order is (1,-1), (2,-1), (0,0), (-1,2).
+const SITE_HEX_A: Vector2i = Vector2i(0, 0)
+const SITE_HEX_B: Vector2i = Vector2i(1, -1)
+const SITE_HEX_C: Vector2i = Vector2i(-1, 2)
+const SITE_HEX_D: Vector2i = Vector2i(2, -1)
+
+## The insertion order the registry fixtures use, and the CANONICAL order they must enumerate in
+## (r ascending, then q ascending — the same order `HexMap.hexes()` produces, §11.1 line 707).
+const SITE_INSERTION_ORDER: Array[Vector2i] = [SITE_HEX_A, SITE_HEX_B, SITE_HEX_C, SITE_HEX_D]
+const SITE_CANONICAL_ORDER: Array[Vector2i] = [SITE_HEX_B, SITE_HEX_D, SITE_HEX_A, SITE_HEX_C]
+
+## §4.2 line 185 "Hard Rock | 2" and line 186 "Dense Granite | 4" — dig times supplied by the
+## CALLER here: the §4.2 table lives in `DigRules` over §12.1 data (M2-T3), never in the container.
+const SITE_TOTAL_TURNS: int = 2
+const OTHER_SITE_TOTAL_TURNS: int = 4
+
+## The COMPLETE public surface of GameState at M2-T5 scope: two fields and SEVENTEEN functions
+## (NINETEEN members — grown from five by (AV) to eight, from eight by (AX) to fourteen, and from
+## fourteen by (AY) to nineteen in the same commit that adds the dig-site registry, per the
+## standing PROGRESS rule). `buildings`, `serialize` and friends all belong to later slices and
+## would be invented API here (§13.4).
 const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"player_count",
 	"player",
@@ -217,6 +266,11 @@ const REQUIRED_PUBLIC_FUNCTIONS: Array[String] = [
 	"units_of",
 	"units_at",
 	"remove_unit",
+	"add_dig_site",
+	"dig_site",
+	"dig_site_hexes",
+	"dig_site_of_digger",
+	"remove_dig_site",
 ]
 const REQUIRED_PUBLIC_VARS: Array[String] = ["map", "rng"]
 
@@ -233,20 +287,22 @@ const FOLD_ORDER_TOKENS: Array[String] = [
 	"map",
 	"_next_unit_id",
 	"unit_ids",
+	"dig_site_hexes",
 ]
 
-## (AX)/G1 NEGATIVE PIN — the `.gd` files `scripts/sim/commands/` and `scripts/sim/events/` hold
-## after this slice. M2-T4 adds NO Command and NO Event: the first unit-side consumer of the (AV)
-## spine is a LATER slice's dig Command.
+## (AY)/G1 NEGATIVE PIN — the `.gd` files `scripts/sim/commands/` and `scripts/sim/events/` hold
+## after this slice. M2-T5 adds EXACTLY ONE of each: `DigHexCommand` (§11.1 line 705's fourth
+## printed name) and `DigStartedEvent`. `CancelDigCommand`/`DigCancelledEvent` are SLICE 3b.
 const COMMAND_FILES: Array[String] = [
 	"command.gd",
 	"command_error.gd",
+	"dig_hex_command.gd",
 	"end_turn_command.gd",
 ]
-const EVENT_FILES: Array[String] = ["turn_ended_event.gd"]
+const EVENT_FILES: Array[String] = ["dig_started_event.gd", "turn_ended_event.gd"]
 
 ## Doc-comment sections accepted by the S6 scan for this file (§11.3).
-const DOC_SECTIONS: Array[String] = ["§11.1", "§3.3"]
+const DOC_SECTIONS: Array[String] = ["§11.1", "§3.3", "§4.2"]
 
 
 # =============================================================================================
@@ -1073,32 +1129,385 @@ func test_content_hash_separates_states_differing_only_in_one_units_record() -> 
 
 
 # =============================================================================================
-# C8. §13.4 NEGATIVE PINS — what M2-T4 deliberately does NOT add
+# C9. THE DIG-SITE REGISTRY ((AY); §4.2, §11.1 line 704 "nodes", line 707 stable order)
+#     A pure CONTAINER: adjacency, diggability and §4.2 line 197's cap are the COMMAND's rules
+#     (pinned in `tests/unit/test_dig_hex_command.gd`), never the registry's.
 # =============================================================================================
 
-## (AX)/G1 — M2-T4 adds NO Command and NO Event. The roster is a pure CONTAINER; the first
-## unit-side consumer of the (AV) spine is a LATER slice's dig Command. Pinned by enumerating the
-## two spine directories so a stray file cannot appear unremarked (§13.4).
-func test_no_command_and_no_event_file_was_added_in_this_slice() -> void:
+## (AY) — a fresh state holds NO dig site, and `add_dig_site` hands back a `DigSite` carrying the
+## identity it was asked for, reachable afterwards through `dig_site(hex)`.
+func test_add_dig_site_registers_a_site_with_the_requested_identity() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(state.dig_site_hexes(), [] as Array[Vector2i], "(AY): a fresh state holds no site")
+	assert_null(state.dig_site(SITE_HEX_A), "(AY): an unregistered hex answers null")
+
+	var site: DigSite = state.add_dig_site(SITE_HEX_A, 1, SITE_TOTAL_TURNS)
+	assert_not_null(site, "(AY): a legal registration is accepted")
+	if site == null:
+		return
+	assert_eq(site.hex(), SITE_HEX_A, "(AY): the site knows its hex")
+	assert_eq(site.owner_index(), 1, "(AY): ONE owner per site — the ordering player")
+	assert_eq(site.total_turns(), SITE_TOTAL_TURNS, "§4.2: the caller supplies the dig time")
+	assert_eq(site.remaining_turns(), SITE_TOTAL_TURNS, "§4.2: a fresh site has all turns left")
+	assert_eq(site.digger_ids(), [] as Array[int], "(AY): the COMMAND assigns the diggers")
+	assert_eq(
+		state.dig_site_hexes(), [SITE_HEX_A] as Array[Vector2i], "(AY): the site is registered"
+	)
+
+
+## (AY) — `dig_site(hex)` returns the SAME object every call (the `player()`/`unit()` precedent),
+## so a mutation through it persists. An implementation handing back a throwaway copy fails here.
+func test_dig_site_returns_the_same_object_every_call() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var registered: DigSite = state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS)
+	assert_not_null(registered, "sanity: the registration is accepted")
+	if registered == null:
+		return
+	assert_true(
+		is_same(registered, state.dig_site(SITE_HEX_A)),
+		"(AY): add_dig_site returns the REGISTRY's object"
+	)
+	assert_true(
+		is_same(state.dig_site(SITE_HEX_A), state.dig_site(SITE_HEX_A)),
+		"(AY): dig_site(hex) must return the SAME DigSite each call, not a throwaway copy"
+	)
+	registered.set_remaining_turns(1)
+	assert_eq(
+		state.dig_site(SITE_HEX_A).remaining_turns(),
+		1,
+		"(AY): a mutation through dig_site(hex) must be visible on the next call"
+	)
+
+
+## (AY) — a DUPLICATE hex is refused (null): one site per hex, so "the site on this hex" is a
+## function. The refusal is ATOMIC — the existing site is untouched and the hash does not move.
+func test_add_dig_site_refuses_a_duplicate_hex_atomically() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var first: DigSite = state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS)
+	assert_not_null(first, "sanity: the first registration is accepted")
+	if first == null:
+		return
+	var before: int = state.content_hash()
+	assert_null(
+		state.add_dig_site(SITE_HEX_A, 1, OTHER_SITE_TOTAL_TURNS),
+		"(AY): a second site on the same hex is refused"
+	)
+	assert_true(is_same(state.dig_site(SITE_HEX_A), first), "(AY): the original site is untouched")
+	assert_eq(first.owner_index(), 0, "(AY): the refusal did not re-own the site")
+	assert_eq(first.total_turns(), SITE_TOTAL_TURNS, "(AY): the refusal did not re-size the site")
+	assert_eq(state.content_hash(), before, "(AY): a refused registration changes nothing at all")
+
+
+## (AY) — an owner outside `0..player_count()-1` and a non-positive `total_turns` are REFUSED,
+## atomically. §8.1's creeps and §3.2's "their units become neutral hostiles" will need an explicit
+## owner sentinel at M5; -1 must NOT be silently invented here (the (AX) rule).
+func test_add_dig_site_refuses_an_illegal_owner_or_total_atomically() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var before: int = state.content_hash()
+	for bad_owner: int in [-1, -99, MIN_PLAYERS, MIN_PLAYERS + 1, 9999]:
+		assert_null(
+			state.add_dig_site(SITE_HEX_A, bad_owner, SITE_TOTAL_TURNS),
+			"(AY): owner %d is outside 0..player_count()-1 and must be refused" % bad_owner
+		)
+	for bad_total: int in [0, -1, -SITE_TOTAL_TURNS]:
+		assert_null(
+			state.add_dig_site(SITE_HEX_A, 0, bad_total),
+			"(AY): total_turns %d is not a §4.2 dig time and must be refused" % bad_total
+		)
+	assert_eq(state.dig_site_hexes(), [] as Array[Vector2i], "(AY): no site was registered")
+	assert_eq(state.content_hash(), before, "(AY): every refusal is ATOMIC")
+
+
+## (AY) — on the EMPTY roster NO owner index is in range, so every dig-site registration is refused
+## and the degenerate state stays a usable, hashable state (the (AX) `spawn_unit` precedent).
+func test_every_owner_index_is_refused_for_a_dig_site_on_the_empty_roster() -> void:
+	var state: GameState = GameState.new(GOLDEN_SEED, null, 0)
+	for probed_owner: int in [-1, 0, 1, MAX_PLAYERS]:
+		assert_null(
+			state.add_dig_site(SITE_HEX_A, probed_owner, SITE_TOTAL_TURNS),
+			"(AY): the empty roster owns nothing — owner %d is refused" % probed_owner
+		)
+	assert_eq(state.dig_site_hexes(), [] as Array[Vector2i], "(AY): the empty roster holds no site")
+
+
+## (AY) — PLACEMENT AND TERRAIN ARE NOT VALIDATED HERE. The registry accepts ANY `Vector2i` and
+## never consults `map`: adjacency, diggability and §4.2 line 197's cap are the COMMAND's rules.
+## Pinned positively so a later slice cannot claim the container was silently enforcing them.
+func test_add_dig_site_validates_no_placement_or_terrain() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(state.map, "sanity: the fixture carries a map")
+	assert_not_null(
+		state.add_dig_site(HEX_OFF_MAP, 0, SITE_TOTAL_TURNS),
+		"(AY): a hex far outside the map is accepted — legality is the Command's job"
+	)
+	assert_not_null(
+		state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS),
+		"(AY): a hex with NO terrain set is accepted — diggability is the Command's job"
+	)
+	assert_eq(state.dig_site_hexes().size(), 2, "(AY): both registrations took")
+
+
+## §11.1 line 707 "iterate collections in stable ID order" / (AY) — `dig_site_hexes()` enumerates
+## in the CANONICAL order **r ascending, then q ascending** (the same order `HexMap.hexes()`
+## produces), NOT `Vector2i`'s default `<` (which sorts x first). The fixture is chosen so those
+## two orders DIFFER, which is what makes this test load-bearing.
+func test_dig_site_hexes_uses_the_canonical_r_then_q_order() -> void:
+	var state: GameState = _sited(GOLDEN_SEED)
+	assert_eq(
+		state.dig_site_hexes(),
+		SITE_CANONICAL_ORDER,
+		"§11.1 line 707: dig sites enumerate r ascending, then q ascending"
+	)
+
+	var default_order: Array[Vector2i] = SITE_INSERTION_ORDER.duplicate()
+	default_order.sort()
+	assert_ne(
+		default_order,
+		SITE_CANONICAL_ORDER,
+		"fixture: Vector2i's DEFAULT sort must differ from the canonical order, or this pins nothing"
+	)
+
+
+## (AY) — the enumeration is a function of the SET of registered hexes, not of insertion order:
+## two states built in OPPOSITE order enumerate identically AND hash identically.
+func test_insertion_order_changes_neither_the_enumeration_nor_the_hash() -> void:
+	var forwards: GameState = _sited(GOLDEN_SEED)
+	var backwards: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var reversed_order: Array[Vector2i] = []
+	for i: int in range(SITE_INSERTION_ORDER.size()):
+		reversed_order.append(SITE_INSERTION_ORDER[SITE_INSERTION_ORDER.size() - 1 - i])
+	for where: Vector2i in reversed_order:
+		assert_not_null(
+			backwards.add_dig_site(where, 0, SITE_TOTAL_TURNS),
+			"fixture: %s is registered" % str(where)
+		)
+	assert_eq(
+		backwards.dig_site_hexes(),
+		forwards.dig_site_hexes(),
+		"§11.1 line 707: the canonical order does not depend on insertion order"
+	)
+	assert_eq(
+		backwards.content_hash(),
+		forwards.content_hash(),
+		"§11.1: two states holding the same sites are the same replayable state"
+	)
+
+
+## §11.1/M1-T9 — `dig_site_hexes()` builds a FRESH Array every call. Pinned with an `is_same()`
+## IDENTITY assertion AND a mutate-then-re-read pollution check, because a SELF-CLEARING member
+## cache passes a pollution-only check (the M1-T9 lesson, re-learned at M2-T1 and M2-T4).
+func test_dig_site_hexes_is_a_fresh_array_every_call() -> void:
+	var state: GameState = _sited(GOLDEN_SEED)
+	assert_false(
+		is_same(state.dig_site_hexes(), state.dig_site_hexes()),
+		"§11.1: dig_site_hexes() must build a FRESH array every call, never hand out a cache"
+	)
+	var pulled: Array[Vector2i] = state.dig_site_hexes()
+	pulled.clear()
+	pulled.append(HEX_OFF_MAP)
+	assert_eq(
+		state.dig_site_hexes(),
+		SITE_CANONICAL_ORDER,
+		"§11.1: mutating the returned array must not pollute the registry"
+	)
+
+
+## (AY) — `dig_site_of_digger` is a LINEAR SCAN over `dig_site_hexes()`, never a reverse index (a
+## second source of truth is a determinism hazard). It answers the SAME object `dig_site(hex)` does
+## and null for a unit that digs nothing, including id 0 ("no unit") and a negative id.
+func test_dig_site_of_digger_finds_the_one_job_and_is_total() -> void:
+	var state: GameState = _sited(GOLDEN_SEED)
+	assert_null(state.dig_site_of_digger(1), "(AY): a unit digging nothing answers null")
+	for bad_id: int in [NO_UNIT_ID, -1, 9999]:
+		assert_null(state.dig_site_of_digger(bad_id), "(AY): id %d digs nothing" % bad_id)
+
+	var here: DigSite = state.dig_site(SITE_HEX_A)
+	var there: DigSite = state.dig_site(SITE_HEX_C)
+	assert_not_null(here, "sanity: the site on A exists")
+	assert_not_null(there, "sanity: the site on C exists")
+	if here == null or there == null:
+		return
+	assert_true(here.add_digger(1), "fixture: unit 1 digs the site on A")
+	assert_true(there.add_digger(2), "fixture: unit 2 digs the site on C")
+	assert_true(is_same(state.dig_site_of_digger(1), here), "(AY): unit 1's job is the site on A")
+	assert_true(is_same(state.dig_site_of_digger(2), there), "(AY): unit 2's job is the site on C")
+	assert_null(state.dig_site_of_digger(3), "(AY): unit 3 still digs nothing")
+
+	assert_true(here.remove_digger(1), "fixture: unit 1 is unassigned")
+	assert_null(state.dig_site_of_digger(1), "(AY): an unassigned unit digs nothing again")
+
+
+## (AY) totality — `remove_dig_site` answers true EXACTLY ONCE for a registered hex, false on the
+## second call and false for a hex that never had one; afterwards the site is gone from every view.
+func test_remove_dig_site_is_total_and_answers_true_exactly_once() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var site: DigSite = state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS)
+	assert_not_null(site, "sanity: the registration is accepted")
+	if site == null:
+		return
+	assert_true(site.add_digger(1), "fixture: unit 1 digs it")
+	assert_true(state.remove_dig_site(SITE_HEX_A), "(AY): the first removal succeeds")
+	assert_false(state.remove_dig_site(SITE_HEX_A), "(AY): the second removal is refused")
+	for unknown: Vector2i in [SITE_HEX_B, SITE_HEX_C, HEX_OFF_MAP]:
+		assert_false(
+			state.remove_dig_site(unknown), "(AY): removing %s is refused" % str(unknown)
+		)
+	assert_null(state.dig_site(SITE_HEX_A), "(AY): a removed site is gone")
+	assert_eq(state.dig_site_hexes(), [] as Array[Vector2i], "(AY): gone from dig_site_hexes()")
+	assert_null(state.dig_site_of_digger(1), "(AY): its digger holds no job any more")
+
+
+## (AY)/§3.4 step 4 NEGATIVE PIN — `set_remaining_turns` CLAMPS into `[0, total_turns]` and DOES
+## NOT remove the site: completion is a RULE (§3.4 step 4), and it is SLICE 4. Pinned through the
+## registry as well as on the record, because "the site vanishes at 0" is exactly the shortcut a
+## later slice might take without saying so.
+func test_a_site_at_zero_remaining_stays_in_the_registry() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var site: DigSite = state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS)
+	assert_not_null(site, "sanity: the registration is accepted")
+	if site == null:
+		return
+	site.set_remaining_turns(-1)
+	assert_eq(site.remaining_turns(), 0, "(AY): the clamp floors at 0")
+	site.set_remaining_turns(SITE_TOTAL_TURNS + 99)
+	assert_eq(site.remaining_turns(), SITE_TOTAL_TURNS, "(AY): the clamp saturates at total_turns")
+	site.set_remaining_turns(0)
+	assert_not_null(state.dig_site(SITE_HEX_A), "§3.4 step 4 is SLICE 4 — 0 does NOT remove")
+	assert_eq(
+		state.dig_site_hexes(),
+		[SITE_HEX_A] as Array[Vector2i],
+		"§3.4 step 4 is SLICE 4 — the exhausted site is still registered"
+	)
+
+
+# =============================================================================================
+# C10. THE DIG-SITE REGISTRY IN THE CONTENT HASH ((AY); §11.1 line 707/708)
+# =============================================================================================
+
+## §11.1 — the registry is part of the replayable state: registering a site moves the hash, and so
+## does any change to a site's OWN record (which is what welds `DigSite.content_hash()` in).
+func test_content_hash_folds_the_registry_and_each_sites_record() -> void:
+	var state: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	var empty_hash: int = state.content_hash()
+	var site: DigSite = state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS)
+	assert_not_null(site, "sanity: the registration is accepted")
+	if site == null:
+		return
+	var one_hash: int = state.content_hash()
+	assert_ne(empty_hash, one_hash, "§11.1: the dig-site registry is part of the state")
+
+	site.set_remaining_turns(1)
+	var worked_hash: int = state.content_hash()
+	assert_ne(one_hash, worked_hash, "§4.2: a site's REMAINING time is part of the state")
+	assert_true(site.add_digger(1), "sanity: a digger is assigned")
+	var staffed_hash: int = state.content_hash()
+	assert_ne(worked_hash, staffed_hash, "§4.2 line 197: the digger set is part of the state")
+
+	assert_not_null(
+		state.add_dig_site(SITE_HEX_B, 1, OTHER_SITE_TOTAL_TURNS), "sanity: a second registration"
+	)
+	assert_ne(staffed_hash, state.content_hash(), "§11.1: EVERY site is folded, not just the first")
+
+
+## §11.1 line 707 — SITES ARE FOLDED BY HEX, NEVER AS A SET. Two states holding the same two sites
+## with the OWNERS swapped between the two hexes are different match states, so the hashes must
+## differ. A multiset-shaped fold survives every other test in this file and dies exactly here.
+func test_content_hash_folds_sites_by_hex_not_as_a_set() -> void:
+	var straight: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(straight.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS), "sanity: A -> owner 0")
+	assert_not_null(straight.add_dig_site(SITE_HEX_B, 1, SITE_TOTAL_TURNS), "sanity: B -> owner 1")
+
+	var swapped: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(swapped.add_dig_site(SITE_HEX_A, 1, SITE_TOTAL_TURNS), "sanity: A -> owner 1")
+	assert_not_null(swapped.add_dig_site(SITE_HEX_B, 0, SITE_TOTAL_TURNS), "sanity: B -> owner 0")
+
+	assert_eq(
+		straight.dig_site_hexes(), swapped.dig_site_hexes(), "fixture: the same two hexes are dug"
+	)
+	assert_ne(
+		straight.content_hash(),
+		swapped.content_hash(),
+		"§11.1: sites are folded BY HEX — swapping two sites' owners is a new state"
+	)
+
+
+## (AY) — THE DELIBERATE DIVERGENCE FROM (AX)'s `_next_unit_id`, asserted POSITIVELY so it cannot
+## drift silently: "registered every site then removed every site" DOES hash like "never registered
+## anything". A unit id is a MINTED identity that dangling references depend on, so (AX) folds the
+## counter; a dig site is keyed by its HEX, mints nothing and leaves nothing dangling, so there is
+## no counter to fold and none may be invented.
+func test_adding_then_removing_every_site_hashes_like_never_adding_one() -> void:
+	var churned: GameState = _sited(GOLDEN_SEED)
+	for where: Vector2i in SITE_INSERTION_ORDER:
+		assert_true(churned.remove_dig_site(where), "sanity: %s is removed" % str(where))
+	var fresh: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(churned.dig_site_hexes(), [] as Array[Vector2i], "fixture: the churned registry is empty")
+	assert_eq(
+		churned.content_hash(),
+		fresh.content_hash(),
+		"(AY): a dig site has no dangling identity — unlike (AX)'s _next_unit_id, nothing is folded"
+	)
+
+	var unit_churned: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_eq(_spawn(unit_churned, 0, HEX_A), FIRST_UNIT_ID, "sanity: a unit is minted")
+	assert_true(unit_churned.remove_unit(FIRST_UNIT_ID), "sanity: the unit is removed")
+	assert_ne(
+		unit_churned.content_hash(),
+		fresh.content_hash(),
+		"(AX): the CONTRAST — a minted unit id IS folded, which is why the two rules differ"
+	)
+
+
+## §11.1 — the registry is folded INDEPENDENTLY of the rest of the state: two states differing only
+## in a site's total dig time, and two differing only in which hex is being dug, must not collide.
+func test_content_hash_separates_states_differing_only_in_one_site() -> void:
+	var left: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(left.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS), "sanity")
+	var deeper: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(deeper.add_dig_site(SITE_HEX_A, 0, OTHER_SITE_TOTAL_TURNS), "sanity")
+	assert_ne(
+		left.content_hash(), deeper.content_hash(), "§4.2: the site's total dig time reaches the hash"
+	)
+
+	var elsewhere: GameState = _state(GOLDEN_SEED, TEST_MAP_RADIUS, MIN_PLAYERS)
+	assert_not_null(elsewhere.add_dig_site(SITE_HEX_B, 0, SITE_TOTAL_TURNS), "sanity")
+	assert_ne(
+		left.content_hash(), elsewhere.content_hash(), "§4.1: WHICH hex is being dug reaches the hash"
+	)
+
+
+# =============================================================================================
+# C8. §13.4 NEGATIVE PINS — what M2-T5 deliberately does NOT add
+# =============================================================================================
+
+## (AY)/G1 — M2-T5 adds EXACTLY ONE Command file and EXACTLY ONE Event file. `CancelDigCommand`
+## and `DigCancelledEvent` are SLICE 3b (M2-T6). Pinned by enumerating the two spine directories so
+## a stray file cannot appear unremarked (§13.4).
+func test_exactly_one_command_and_one_event_file_was_added_in_this_slice() -> void:
 	assert_eq(
 		_gd_files("res://scripts/sim/commands"),
 		COMMAND_FILES,
-		"(AX): M2-T4 adds no Command — scripts/sim/commands/ is unchanged"
+		"(AY): M2-T5 adds exactly one Command (DigHexCommand) — CancelDig is slice 3b"
 	)
 	assert_eq(
 		_gd_files("res://scripts/sim/events"),
 		EVENT_FILES,
-		"(AX): M2-T4 adds no Event — scripts/sim/events/ is unchanged"
+		"(AY): M2-T5 adds exactly one Event (DigStartedEvent) — DigCancelled is slice 3b"
 	)
 
 
-## §3.4 (lines 141–165) NEGATIVE PIN, EXTENDED BY (AX) — the nine per-player start-of-turn steps
-## and the three World-phase steps are ALL still unimplemented. After any number of accepted
-## EndTurns NO unit is spawned, moved, paid, bled or killed, and the one seeded stream has still
-## drawn nothing. (`tests/unit/test_end_turn_command.gd` owns the stockpile half of this pin and
-## is untouched; this is the roster half.)
-func test_ending_turns_spawns_no_unit_and_draws_no_roll() -> void:
+## §3.4 (lines 141–165) NEGATIVE PIN, EXTENDED BY (AX) AND AGAIN BY (AY) — the nine per-player
+## start-of-turn steps and the three World-phase steps are ALL still unimplemented. After any
+## number of accepted EndTurns NO unit is spawned, moved, paid, bled or killed, **§3.4 step 4's
+## dig progress does NOT tick**, and the one seeded stream has still drawn nothing.
+## (`tests/unit/test_end_turn_command.gd` owns the stockpile half of this pin and is untouched;
+## this is the roster + registry half.)
+func test_ending_turns_spawns_no_unit_ticks_no_dig_and_draws_no_roll() -> void:
 	var state: GameState = GameState.new(GOLDEN_SEED, null, MAX_PLAYERS)
+	var site: DigSite = state.add_dig_site(SITE_HEX_A, 0, SITE_TOTAL_TURNS)
+	assert_not_null(site, "fixture: a dig site is registered")
+	if site == null:
+		return
 	for k: int in range(3 * MAX_PLAYERS):
 		var rejection: CommandError = EndTurnCommand.new(state.current_player_index()).execute(
 			state, null
@@ -1108,6 +1517,16 @@ func test_ending_turns_spawns_no_unit_and_draws_no_roll() -> void:
 		state.unit_ids(),
 		[] as Array[int],
 		"§3.4: no rule spawns a unit yet — the roster is written only by spawn_unit"
+	)
+	assert_eq(
+		state.dig_site_hexes(),
+		[SITE_HEX_A] as Array[Vector2i],
+		"§3.4 step 4 is SLICE 4 — no dig completes and no site is removed"
+	)
+	assert_eq(
+		site.remaining_turns(),
+		SITE_TOTAL_TURNS,
+		"§3.4 step 4 is SLICE 4 — \"Dig progress ticks\" spends NO worker-turn yet"
 	)
 	assert_eq(
 		state.rng.rolls_drawn(),
@@ -1243,11 +1662,13 @@ func test_source_declares_no_loader_and_shadows_no_global() -> void:
 
 
 ## S6 §11.3/§13.4 — the expected public surface is listed EXPLICITLY, so a MISSING member fails
-## instead of passing vacuously and an EXTRA member (buildings, nodes, a serializer, a second RNG
-## accessor, a `unit_count()` convenience) fails too. The seed value and both roster privates
-## (`_units`, `_next_unit_id`) stay PRIVATE: they are folded into content_hash, not handed out.
-## The list was grown 8 -> 14 by (AX) IN THE SAME COMMIT that adds the roster (the standing rule).
-func test_public_api_is_exactly_the_fourteen_documented_members() -> void:
+## instead of passing vacuously and an EXTRA member (buildings, a serializer, a second RNG
+## accessor, a `unit_count()`/`dig_site_count()` convenience) fails too. The seed value, both
+## roster privates (`_units`, `_next_unit_id`), the registry store (`_dig_sites`) and the private
+## `_hex_before` comparator all stay PRIVATE: they are folded into content_hash, not handed out.
+## The list was grown 8 -> 14 by (AX) and 14 -> 19 by (AY), each time IN THE SAME COMMIT that adds
+## the collection (the standing rule).
+func test_public_api_is_exactly_the_nineteen_documented_members() -> void:
 	var public_functions: Array[String] = []
 	var undocumented: Array[String] = []
 	_collect_public_functions(GAME_STATE_PATH, public_functions, undocumented)
@@ -1361,6 +1782,16 @@ func test_the_header_documents_the_turn_position_in_the_fold() -> void:
 		header.contains("unit count"),
 		"(AX): %s's header must document the unit count in the fold order" % GAME_STATE_PATH
 	)
+	assert_true(
+		header.contains("dig site"),
+		"(AY): %s's header must document the dig-site registry in the fold order" % GAME_STATE_PATH
+	)
+	assert_true(
+		header.contains("canonical order"),
+		"(AY): %s's header must document the canonical hex order the registry folds in" % [
+			GAME_STATE_PATH
+		]
+	)
 
 
 # =============================================================================================
@@ -1406,6 +1837,18 @@ func _populated(seed_value: int) -> GameState:
 	assert_not_null(hurt, "fixture: unit 2 is in the roster")
 	if hurt != null:
 		hurt.set_hp(1)
+	return state
+
+
+## A state on a real map with MIN_PLAYERS players, carrying four dig sites registered in
+## SITE_INSERTION_ORDER (which is deliberately NOT the canonical enumeration order). Built the same
+## way every time, so two calls must hash identically.
+func _sited(seed_value: int) -> GameState:
+	var state: GameState = _state(seed_value, TEST_MAP_RADIUS, MIN_PLAYERS)
+	for where: Vector2i in SITE_INSERTION_ORDER:
+		assert_not_null(
+			state.add_dig_site(where, 0, SITE_TOTAL_TURNS), "fixture: %s is registered" % str(where)
+		)
 	return state
 
 
